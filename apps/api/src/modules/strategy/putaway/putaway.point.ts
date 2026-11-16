@@ -18,6 +18,8 @@ export interface PutawayContext {
   source: Location;
   /** Suchgruppe aus der Anfrage, falls angegeben. */
   requestGroup: string | null;
+  /** Typ der auslösenden Lagerbewegung, falls die Entscheidung aus einer Bewegung kommt. */
+  movementType: string | null;
   /** Plätze, die nicht in Frage kommen (z. B. nach gescheiterter Zuweisung). */
   exclude: ReadonlySet<string>;
 }
@@ -32,6 +34,10 @@ export const PUTAWAY_FIELDS: FieldCatalog = {
   'source.groupName': { type: 'string', description: 'Gruppe des aktuellen Platzes' },
   'source.typeCode': { type: 'string', description: 'Platztyp des aktuellen Platzes' },
   'request.group': { type: 'string', description: 'In der Anfrage genannte Suchgruppe (fehlt, wenn keine angegeben)' },
+  'request.movementType': {
+    type: 'string',
+    description: 'Typ der auslösenden Lagerbewegung, z. B. INBOUND oder EMPTIES (fehlt bei direkter Anfrage)',
+  },
 };
 
 const SearchGroup = {
@@ -89,6 +95,7 @@ export class PutawayDecisionPoint {
       'source.groupName': this.lookup.groupName(ctx.source),
       'source.typeCode': this.lookup.typeCode(ctx.source),
       'request.group': ctx.requestGroup,
+      'request.movementType': ctx.movementType,
     };
   }
 

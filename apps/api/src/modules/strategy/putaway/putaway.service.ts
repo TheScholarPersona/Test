@@ -19,6 +19,8 @@ export interface PutawayRequest {
   barcode: string;
   group?: string | undefined;
   assign: boolean;
+  /** Typ der auslösenden Lagerbewegung (Fakt `request.movementType`), falls vorhanden. */
+  movementType?: string | undefined;
 }
 
 @Injectable()
@@ -36,7 +38,12 @@ export class PutawayService {
 
   /** Echte Entscheidung mit dem aktiven Regelsatz; wird gespeichert, auf Wunsch als Ziel zugewiesen. */
   decide(request: PutawayRequest): Promise<DecisionResult> {
-    return this.em.transactional(async (tx) => this.run(tx, request, await this.ruleSets.active(tx, PUTAWAY), false));
+    return this.em.transactional((tx) => this.decideIn(tx, request));
+  }
+
+  /** Wie `decide`, aber innerhalb einer bestehenden Transaktion (z. B. beim Anlegen einer Lagerbewegung). */
+  async decideIn(tx: EntityManager, request: PutawayRequest): Promise<DecisionResult> {
+    return this.run(tx, request, await this.ruleSets.active(tx, PUTAWAY), false);
   }
 
   /** Probelauf mit beliebigem Regelsatz (auch Entwurf); nichts wird gespeichert oder zugewiesen. */
@@ -52,7 +59,7 @@ export class PutawayService {
     const source = await this.lookup.resolve(tx, { id: (unit.location as Location).id });
     const prepared = await this.checker.prepareExisting(tx, unit);
     const exclude = new Set<string>();
-    const ctx = { em: tx, prepared, source, requestGroup: request.group ?? null, exclude };
+    const ctx = { em: tx, prepared, source, requestGroup: request.group ?? null, movementType: request.movementType ?? null, exclude };
     const facts = this.point.facts(ctx);
 
     let run: EngineRun;

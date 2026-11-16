@@ -119,41 +119,44 @@ export class TransportUnitService implements OnModuleInit {
    * Regeln geprüft; im Modus `physical` wird immer gebucht und Verstöße werden gemeldet.
    */
   move(barcode: string, input: MoveTransportUnit): Promise<PlacementOutcome> {
-    return this.em.transactional(async (tx) => {
-      const unit = await this.load(tx, barcode);
-      if (unit.parent) {
-        throw new RuleViolationError(
-          'TU_STACKED',
-          `TU ${barcode} steht auf ${(unit.parent as TransportUnit).barcode}; erst abstapeln oder die Basis bewegen`,
-          { barcode, parentBarcode: (unit.parent as TransportUnit).barcode },
-        );
-      }
-      const target = await this.lookup.resolve(tx, input.to, { lock: true });
-      const source = unit.location as Location;
-      if (target.id === source.id) {
-        return { unit, violations: [] };
-      }
-      const prepared = await this.placement.prepareExisting(tx, unit);
-      const stack = prepared.stack;
-      const { violations } = (await this.placement.evaluate(tx, prepared, source, [target])).get(target.id)!;
-      if (input.mode === 'checked' && violations.length > 0) {
-        throw placementRejected(violations);
-      }
-      for (const moved of [unit, ...stack]) {
-        moved.location = target;
-      }
-      if ((unit.target as Location | null)?.id === target.id) {
-        unit.target = null;
-      }
-      this.outbox.record(tx, TransportUnitMovedEvent, {
-        ...transportUnitSnapshot(unit),
-        from: locationRef(source),
-        mode: input.mode,
-        violations,
-        movedWith: stack.map((u) => u.barcode),
-      });
-      return { unit, violations };
+    return this.em.transactional((tx) => this.moveIn(tx, barcode, input));
+  }
+
+  /** Wie `move`, aber innerhalb einer bestehenden Transaktion (z. B. beim Abschluss einer Lagerbewegung). */
+  async moveIn(tx: EntityManager, barcode: string, input: MoveTransportUnit): Promise<PlacementOutcome & { from: Location }> {
+    const unit = await this.load(tx, barcode);
+    if (unit.parent) {
+      throw new RuleViolationError(
+        'TU_STACKED',
+        `TU ${barcode} steht auf ${(unit.parent as TransportUnit).barcode}; erst abstapeln oder die Basis bewegen`,
+        { barcode, parentBarcode: (unit.parent as TransportUnit).barcode },
+      );
+    }
+    const target = await this.lookup.resolve(tx, input.to, { lock: true });
+    const source = unit.location as Location;
+    if (target.id === source.id) {
+      return { unit, violations: [], from: source };
+    }
+    const prepared = await this.placement.prepareExisting(tx, unit);
+    const stack = prepared.stack;
+    const { violations } = (await this.placement.evaluate(tx, prepared, source, [target])).get(target.id)!;
+    if (input.mode === 'checked' && violations.length > 0) {
+      throw placementRejected(violations);
+    }
+    for (const moved of [unit, ...stack]) {
+      moved.location = target;
+    }
+    if ((unit.target as Location | null)?.id === target.id) {
+      unit.target = null;
+    }
+    this.outbox.record(tx, TransportUnitMovedEvent, {
+      ...transportUnitSnapshot(unit),
+      from: locationRef(source),
+      mode: input.mode,
+      violations,
+      movedWith: stack.map((u) => u.barcode),
     });
+    return { unit, violations, from: source };
   }
 
   update(barcode: string, input: UpdateTransportUnit): Promise<TransportUnit> {
@@ -269,10 +272,11 @@ export class TransportUnitService implements OnModuleInit {
   }
 
   /**
-   * Setzt das geplante Ziel einer TU innerhalb einer bestehenden Transaktion
-   * (z. B. nach einer Einlagerentscheidung) und veröffentlicht die Änderung.
+   * Setzt oder entfernt (`null`) das geplante Ziel einer TU innerhalb einer
+   * bestehenden Transaktion (z. B. nach einer Einlagerentscheidung oder beim
+   * Storno einer Bewegung) und veröffentlicht die Änderung.
    */
-  assignTarget(em: EntityManager, unit: TransportUnit, target: Location): void {
+  assignTarget(em: EntityManager, unit: TransportUnit, target: Location | null): void {
     unit.target = target;
     this.outbox.record(em, TransportUnitUpdatedEvent, transportUnitSnapshot(unit));
   }

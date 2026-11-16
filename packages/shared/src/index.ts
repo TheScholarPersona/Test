@@ -4,3 +4,4 @@ export * from './events.js';
 export * from './layout-events.js';
 export * from './transport-events.js';
 export * from './strategy-events.js';
+export * from './movement-events.js';

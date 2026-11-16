@@ -17,6 +17,7 @@ apps/api/                  WMS-Kern (NestJS)
     layout/                Lagerstruktur: Platztypen, Gruppen, Lagerplätze, Sperren
     transport/             Transporteinheiten: Typen, Regeln, TUs, Bewegen, Stapeln
     strategy/              Strategie-Kern: Regelsätze, Entscheidungen; Einlagerung (putaway/)
+    movement/              Lagerbewegungen mit Zustandsautomat
     test-support/          Test-Endpunkte, nur im Profil "test"
   test/unit/               Unit-Tests (ohne Datenbank)
   test/integration/        Integrationstests mit Testcontainers
@@ -173,6 +174,44 @@ Ohne `group` in der Regel gilt die Suchgruppe aus der Anfrage (`NO_SEARCH_GROUP`
 **Parallele Zuweisungen:** Der gewählte Platz wird ohne Warten gesperrt (`FOR UPDATE SKIP LOCKED`) und mit frisch gelesener Belegung erneut geprüft. Ist er inzwischen vergeben oder wird er gerade von einer anderen Anfrage vergeben (`LOCATION_BUSY`), wird er ausgeschlossen und neu gewählt (höchstens 5 Versuche, siehe `attempts` und `rejectedOnAssign`). Da nie auf eine Sperre gewartet wird, sind Deadlocks ausgeschlossen; ein Platz, dessen parallele Vergabe doch scheitert, wird in diesem Durchlauf nicht berücksichtigt.
 
 **Neuen Entscheidungspunkt ergänzen:** Definition mit Feldkatalog und Strategien (Vorbild `strategy/putaway/putaway.point.ts`), in `StrategyRegistry` eintragen, Service für Kontext und Ergebnis.
+
+## Modul Lagerbewegungen (`/v1/movements`)
+
+Eine Lagerbewegung ist der Auftrag, eine TU (samt Stapel) auf ein Ziel zu bringen. Nummer im Format `MV00000001`.
+
+**Anlegen** `POST /v1/movements`:
+
+```json
+{ "barcode": "P1", "type": "INBOUND", "target": { "group": "LAGER" }, "priority": "HIGH", "initiator": "erp" }
+```
+
+- `type`: `INBOUND`, `RELOCATION`, `REPLENISHMENT`, `OUTBOUND`, `EMPTIES`, `CLEARING`, `MANUAL`
+- `target`: fester Platz `{ "location": { "erpCode": "A1" } }` (wird gegen die harten Platzregeln geprüft) oder Gruppe `{ "group": "LAGER" }` – dann wählt der aktive Einlager-Regelsatz den Platz; der Bewegungstyp steht dort als Fakt `request.movementType` zur Verfügung (z. B. `EMPTIES` → Leergutzone)
+- Das Ziel wird reserviert (Ziel der TU); findet die Strategie keinen Platz, wird nichts angelegt (`409 NO_TARGET_LOCATION` mit Zusammenfassung der Entscheidung)
+- Je TU höchstens eine offene Bewegung (`MOVEMENT_EXISTS`, per Datenbank abgesichert); gestapelte TUs werden über ihre Basis bewegt (`TU_STACKED`)
+
+**Zustände und Aktionen:**
+
+| Aktion | Endpunkt | Von → Nach |
+|---|---|---|
+| beginnen | `POST …/{number}/start` `{ assignedTo? }` | OPEN → IN_PROGRESS |
+| zurückgeben | `POST …/{number}/release` | IN_PROGRESS → OPEN |
+| abschließen | `POST …/{number}/complete` `{ location?, mode? }` | OPEN, IN_PROGRESS → DONE |
+| stornieren | `POST …/{number}/cancel` `{ reason? }` | OPEN, IN_PROGRESS → CANCELLED |
+
+Andere Übergänge werden mit `409 INVALID_STATE_TRANSITION` abgelehnt; jede Antwort enthält `allowedActions`. Den Zustand direkt zu setzen ist nicht möglich.
+
+**Abschluss** bucht die TU mit allen Regeln der TU-Buchung (`checked`/`physical` wie beim Bewegen). Ohne `location` gilt das Ziel; ein anderer Platz ist eine Abweichung (`completed.deviated`), die Reservierung des ursprünglichen Ziels wird dann aufgehoben. Das Event `movement.completed` nennt den Platz vor (`from`) und nach (`to`) dem Abschluss.
+
+**Storno** hebt die Reservierung des Ziels auf (`releasedTarget` im Event).
+
+**Arbeitsliste:** `GET /v1/movements?state=OPEN,IN_PROGRESS&type=INBOUND` liefert dringendste zuerst (Priorität, dann Alter); weitere Filter `barcode`, `assignedTo`.
+
+**Löschschutz und Historie:** Eine TU mit offener Bewegung und ein Platz, der Ziel einer offenen Bewegung ist, können nicht gelöscht werden (Einwand `open-movements`). Bewegungen selbst werden nie gelöscht: Barcode und Platzkoordinaten bleiben gespeichert, auch wenn TU oder Platz später gelöscht werden (`id: null`).
+
+Events: `movement.created|started|released|completed|cancelled` (Schemas in `packages/shared/src/movement-events.ts`).
+
+Noch nicht enthalten: Bewegungsgruppen (Zuteilung an Bediener), automatischer Abschluss, wenn die TU ohne Quittung am Ziel gebucht wird.
 
 ## Events
 

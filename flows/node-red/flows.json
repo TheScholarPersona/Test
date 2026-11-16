@@ -517,15 +517,15 @@
   {
     "id": "f502000000000000",
     "type": "tab",
-    "label": "Szenario: putaway-strategy",
+    "label": "Szenario: movement-flow",
     "disabled": false,
-    "info": "Schrittliste aus flows/scenarios/putaway-strategy.js; ausgeführt vom Tab „Schritt-Engine“."
+    "info": "Schrittliste aus flows/scenarios/movement-flow.js; ausgeführt vom Tab „Schritt-Engine“."
   },
   {
     "id": "f502000000000001",
     "type": "comment",
     "z": "f502000000000000",
-    "name": "Definition: flows/scenarios/putaway-strategy.js (im Repository bearbeiten, dann Flows neu erzeugen)",
+    "name": "Definition: flows/scenarios/movement-flow.js (im Repository bearbeiten, dann Flows neu erzeugen)",
     "info": "",
     "x": 380,
     "y": 40,
@@ -535,6 +535,39 @@
     "id": "f502000000000002",
     "type": "function",
     "z": "f502000000000000",
+    "name": "Szenario movement-flow anmelden",
+    "func": "return msg;\n",
+    "outputs": 0,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "const registerScenario = (definition) => {\n  const all = global.get('stepScenarios') || {};\n  all[definition.id] = definition;\n  global.set('stepScenarios', all);\n};\n/**\n * Szenario: Ablauf einer Lagerbewegung.\n *\n * Anlegen mit Zielreservierung, Bearbeitung beginnen, ungültiger Übergang,\n * Löschschutz der TU, Abschluss auf einem abweichenden Platz (wie bei einer\n * Scanner-Quittung), Storno mit Freigabe der Reservierung.\n * Bewegungen bleiben als Historie erhalten (kein Löschen).\n * Schrittformat: siehe flows/scenarios/layout-locks.js.\n */\nregisterScenario({\n  id: 'movement-flow',\n  description: 'Bewegung anlegen, beginnen, mit Abweichung abschließen und stornieren; ungültige Übergänge werden abgelehnt.',\n  init: (runId) => {\n    const s = runId.replace(/[^a-z0-9]/gi, '').slice(-8).toUpperCase();\n    return {\n      locationType: `SZ-${s}`,\n      zone: `SZ-${s}-ZONE`,\n      inbound: `SZ-${s}-WE`,\n      unitType: `SZ-${s}`,\n      tu: `SZ-${s}-P`,\n      z1Coord: `S${s}/0001/0001/0001/0000`,\n      z2Coord: `S${s}/0001/0002/0001/0000`,\n      weCoord: `S${s}/0009/0001/0001/0000`,\n      z1: null,\n      z2: null,\n      we: null,\n      first: null,\n      second: null,\n    };\n  },\n  steps: [\n    { name: 'Platztyp anlegen', request: (v) => ({ method: 'POST', path: '/v1/location-types', body: { code: v.locationType } }), expectStatus: 201 },\n    { name: 'Lagerzone anlegen', request: (v) => ({ method: 'POST', path: '/v1/location-groups', body: { name: v.zone } }), expectStatus: 201 },\n    { name: 'Wareneingang anlegen', request: (v) => ({ method: 'POST', path: '/v1/location-groups', body: { name: v.inbound } }), expectStatus: 201 },\n    {\n      name: 'Platz Z1 anlegen',\n      request: (v) => ({ method: 'POST', path: '/v1/locations', body: { locationId: v.z1Coord, typeCode: v.locationType, groupName: v.zone } }),\n      expectStatus: 201,\n      save: (body, v) => {\n        v.z1 = body.id;\n      },\n    },\n    {\n      name: 'Platz Z2 anlegen',\n      request: (v) => ({ method: 'POST', path: '/v1/locations', body: { locationId: v.z2Coord, typeCode: v.locationType, groupName: v.zone } }),\n      expectStatus: 201,\n      save: (body, v) => {\n        v.z2 = body.id;\n      },\n    },\n    {\n      name: 'Wareneingangsplatz anlegen',\n      request: (v) => ({ method: 'POST', path: '/v1/locations', body: { locationId: v.weCoord, typeCode: v.locationType, groupName: v.inbound, maxTransportUnits: 10 } }),\n      expectStatus: 201,\n      save: (body, v) => {\n        v.we = body.id;\n      },\n    },\n    { name: 'TU-Typ anlegen', request: (v) => ({ method: 'POST', path: '/v1/transport-unit-types', body: { code: v.unitType } }), expectStatus: 201 },\n    {\n      name: 'TU im Wareneingang anlegen',\n      request: (v) => ({ method: 'POST', path: '/v1/transport-units', body: { barcode: v.tu, typeCode: v.unitType, location: { id: v.we } } }),\n      expectStatus: 201,\n    },\n    {\n      name: 'Bewegung nach Z1 anlegen',\n      request: (v) => ({\n        method: 'POST',\n        path: '/v1/movements',\n        body: { barcode: v.tu, type: 'INBOUND', target: { location: { id: v.z1 } }, initiator: 'node-red' },\n      }),\n      expectStatus: 201,\n      check: (body, v) => (body.state === 'OPEN' && body.target.id === v.z1 ? null : `Unerwartet: ${JSON.stringify(body)}`),\n      save: (body, v) => {\n        v.first = body.number;\n      },\n    },\n    { name: 'Event movement.created empfangen', event: (e, v) => e.type === 'movement.created' && e.payload.number === v.first },\n    {\n      name: 'Ziel Z1 ist für die TU reserviert',\n      request: (v) => ({ method: 'GET', path: `/v1/transport-units/${v.tu}` }),\n      expectStatus: 200,\n      check: (body, v) => (body.target && body.target.id === v.z1 ? null : `Ziel nicht reserviert: ${JSON.stringify(body.target)}`),\n    },\n    {\n      name: 'Bearbeitung beginnen',\n      request: (v) => ({ method: 'POST', path: `/v1/movements/${v.first}/start`, body: { assignedTo: 'node-red' } }),\n      expectStatus: 200,\n      check: (body) => (body.state === 'IN_PROGRESS' ? null : `Erwartet IN_PROGRESS, erhalten ${body.state}`),\n    },\n    {\n      name: 'Erneutes Beginnen wird abgelehnt (INVALID_STATE_TRANSITION)',\n      request: (v) => ({ method: 'POST', path: `/v1/movements/${v.first}/start`, body: {} }),\n      expectStatus: 409,\n      check: (body) => (body.code === 'INVALID_STATE_TRANSITION' ? null : `Erwartet INVALID_STATE_TRANSITION, erhalten ${body.code}`),\n    },\n    {\n      name: 'TU mit offener Bewegung kann nicht gelöscht werden',\n      request: (v) => ({ method: 'DELETE', path: `/v1/transport-units/${v.tu}` }),\n      expectStatus: 409,\n      check: (body) => (body.code === 'TU_IN_USE' ? null : `Erwartet TU_IN_USE, erhalten ${body.code}`),\n    },\n    {\n      name: 'Abschluss auf Z2 statt Z1 (Abweichung)',\n      request: (v) => ({ method: 'POST', path: `/v1/movements/${v.first}/complete`, body: { location: { id: v.z2 } } }),\n      expectStatus: 200,\n      check: (body, v) =>\n        body.movement.state === 'DONE' && body.movement.completed.deviated === true && body.movement.completed.location.id === v.z2\n          ? null\n          : `Unerwartet: ${JSON.stringify(body.movement)}`,\n    },\n    {\n      name: 'Event movement.completed mit Quelle, Ziel und Abweichung',\n      event: (e, v) => e.type === 'movement.completed' && e.payload.number === v.first && e.payload.deviated === true && e.payload.from.id === v.we && e.payload.to.id === v.z2,\n    },\n    {\n      name: 'TU steht auf Z2, die Reservierung von Z1 ist aufgehoben',\n      request: (v) => ({ method: 'GET', path: `/v1/transport-units/${v.tu}` }),\n      expectStatus: 200,\n      check: (body, v) => (body.location.id === v.z2 && body.target === null ? null : `Unerwartet: ${JSON.stringify({ location: body.location, target: body.target })}`),\n    },\n    {\n      name: 'Zweite Bewegung nach Z1 anlegen',\n      request: (v) => ({ method: 'POST', path: '/v1/movements', body: { barcode: v.tu, type: 'RELOCATION', target: { location: { id: v.z1 } } } }),\n      expectStatus: 201,\n      save: (body, v) => {\n        v.second = body.number;\n      },\n    },\n    {\n      name: 'Zweite Bewegung stornieren',\n      request: (v) => ({ method: 'POST', path: `/v1/movements/${v.second}/cancel`, body: { reason: 'Szenario movement-flow' } }),\n      expectStatus: 200,\n      check: (body) => (body.state === 'CANCELLED' && body.cancelled.reason === 'Szenario movement-flow' ? null : `Unerwartet: ${JSON.stringify(body)}`),\n    },\n    {\n      name: 'Storno hat die Reservierung freigegeben',\n      request: (v) => ({ method: 'GET', path: `/v1/transport-units/${v.tu}` }),\n      expectStatus: 200,\n      check: (body) => (body.target === null ? null : `Ziel noch gesetzt: ${JSON.stringify(body.target)}`),\n    },\n    {\n      name: 'Aufräumen: offene Bewegung stornieren',\n      cleanup: true,\n      request: (v) => (v.first ? { method: 'POST', path: `/v1/movements/${v.first}/cancel`, body: { reason: 'Aufräumen' } } : null),\n    },\n    { name: 'Aufräumen: TU löschen', cleanup: true, request: (v) => ({ method: 'DELETE', path: `/v1/transport-units/${v.tu}` }) },\n    { name: 'Aufräumen: Z1 löschen', cleanup: true, request: (v) => (v.z1 ? { method: 'DELETE', path: `/v1/locations/${v.z1}` } : null), expectStatus: 204 },\n    { name: 'Aufräumen: Z2 löschen', cleanup: true, request: (v) => (v.z2 ? { method: 'DELETE', path: `/v1/locations/${v.z2}` } : null), expectStatus: 204 },\n    { name: 'Aufräumen: Wareneingangsplatz löschen', cleanup: true, request: (v) => (v.we ? { method: 'DELETE', path: `/v1/locations/${v.we}` } : null), expectStatus: 204 },\n    { name: 'Aufräumen: Lagerzone löschen', cleanup: true, request: (v) => ({ method: 'DELETE', path: `/v1/location-groups/${v.zone}` }), expectStatus: 204 },\n    { name: 'Aufräumen: Wareneingang löschen', cleanup: true, request: (v) => ({ method: 'DELETE', path: `/v1/location-groups/${v.inbound}` }), expectStatus: 204 },\n    { name: 'Aufräumen: TU-Typ löschen', cleanup: true, request: (v) => ({ method: 'DELETE', path: `/v1/transport-unit-types/${v.unitType}` }), expectStatus: 204 },\n    { name: 'Aufräumen: Platztyp löschen', cleanup: true, request: (v) => ({ method: 'DELETE', path: `/v1/location-types/${v.locationType}` }), expectStatus: 204 },\n  ],\n});\n",
+    "finalize": "",
+    "libs": [],
+    "x": 200,
+    "y": 100,
+    "wires": []
+  },
+  {
+    "id": "f503000000000000",
+    "type": "tab",
+    "label": "Szenario: putaway-strategy",
+    "disabled": false,
+    "info": "Schrittliste aus flows/scenarios/putaway-strategy.js; ausgeführt vom Tab „Schritt-Engine“."
+  },
+  {
+    "id": "f503000000000001",
+    "type": "comment",
+    "z": "f503000000000000",
+    "name": "Definition: flows/scenarios/putaway-strategy.js (im Repository bearbeiten, dann Flows neu erzeugen)",
+    "info": "",
+    "x": 380,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "f503000000000002",
+    "type": "function",
+    "z": "f503000000000000",
     "name": "Szenario putaway-strategy anmelden",
     "func": "return msg;\n",
     "outputs": 0,
@@ -548,16 +581,16 @@
     "wires": []
   },
   {
-    "id": "f503000000000000",
+    "id": "f504000000000000",
     "type": "tab",
     "label": "Szenario: tu-placement",
     "disabled": false,
     "info": "Schrittliste aus flows/scenarios/tu-placement.js; ausgeführt vom Tab „Schritt-Engine“."
   },
   {
-    "id": "f503000000000001",
+    "id": "f504000000000001",
     "type": "comment",
-    "z": "f503000000000000",
+    "z": "f504000000000000",
     "name": "Definition: flows/scenarios/tu-placement.js (im Repository bearbeiten, dann Flows neu erzeugen)",
     "info": "",
     "x": 380,
@@ -565,9 +598,9 @@
     "wires": []
   },
   {
-    "id": "f503000000000002",
+    "id": "f504000000000002",
     "type": "function",
-    "z": "f503000000000000",
+    "z": "f504000000000000",
     "name": "Szenario tu-placement anmelden",
     "func": "return msg;\n",
     "outputs": 0,
