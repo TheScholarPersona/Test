@@ -19,7 +19,7 @@ Stand der Analyse: 16.11.2026 · Methode: direkte Quellcodeanalyse öffentlicher
 | Mehrere Fehler im Originalcode gefunden (Kap. 6.4). | Nicht 1:1 übernehmen. |
 | Schema entsteht per Hibernate `ddl-auto` (keine Flyway/Liquibase-Migrationen). | Im Rebuild eigene, versionierte Migrationen. |
 
-**Empfehlung:** Eigene Anwendung als **modularer Monolith** (Java 25, Spring Boot 4, Spring Modulith, PostgreSQL, Flyway) mit denselben fachlichen Modulgrenzen wie OpenWMS. Code fachlich neu schreiben, OpenWMS als Referenz für Konzepte und Zustandsautomaten nutzen. Eine direkte Übernahme einzelner Klassen ist rechtlich zulässig, aber wegen Abhängigkeit von `ameba-lib`, Spring-Cloud-Infrastruktur und den gefundenen Fehlern nicht empfehlenswert.
+**Empfehlung (aktualisiert):** Eigene Anwendung in **TypeScript** als **modularer Monolith** (Node.js, NestJS, PostgreSQL, MikroORM, Zod) mit denselben fachlichen Modulgrenzen wie OpenWMS. **Node-RED** wird als Integrationsschicht angebunden (MQTT-Events + REST-API), die Geschäftsregeln bleiben im Kern. Code fachlich neu schreiben, OpenWMS als Referenz für Konzepte und Zustandsautomaten nutzen. Grund für TypeScript statt Java: geringe Java-Erfahrung im Team, vorhandene Node-RED-Erfahrung, eine Sprache für Backend, Frontend und Node-RED-Nodes.
 
 ---
 
@@ -361,18 +361,22 @@ REA 6.9.0 ist in dieser Umgebung verfügbar (u. a. `inspect_artifact`, `binary_o
 
 | Thema | OpenWMS | Empfehlung Rebuild | Begründung |
 |---|---|---|---|
-| Schnitt | 4+ Microservices + Eureka, Config, Gateway, Bus | **Modularer Monolith** mit Spring Modulith; ein Modul je Bounded Context | Gleiche fachliche Grenzen, aber ohne Betriebsaufwand; spätere Auftrennung möglich, weil Module nur über Events/APIs kommunizieren |
-| Kommunikation | RabbitMQ-Events + Feign | interne Spring-Events mit Modulith Event Publication Registry (Outbox); Kafka/RabbitMQ erst bei Auftrennung | Transaktionssicherheit ohne Broker |
-| Persistenz | `ddl-auto: create/update` | PostgreSQL + **Flyway** | reproduzierbare Migrationen |
-| Plattform | Java 21/25, Boot 3.4–4.1 | **Java 25 (LTS), Spring Boot 4.x** | entspricht aktuellem OpenWMS-Parent 28.x |
-| Hilfsbibliotheken | ameba-lib, MapStruct | nur MapStruct oder handgeschriebene Mapper; Jakarta Validation; eigene Basisklassen | Unabhängigkeit von Projekt-Interna |
-| Einheiten | `org.openwms.core.units` (Measurable) | `javax.measure` (Indriya, JSR-385) oder eigener `Quantity`-Wert-Typ | Standard statt Spezialbibliothek |
+| Sprache/Plattform | Java 21/25, Spring Boot 3.4–4.1 | **TypeScript (strict), Node.js LTS, NestJS** | Teamerfahrung; NestJS bietet Module + Dependency Injection ähnlich Spring |
+| Schnitt | 4+ Microservices + Eureka, Config, Gateway, Bus | **Modularer Monolith**, ein NestJS-Modul je Bounded Context; Grenzen per `dependency-cruiser` geprüft | Gleiche fachliche Grenzen ohne Betriebsaufwand; spätere Auftrennung möglich |
+| Persistenz | JPA, `ddl-auto: create/update` | PostgreSQL + **MikroORM** (Unit of Work, Optimistic Locking per Versionsspalte) + versionierte **Migrationen** | Am nächsten am JPA-Modell, reproduzierbares Schema |
+| Interne Kommunikation | RabbitMQ-Events + Feign | In-Process-Domain-Events + **Transactional Outbox** (Tabelle, im selben Commit geschrieben) | Keine verlorenen Events bei Fehlern |
+| Externe Events | RabbitMQ | **MQTT** (Mosquitto) aus der Outbox, Topics `wms/<modul>/<event>` | Nativ in Node-RED und in der Lager-/Anlagenwelt üblich |
+| Validierung | Jakarta Validation | **Zod** an allen Systemgrenzen, daraus OpenAPI | Typen existieren zur Laufzeit nicht |
+| Mengen/Gewichte | `org.openwms.core.units` (Measurable) | eigener `Quantity`-Wertetyp auf **`decimal.js`**, DB-Spalten `NUMERIC` | **Nie `number` für Mengen** (Float-Fehler) |
+| Fachliche Schlüssel | Klassen (`Barcode`, `LocationPK`) | **Branded Types** (`Barcode`, `LocationId`, `ErpCode`) | Verwechslungsschutz bei strukturellen Typen |
 | Regeln | optionale SPI-Hooks ohne Implementierung | Regeln als explizite Domain-Policies **mit** Default-Implementierung | Schließt die größte fachliche Lücke |
-| Tests | 72 Testklassen, ungleich verteilt | Testcontainers (PostgreSQL), ArchUnit/Modulith-Verifikation, Zustandsautomaten mit parametrisierten Tests | |
+| Zustandsautomaten | `switch`/`ordinal()` verteilt | je Aggregat eine Übergangstabelle (erlaubte Übergänge explizit) | testbar, keine Ordinal-Abhängigkeit |
+| Tests | 72 Testklassen, ungleich verteilt | **Vitest** (Unit), Testcontainers (PostgreSQL, Mosquitto), Supertest (API) | |
+| Repo-Struktur | ein Repo je Service | **pnpm-Monorepo**: `apps/api`, `apps/web` (später), `packages/api-client` (aus OpenAPI generiert), `packages/node-red-nodes` | gemeinsame Typen für Kern, UI und Node-RED |
 
 ```mermaid
 flowchart TB
-    subgraph App["Eigene Anwendung (Spring Boot, modularer Monolith)"]
+    subgraph App["Eigene Anwendung (TypeScript/NestJS, modularer Monolith)"]
         LAY[layout<br/>Lagerstruktur]
         TU[transportunit]
         MOV[movement]
@@ -391,7 +395,28 @@ flowchart TB
     INV --> TU
     LAY & TU & MOV & REC & TO & INV --> SHARED
     App --> PG[(PostgreSQL)]
+    App -- "Outbox → Events" --> MQTT[(MQTT-Broker<br/>Mosquitto)]
+    MQTT --> NR[Node-RED]
+    NR -- "REST-API (Token,<br/>Idempotency-Key)" --> App
+    NR <--> EXT[Scanner, SPS/OPC UA,<br/>ERP-Import, Etikettendrucker,<br/>Benachrichtigungen]
 ```
+
+### 5.1a Rolle von Node-RED
+
+| Node-RED **ja** | Node-RED **nein** |
+|---|---|
+| Anlagen- und Geräteanbindung: SPS über OPC UA/Modbus, Lichtschranken, Waagen, Barcode-Scanner, Pick-by-Light | Zustandsautomaten (TU, Movement, Transportauftrag, Wareneingang) |
+| Schnittstellen: ERP-Avise per CSV/REST/E-Mail einlesen und als Wareneingang anlegen | Kapazitäts-, Gewichts-, Stapel- und Platzierungsregeln |
+| Reaktionen auf Events: Etikett drucken bei `tu.created`, Meldung bei `transport-order.failed` | Bestandsbuchungen und -berechnungen |
+| Leitstands-Dashboards, Prototypen neuer Abläufe | direkter Datenbankzugriff |
+
+Technische Leitplanken:
+1. **Nur über die öffentliche API schreiben.** Node-RED bekommt einen eigenen API-Token mit eingeschränkten Rechten. So greifen alle Regeln im Kern auch für Node-RED.
+2. **Idempotenz:** Schreibende Aufrufe tragen einen `Idempotency-Key`, damit wiederholte Flows (Retry, doppelter Scan) keine Doppelbuchungen erzeugen.
+3. **Events über MQTT** mit QoS 1, eindeutiger Event-ID und Versionsfeld. Konsumenten müssen Duplikate tolerieren.
+4. **Eigene Node-RED-Nodes** als npm-Paket (`packages/node-red-nodes`) mit Config-Node (URL + Token) und fachlichen Nodes wie „TU bewegen“, „Wareneingang erfassen“, „Transportauftrag anlegen“, „WMS-Event“. Die Nodes nutzen den generierten, typisierten API-Client.
+5. **Flows versionieren:** Node-RED-Projects-Funktion (Git); produktive Flows im Monorepo unter `flows/`.
+6. **Absicherung:** `adminAuth` aktiv, Node-RED nicht öffentlich erreichbar, Zugangsdaten nur in Node-RED-Credentials, nicht in Flows.
 
 ### 5.2 Eigenbau oder Wiederverwendung
 
@@ -399,13 +424,14 @@ flowchart TB
 |---|---|---|
 | Fachkonzepte, Zustandsautomaten, API-Schnitt | **Nachbauen** (eigener Code, OpenWMS als Referenz) | Konzepte sind nicht urheberrechtlich geschützt; eigener Code vermeidet Übernahme der gefundenen Fehler und der Infrastrukturkopplung |
 | Einzelne Klassen aus `common.service.lib`, `tms.transportation` | **Zulässig**, wenn nötig | Apache-2.0: Lizenztext beilegen, Copyright-Header behalten, Änderungen kennzeichnen (§ 4). Empfehlung: nur punktuell, z. B. Barcode-Generierung |
-| `org.openwms.core.units`, `ameba-lib` als Maven-Abhängigkeit | möglich, **nicht empfohlen** | Apache-2.0, aber projektinterne APIs; Standardalternativen vorhanden |
+| `org.openwms.core.units`, `ameba-lib` | **entfällt** | Java-Bibliotheken, in TypeScript nicht nutzbar; Ersatz: eigener `Quantity`-Typ auf `decimal.js` |
+| Direkte Portierung von OpenWMS-Code nach TypeScript | **zulässig, aber sparsam** | Eine Übersetzung gilt als abgeleitetes Werk: Apache-2.0-Lizenz beilegen, Herkunft und Änderungen kennzeichnen. Fachlich nachbauen ist einfacher und vermeidet die Fehler aus 5.4 |
 | Bestandsführung, Produkte, Packaging Units | **Eigenbau** | Original privat |
 | Putaway-/Einlagerstrategie | **Eigenbau** (einfache Strategie: erster freier Platz in Zielgruppe nach `sortOrder`) | Original privat, GPLv3 |
 | UI-Module (`*.ui`) | **nicht verwenden** | GPLv3 |
 | Name/Logo „OpenWMS“ | **nicht verwenden** | Markenrecht, Apache-2.0 § 6 |
 | Demodaten (`import-DEMO.sql`) | nur als Strukturvorbild; eigene synthetische Testdaten | keine realen Kundendaten |
-| Standard-OSS: Spring Boot, Spring Modulith, Hibernate, Flyway, PostgreSQL, Testcontainers, springdoc, MapStruct | **verwenden** | Apache-2.0 bzw. kompatibel |
+| Standard-OSS: NestJS, MikroORM, Zod, decimal.js, Vitest, Testcontainers, PostgreSQL, Eclipse Mosquitto, Node-RED | **verwenden** | MIT, Apache-2.0, EPL-2.0/EDL-1.0 (Mosquitto, nur als separater Dienst betrieben) bzw. PostgreSQL-Lizenz – alle mit eigener Nutzung vereinbar; Lizenzen beim Aufsetzen nochmals prüfen |
 
 ### 5.3 Priorisierter Implementierungsplan
 
@@ -413,15 +439,16 @@ Reihenfolge wie gewünscht. Eine fachliche Abhängigkeit ist zu beachten: Der Wa
 
 | Prio | Schritt | Umfang | Fachliche Regeln (aus Katalog) | Abnahmekriterien |
 |---|---|---|---|---|
-| 0 | **Grundgerüst** | Maven-Projekt, Java 25, Boot 4, Modulith, PostgreSQL + Flyway, Testcontainers, OpenAPI, CI | – | `mvn verify` grün, Modulith-Verifikation, leeres API-Dokument |
+| 0 | **Grundgerüst** | pnpm-Monorepo, TypeScript strict, NestJS, MikroORM + Migrationen, Zod → OpenAPI, Outbox + MQTT-Publisher, Vitest, Testcontainers, CI; `docker compose` mit PostgreSQL, Mosquitto, Node-RED | – | `pnpm test` grün, Modulgrenzen geprüft, Test-Event kommt in Node-RED an |
 | 1 | **Lagerstruktur** | `LocationType`, `LocationGroup` (Hierarchie), `Location` (area/aisle/x/y/z, erpCode, plcCode), Sperren In/Out/Permanent | L-01 … L-05, plus **L-06 aktiv** | Anlegen/Abfragen/Sperren per REST; Sperrvererbung getestet |
 | 2 | **Transporteinheiten** | `TransportUnitType`, `TransportUnit`, Barcode-Generator, Bewegen, Zustände, Fehler, Reservierungen, Eltern/Kind | T-01, T-02, **T-03/T-04 als echte Policies** (Kapazität, Gewicht, Platzierung, Stapelung), T-05 | TU anlegen, bewegen, blockieren; Policy-Verletzungen liefern fachliche Fehler; MOVED-Event enthält korrekten Vorplatz |
 | 3 | **Lagerbewegungen** | `Movement`, `MovementGroup`, Typen, Handler je Typ, einfache Putaway-Strategie | M-01 … M-04 mit explizitem Zustandsautomaten | Movement anlegen, bewegen, abschließen, stornieren; ungültige Übergänge abgelehnt |
 | 4 | **Wareneingang** | `ReceivingOrder`, Mengen- und TU-Positionen, Erfassung (gegen Auftrag, blind), Abschluss; **minimales Produkt + Bestandsbuchung** | R-01 … R-07 | Avis anlegen, Teil-/Vollerfassung, Überbuchung nur bei Freigabe, Auftragsstatus korrekt abgeleitet |
 | 5 | **Transportaufträge** | `TransportOrder`, Zustandsautomat, Initialisierung nach Priorität, Start-Steuerung, Zielumleitung, Löschschutz für TUs | O-01 … O-07, plus definierte Behandlung von `INTERRUPTED` | Auftrag durchläuft CREATED→FINISHED; zweiter Start für dieselbe TU abgelehnt; gesperrtes Ziel verhindert Start |
 | 6 | **Bestandsführung** | Produkte, Einheiten/Umrechnungen, Packaging Units (Bestand je TU/Platz), Bestandsbuchungen als Journal, Reservierung, Inventur-Grundlage | neu zu definieren (Original privat) | Bestand pro Produkt/Platz/TU abfragbar, jede Änderung als Buchung nachvollziehbar |
+| 7 | **Node-RED-Nodes und Beispiel-Flows** | npm-Paket mit Config-Node und fachlichen Nodes; Beispiel-Flows: ERP-CSV → Wareneingang, Scan → TU bewegen, Event → Etikett/Meldung | Leitplanken aus 5.1a | Nodes in Node-RED installierbar; Flows laufen gegen die lokale Umgebung; Regelverletzung erscheint als Fehler im Flow |
 
-Je Schritt: Flyway-Migration, Domänenmodell mit Unit-Tests, Service, REST-Controller mit OpenAPI, Domain-Events, Integrationstest mit Testcontainers.
+Je Schritt: Migration, Domänenmodell mit Unit-Tests, Service, REST-Controller mit Zod-Schema/OpenAPI, Domain-Events über Outbox → MQTT, Integrationstest mit Testcontainers. Weil jeder Schritt seine Events veröffentlicht, kann Node-RED schon ab Schritt 1 für Prototypen genutzt werden; Schritt 7 macht daraus wiederverwendbare Nodes.
 
 ### 5.4 Nicht 1:1 übernehmen – gefundene Schwachstellen
 
@@ -434,12 +461,12 @@ Je Schritt: Flyway-Migration, Domänenmodell mit Unit-Tests, Service, REST-Contr
 | 5 | `MVL/impl/MovementServiceImpl.java:261,287` | Übergangsregeln über `ordinal()` – bricht bei Umsortierung des Enums. | erlaubte Übergänge explizit definieren |
 | 6 | `TMS/impl/state/StateManagerImpl.java` | `INTERRUPTED` ist definiert, aber nicht behandelt (`default` → `IllegalStateException`). | Übergänge für INTERRUPTED festlegen (→ STARTED/CANCELED/ONFAILURE) |
 | 7 | `Location.java:114,120`, `TransportUnitType.java:103,108` | Kapazität, Gewicht, Stapel-/Platzierungsregeln ohne Durchsetzung. | Policies im TU-Modul |
-| 8 | alle Services | Schema per `ddl-auto`. | Flyway |
+| 8 | alle Services | Schema per `ddl-auto`. | versionierte Migrationen (MikroORM) |
 | 9 | Routing-Keys | uneinheitlich (`changetarget` vs. `change-target`, `cancelled` vs. `canceled`). | einheitliches Namensschema |
 
 ### 5.5 Offene Entscheidungen für dich
 
-1. **Monolith vs. Microservices** – Empfehlung modularer Monolith; falls Microservices gewünscht sind, verdoppelt sich der Aufwand für Schritt 0.
+1. **Monolith vs. Microservices** – Empfehlung modularer Monolith; falls Microservices gewünscht sind, verdoppelt sich der Aufwand für Schritt 0. *(Sprache entschieden: TypeScript; Node-RED als Integrationsschicht.)*
 2. **Bestandsmodell** – Bestand je Packaging Unit (wie OpenWMS-Schnittstellen andeuten) oder je Platz/Produkt-Saldo mit Buchungsjournal? Empfehlung: Packaging Units + Journal.
 3. **Mandantenfähigkeit** (`Account`) von Anfang an oder später?
 4. **Anlagensteuerung** (`plcCode`, `plcState`, OSIP-Telegramme) – im ersten Ausbau nur als Felder, ohne Treiber?
