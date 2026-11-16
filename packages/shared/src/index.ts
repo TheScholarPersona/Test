@@ -3,3 +3,4 @@ export * from './quantity.js';
 export * from './events.js';
 export * from './layout-events.js';
 export * from './transport-events.js';
+export * from './strategy-events.js';

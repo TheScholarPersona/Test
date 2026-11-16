@@ -12,7 +12,9 @@ export type PlacementRule =
   | 'TARGET_INBOUND_BLOCKED'
   | 'LOCATION_FULL'
   | 'WEIGHT_EXCEEDED'
-  | 'PLACEMENT_NOT_ALLOWED';
+  | 'PLACEMENT_NOT_ALLOWED'
+  /** Nur bei der Platzvergabe: Platz ist von der automatischen Vergabe ausgenommen. */
+  | 'ALLOCATION_BLOCKED';
 
 export interface PlacementViolation {
   rule: PlacementRule;

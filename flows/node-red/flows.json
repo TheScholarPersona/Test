@@ -517,15 +517,15 @@
   {
     "id": "f502000000000000",
     "type": "tab",
-    "label": "Szenario: tu-placement",
+    "label": "Szenario: putaway-strategy",
     "disabled": false,
-    "info": "Schrittliste aus flows/scenarios/tu-placement.js; ausgeführt vom Tab „Schritt-Engine“."
+    "info": "Schrittliste aus flows/scenarios/putaway-strategy.js; ausgeführt vom Tab „Schritt-Engine“."
   },
   {
     "id": "f502000000000001",
     "type": "comment",
     "z": "f502000000000000",
-    "name": "Definition: flows/scenarios/tu-placement.js (im Repository bearbeiten, dann Flows neu erzeugen)",
+    "name": "Definition: flows/scenarios/putaway-strategy.js (im Repository bearbeiten, dann Flows neu erzeugen)",
     "info": "",
     "x": 380,
     "y": 40,
@@ -535,6 +535,39 @@
     "id": "f502000000000002",
     "type": "function",
     "z": "f502000000000000",
+    "name": "Szenario putaway-strategy anmelden",
+    "func": "return msg;\n",
+    "outputs": 0,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "const registerScenario = (definition) => {\n  const all = global.get('stepScenarios') || {};\n  all[definition.id] = definition;\n  global.set('stepScenarios', all);\n};\n/**\n * Szenario: Einlagerstrategie per Regelsatz-Entwurf simulieren.\n *\n * Aktiviert bewusst keinen Regelsatz – das würde das Verhalten der ganzen\n * Umgebung ändern. Stattdessen wird ein eigener Entwurf angelegt, simuliert\n * und wieder gelöscht; genau so prüfen Bediener neue Regeln vor der Aktivierung.\n *\n * Geprüft: Regelwahl über eine Bedingung, Strategie first-free, harte Regel\n * „Vergabesperre“ als Filter mit Begründung, Ablehnung ungültiger Regelsätze.\n * Schrittformat: siehe flows/scenarios/layout-locks.js.\n */\nregisterScenario({\n  id: 'putaway-strategy',\n  description: 'Regelsatz-Entwurf wählt den ersten freien Platz; Vergabesperre schließt ihn begründet aus.',\n  init: (runId) => {\n    const s = runId.replace(/[^a-z0-9]/gi, '').slice(-8).toUpperCase();\n    return {\n      locationType: `SZ-${s}`,\n      zone: `SZ-${s}-ZONE`,\n      inbound: `SZ-${s}-WE`,\n      unitType: `SZ-${s}`,\n      tu: `SZ-${s}-P`,\n      l1Coord: `S${s}/0001/0001/0001/0000`,\n      l2Coord: `S${s}/0001/0002/0001/0000`,\n      weCoord: `S${s}/0009/0001/0001/0000`,\n      l1: null,\n      l2: null,\n      we: null,\n      draft: null,\n    };\n  },\n  steps: [\n    { name: 'Platztyp anlegen', request: (v) => ({ method: 'POST', path: '/v1/location-types', body: { code: v.locationType } }), expectStatus: 201 },\n    { name: 'Lagerzone anlegen', request: (v) => ({ method: 'POST', path: '/v1/location-groups', body: { name: v.zone } }), expectStatus: 201 },\n    { name: 'Wareneingang anlegen', request: (v) => ({ method: 'POST', path: '/v1/location-groups', body: { name: v.inbound } }), expectStatus: 201 },\n    {\n      name: 'Platz L1 anlegen (Sortierung 1)',\n      request: (v) => ({ method: 'POST', path: '/v1/locations', body: { locationId: v.l1Coord, typeCode: v.locationType, groupName: v.zone, sortOrder: 1 } }),\n      expectStatus: 201,\n      save: (body, v) => {\n        v.l1 = body.id;\n      },\n    },\n    {\n      name: 'Platz L2 anlegen (Sortierung 2)',\n      request: (v) => ({ method: 'POST', path: '/v1/locations', body: { locationId: v.l2Coord, typeCode: v.locationType, groupName: v.zone, sortOrder: 2 } }),\n      expectStatus: 201,\n      save: (body, v) => {\n        v.l2 = body.id;\n      },\n    },\n    {\n      name: 'Wareneingangsplatz anlegen',\n      request: (v) => ({ method: 'POST', path: '/v1/locations', body: { locationId: v.weCoord, typeCode: v.locationType, groupName: v.inbound, maxTransportUnits: 10 } }),\n      expectStatus: 201,\n      save: (body, v) => {\n        v.we = body.id;\n      },\n    },\n    { name: 'TU-Typ anlegen', request: (v) => ({ method: 'POST', path: '/v1/transport-unit-types', body: { code: v.unitType } }), expectStatus: 201 },\n    {\n      name: 'TU im Wareneingang anlegen',\n      request: (v) => ({ method: 'POST', path: '/v1/transport-units', body: { barcode: v.tu, typeCode: v.unitType, location: { id: v.we } } }),\n      expectStatus: 201,\n    },\n    {\n      name: 'Ungültiger Regelsatz wird mit Begründung abgelehnt',\n      request: () => ({\n        method: 'POST',\n        path: '/v1/strategy-rule-sets',\n        body: { decisionPoint: 'putaway', rules: [{ name: 'x', when: { field: 'unit.farbe', op: 'eq', value: 'rot' }, strategy: 'first-free' }] },\n      }),\n      expectStatus: 400,\n      check: (body) => {\n        const errors = (body.details && body.details.errors) || [];\n        return body.code === 'RULE_SET_INVALID' && errors.some((e) => e.includes('unit.farbe')) && errors.some((e) => e.includes('letzte Regel'))\n          ? null\n          : `Unerwartete Antwort: ${JSON.stringify(body)}`;\n      },\n    },\n    {\n      name: 'Regelsatz-Entwurf anlegen',\n      request: (v) => ({\n        method: 'POST',\n        path: '/v1/strategy-rule-sets',\n        body: {\n          decisionPoint: 'putaway',\n          description: 'Szenario putaway-strategy',\n          rules: [\n            { name: 'szenario-tu', when: { field: 'unit.barcode', op: 'eq', value: v.tu }, strategy: 'first-free', params: { group: v.zone } },\n            { name: 'rest', when: { always: true }, strategy: 'first-free', params: {} },\n          ],\n        },\n      }),\n      expectStatus: 201,\n      check: (body) => (body.status === 'DRAFT' ? null : `Erwartet DRAFT, erhalten ${body.status}`),\n      save: (body, v) => {\n        v.draft = body.id;\n      },\n    },\n    {\n      name: 'Simulation wählt L1 über die Regel szenario-tu',\n      request: (v) => ({ method: 'POST', path: '/v1/putaway/simulations', body: { barcode: v.tu, ruleSetId: v.draft } }),\n      expectStatus: 200,\n      check: (body, v) =>\n        body.simulated === true && body.rule.name === 'szenario-tu' && body.chosen && body.chosen.key === v.l1 && body.id === null\n          ? null\n          : `Unerwartete Entscheidung: ${JSON.stringify({ rule: body.rule, chosen: body.chosen, simulated: body.simulated })}`,\n    },\n    {\n      name: 'L1 für die Platzvergabe sperren',\n      request: (v) => ({ method: 'PATCH', path: `/v1/locations/${v.l1}/locks`, body: { allocation: true, reason: 'Szenario putaway-strategy' } }),\n      expectStatus: 200,\n    },\n    {\n      name: 'Simulation weicht auf L2 aus und begründet den Ausschluss von L1',\n      request: (v) => ({ method: 'POST', path: '/v1/putaway/simulations', body: { barcode: v.tu, ruleSetId: v.draft } }),\n      expectStatus: 200,\n      check: (body, v) => {\n        const l1 = body.candidates.find((c) => c.key === v.l1);\n        if (!body.chosen || body.chosen.key !== v.l2) return `Erwartet L2, erhalten ${JSON.stringify(body.chosen)}`;\n        if (!l1 || l1.eligible || !l1.violations.some((x) => x.rule === 'ALLOCATION_BLOCKED')) return `L1 nicht begründet ausgeschlossen: ${JSON.stringify(l1)}`;\n        return body.summary.excludedByRule.ALLOCATION_BLOCKED === 1 ? null : `Zusammenfassung falsch: ${JSON.stringify(body.summary)}`;\n      },\n    },\n    {\n      name: 'Simulation hat nichts gespeichert und nichts zugewiesen',\n      request: (v) => ({ method: 'GET', path: `/v1/transport-units/${v.tu}` }),\n      expectStatus: 200,\n      check: (body) => (body.target === null ? null : `TU hat unerwartet ein Ziel: ${JSON.stringify(body.target)}`),\n    },\n    { name: 'Aufräumen: Entwurf löschen', cleanup: true, request: (v) => (v.draft ? { method: 'DELETE', path: `/v1/strategy-rule-sets/${v.draft}` } : null), expectStatus: 204 },\n    { name: 'Aufräumen: TU löschen', cleanup: true, request: (v) => ({ method: 'DELETE', path: `/v1/transport-units/${v.tu}` }) },\n    { name: 'Aufräumen: L1 löschen', cleanup: true, request: (v) => (v.l1 ? { method: 'DELETE', path: `/v1/locations/${v.l1}` } : null), expectStatus: 204 },\n    { name: 'Aufräumen: L2 löschen', cleanup: true, request: (v) => (v.l2 ? { method: 'DELETE', path: `/v1/locations/${v.l2}` } : null), expectStatus: 204 },\n    { name: 'Aufräumen: Wareneingangsplatz löschen', cleanup: true, request: (v) => (v.we ? { method: 'DELETE', path: `/v1/locations/${v.we}` } : null), expectStatus: 204 },\n    { name: 'Aufräumen: Lagerzone löschen', cleanup: true, request: (v) => ({ method: 'DELETE', path: `/v1/location-groups/${v.zone}` }), expectStatus: 204 },\n    { name: 'Aufräumen: Wareneingang löschen', cleanup: true, request: (v) => ({ method: 'DELETE', path: `/v1/location-groups/${v.inbound}` }), expectStatus: 204 },\n    { name: 'Aufräumen: TU-Typ löschen', cleanup: true, request: (v) => ({ method: 'DELETE', path: `/v1/transport-unit-types/${v.unitType}` }), expectStatus: 204 },\n    { name: 'Aufräumen: Platztyp löschen', cleanup: true, request: (v) => ({ method: 'DELETE', path: `/v1/location-types/${v.locationType}` }), expectStatus: 204 },\n  ],\n});\n",
+    "finalize": "",
+    "libs": [],
+    "x": 200,
+    "y": 100,
+    "wires": []
+  },
+  {
+    "id": "f503000000000000",
+    "type": "tab",
+    "label": "Szenario: tu-placement",
+    "disabled": false,
+    "info": "Schrittliste aus flows/scenarios/tu-placement.js; ausgeführt vom Tab „Schritt-Engine“."
+  },
+  {
+    "id": "f503000000000001",
+    "type": "comment",
+    "z": "f503000000000000",
+    "name": "Definition: flows/scenarios/tu-placement.js (im Repository bearbeiten, dann Flows neu erzeugen)",
+    "info": "",
+    "x": 380,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "f503000000000002",
+    "type": "function",
+    "z": "f503000000000000",
     "name": "Szenario tu-placement anmelden",
     "func": "return msg;\n",
     "outputs": 0,

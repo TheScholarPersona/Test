@@ -99,3 +99,15 @@ export class Quantity {
     }
   }
 }
+
+/** Vergleicht zwei Dezimal-Strings exakt: -1, 0 oder 1. Wirft bei ungültigen Werten. */
+export function compareDecimal(a: string, b: string): -1 | 0 | 1 {
+  if (!DECIMAL_PATTERN.test(a) || !DECIMAL_PATTERN.test(b)) {
+    throw new Error(`Kein Dezimalwert: ${!DECIMAL_PATTERN.test(a) ? a : b}`);
+  }
+  return new Decimal(a).comparedTo(new Decimal(b)) as -1 | 0 | 1;
+}
+
+export function isDecimalString(value: unknown): value is string {
+  return typeof value === 'string' && DECIMAL_PATTERN.test(value);
+}

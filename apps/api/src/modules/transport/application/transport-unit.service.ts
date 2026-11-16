@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 import { EntityManager, type FilterQuery } from '@mikro-orm/postgresql';
 import { Injectable, type OnModuleInit } from '@nestjs/common';
 import {
-  Quantity,
   TransportUnitCreatedEvent,
   TransportUnitDeletedEvent,
   TransportUnitMovedEvent,
@@ -15,7 +14,7 @@ import { ConflictError, NotFoundError, RuleViolationError } from '../../../commo
 import type { WeightKg } from '../../../http/common-schemas.js';
 import { OutboxService } from '../../../infrastructure/outbox/outbox.service.js';
 import { type Location, LocationLookup, LocationRemovalPolicy, type LocationType } from '../../layout/index.js';
-import { checkPlacement, KG, type PlacementViolation } from '../domain/placement.js';
+import { KG, type PlacementViolation } from '../domain/placement.js';
 import { checkStacking } from '../domain/stacking.js';
 import { TransportUnitStackingRule, type TransportUnitType } from '../entities/transport-unit-type.entity.js';
 import { TransportUnit } from '../entities/transport-unit.entity.js';
@@ -28,7 +27,8 @@ import type {
   UnstackInput,
   UpdateTransportUnit,
 } from '../http/schemas.js';
-import { effectiveWeight, locationRef, transportUnitSnapshot } from './mappers.js';
+import { locationRef, transportUnitSnapshot } from './mappers.js';
+import { PlacementChecker } from './placement-checker.js';
 import { TransportUnitRemovalPolicy } from './transport-unit-removal-policy.js';
 import { TransportUnitTypeService } from './transport-unit-type.service.js';
 
@@ -52,6 +52,7 @@ export class TransportUnitService implements OnModuleInit {
     private readonly outbox: OutboxService,
     private readonly lookup: LocationLookup,
     private readonly types: TransportUnitTypeService,
+    private readonly placement: PlacementChecker,
     private readonly locationRemoval: LocationRemovalPolicy,
     private readonly unitRemoval: TransportUnitRemovalPolicy,
   ) {}
@@ -93,13 +94,8 @@ export class TransportUnitService implements OnModuleInit {
       if ((await tx.count(TransportUnit, { barcode })) > 0) {
         throw new ConflictError('TU_EXISTS', `Transporteinheit [${barcode}] existiert bereits`, { barcode });
       }
-      const violations = await this.evaluatePlacement(tx, {
-        type,
-        stackWeight: KG(input.weight?.amount ?? type.tareWeightKg),
-        target,
-        source: null,
-        excludeIds: [],
-      });
+      const prepared = await this.placement.prepareNew(tx, type, input.weight?.amount ?? null);
+      const { violations } = (await this.placement.evaluate(tx, prepared, null, [target])).get(target.id)!;
       if (input.mode === 'checked' && violations.length > 0) {
         throw placementRejected(violations);
       }
@@ -137,14 +133,9 @@ export class TransportUnitService implements OnModuleInit {
       if (target.id === source.id) {
         return { unit, violations: [] };
       }
-      const stack = await this.descendants(tx, unit);
-      const violations = await this.evaluatePlacement(tx, {
-        type: unit.type as TransportUnitType,
-        stackWeight: [unit, ...stack].reduce((sum, u) => sum.add(effectiveWeight(u)), KG('0')),
-        target,
-        source,
-        excludeIds: [unit.id, ...stack.map((u) => u.id)],
-      });
+      const prepared = await this.placement.prepareExisting(tx, unit);
+      const stack = prepared.stack;
+      const { violations } = (await this.placement.evaluate(tx, prepared, source, [target])).get(target.id)!;
       if (input.mode === 'checked' && violations.length > 0) {
         throw placementRejected(violations);
       }
@@ -272,6 +263,20 @@ export class TransportUnitService implements OnModuleInit {
     });
   }
 
+  /** Lädt eine TU im übergebenen EntityManager (z. B. innerhalb der Transaktion eines anderen Moduls). */
+  loadIn(em: EntityManager, barcode: string): Promise<TransportUnit> {
+    return this.load(em, barcode);
+  }
+
+  /**
+   * Setzt das geplante Ziel einer TU innerhalb einer bestehenden Transaktion
+   * (z. B. nach einer Einlagerentscheidung) und veröffentlicht die Änderung.
+   */
+  assignTarget(em: EntityManager, unit: TransportUnit, target: Location): void {
+    unit.target = target;
+    this.outbox.record(em, TransportUnitUpdatedEvent, transportUnitSnapshot(unit));
+  }
+
   // -------------------------------------------------------------------------
 
   private async load(em: EntityManager, barcode: string): Promise<TransportUnit> {
@@ -280,54 +285,6 @@ export class TransportUnitService implements OnModuleInit {
       throw new NotFoundError('TU_NOT_FOUND', `Transporteinheit [${barcode}] existiert nicht`, { barcode });
     }
     return unit;
-  }
-
-  private async evaluatePlacement(
-    em: EntityManager,
-    args: { type: TransportUnitType; stackWeight: Quantity; target: Location; source: Location | null; excludeIds: string[] },
-  ): Promise<PlacementViolation[]> {
-    const rules = await this.types.rulesOf(em, args.type);
-    const where: FilterQuery<TransportUnit> = { location: args.target };
-    if (args.excludeIds.length > 0) where.id = { $nin: args.excludeIds };
-    const onTarget = await em.find(TransportUnit, where, { populate: ['type'] });
-    const targetLocks = this.lookup.locks(args.target);
-    const sourceLocks = args.source ? this.lookup.locks(args.source) : null;
-    return checkPlacement({
-      unit: {
-        typeCode: args.type.code,
-        allowedLocationTypes: rules.placement.map((r) => (r.locationType as LocationType).code),
-        stackWeight: args.stackWeight,
-      },
-      source:
-        args.source && sourceLocks
-          ? {
-              locationId: args.source.locationId,
-              outboundBlocked: sourceLocks.outbound.blocked,
-              outboundBlockedBy: sourceLocks.outbound.blockedBy?.name ?? null,
-            }
-          : null,
-      target: {
-        locationId: args.target.locationId,
-        typeCode: this.lookup.typeCode(args.target),
-        inboundBlocked: targetLocks.inbound.blocked,
-        inboundBlockedBy: targetLocks.inbound.blockedBy?.name ?? null,
-        maxTransportUnits: args.target.maxTransportUnits,
-        maxWeight: args.target.maxWeightKg == null ? null : KG(args.target.maxWeightKg),
-        occupiedSlots: onTarget.filter((u) => !u.parent).length,
-        currentWeight: onTarget.reduce((sum, u) => sum.add(effectiveWeight(u)), KG('0')),
-      },
-    });
-  }
-
-  /** Alle TUs, die (mittelbar) auf `unit` stehen. */
-  private async descendants(em: EntityManager, unit: TransportUnit): Promise<TransportUnit[]> {
-    const result: TransportUnit[] = [];
-    let frontier = [unit];
-    for (let depth = 0; frontier.length > 0 && depth < MAX_STACK_DEPTH; depth++) {
-      frontier = await em.find(TransportUnit, { parent: { $in: frontier } }, { populate: ['type'] });
-      result.push(...frontier);
-    }
-    return result;
   }
 
   /** Barcodes der TUs, auf denen `unit` (mittelbar) steht. */

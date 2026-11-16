@@ -16,6 +16,7 @@ apps/api/                  WMS-Kern (NestJS)
     health/                GET /health
     layout/                Lagerstruktur: Platztypen, Gruppen, Lagerplätze, Sperren
     transport/             Transporteinheiten: Typen, Regeln, TUs, Bewegen, Stapeln
+    strategy/              Strategie-Kern: Regelsätze, Entscheidungen; Einlagerung (putaway/)
     test-support/          Test-Endpunkte, nur im Profil "test"
   test/unit/               Unit-Tests (ohne Datenbank)
   test/integration/        Integrationstests mit Testcontainers
@@ -116,6 +117,62 @@ Der Zielplatz wird während der Prüfung in der Datenbank gesperrt (`SELECT … 
 **Löschschutz.** Ein Lagerplatz mit TUs kann nicht gelöscht werden (`LOCATION_IN_USE`, Einwand `transport-units`). Eine TU mit aufgestapelten TUs ebenfalls nicht (`TU_HAS_CHILDREN`); weitere Einwände anderer Module über `TransportUnitRemovalPolicy` (ab Schritt 5: laufende Transportaufträge).
 
 Events: `transport-unit-type.created|updated|deleted`, `transport-unit.created|moved|updated|state-changed|stacked|unstacked|deleted` (Schemas in `packages/shared/src/transport-events.ts`).
+
+## Strategie-Kern (`/v1/strategies`, `/v1/strategy-rule-sets`, `/v1/putaway/…`, `/v1/strategy-decisions`)
+
+Entscheidungen wie „Auf welchen Platz kommt diese TU?“ werden nicht fest programmiert, sondern über versionierte **Regelsätze** konfiguriert. Bisheriger Entscheidungspunkt: `putaway` (Einlagerung).
+
+**Ablauf einer Entscheidung:** Fakten ermitteln → erste zutreffende Regel wählen → deren Strategie mit Parametern ausführen → Kandidaten gegen die **harten Regeln** prüfen → geeignete Kandidaten bewerten → Ergebnis mit Begründung speichern.
+
+`GET /v1/strategies` liefert je Entscheidungspunkt die Felder für Bedingungen (mit Typ) und die Strategien mit JSON-Schema ihrer Parameter.
+
+**Regelsatz:** geordnete Liste von Regeln; die erste zutreffende gilt, die letzte muss `{ "always": true }` haben (Rückfall).
+
+```json
+{ "decisionPoint": "putaway", "description": "Schweres auf den Boden",
+  "rules": [
+    { "name": "schwer", "when": { "field": "unit.weightKg", "op": "gt", "value": "500" },
+      "strategy": "first-free", "params": { "group": "ZONE-BODEN" } },
+    { "name": "anfrage", "when": { "field": "request.group", "op": "exists" },
+      "strategy": "first-free", "params": {} },
+    { "name": "standard", "when": { "always": true },
+      "strategy": "weighted", "params": { "group": "LAGER", "weights": { "emptiness": 2, "privilege": 5 } } }
+  ] }
+```
+
+| Bedingung | Form |
+|---|---|
+| Vergleich | `{ "field", "op", "value" }` mit `eq`, `neq`, `in`, `notIn` (Liste), `gt`, `gte`, `lt`, `lte` (Zahl/Dezimal), `exists` (ohne Wert) |
+| Verknüpfung | `{ "all": [...] }`, `{ "any": [...] }`, `{ "not": {...} }`, `{ "always": true }` |
+
+Dezimalfelder (z. B. `unit.weightKg`) werden exakt verglichen. Beim Speichern werden Felder, Operatoren, Werttypen, Strategien und Parameter vollständig geprüft (`400 RULE_SET_INVALID`, `details.errors` mit Pfad). Bedingungen sind Daten, kein ausführbarer Code.
+
+**Lebenszyklus:** `POST /v1/strategy-rule-sets` legt einen Entwurf (`DRAFT`) mit der nächsten Version an; Entwürfe sind änderbar (`PUT`) und löschbar. `POST …/{id}/activate` aktiviert ihn und archiviert den bisher aktiven (höchstens ein aktiver je Entscheidungspunkt, auch per Datenbank abgesichert). Aktive und archivierte Regelsätze sind unveränderlich (`RULE_SET_NOT_DRAFT`).
+
+**Einlagerstrategien:**
+
+| Strategie | Parameter | Auswahl |
+|---|---|---|
+| `first-free` | `group?`, `includeSubgroups` (Standard `true`) | erster geeigneter Platz nach `sortOrder`, dann Koordinate |
+| `weighted` | zusätzlich `weights: { sortOrder, emptiness, privilege }` (je 0–10, Standard 1) | höchste Summe der gewichteten, auf 0…1 normierten Kriterien: frühe Sortierung, Leere des Platzes, Vorrang des Platztyps laut Platzierungsregel |
+
+Ohne `group` in der Regel gilt die Suchgruppe aus der Anfrage (`NO_SEARCH_GROUP`, wenn beides fehlt).
+
+**Harte Regeln** prüft der Entscheidungspunkt, nicht die Strategie – keine Strategie kann sie abschalten: alle Platzierungsregeln aus dem TU-Modul, dabei zählen bereits zugewiesene, noch nicht angekommene TUs als belegt; zusätzlich `ALLOCATION_BLOCKED` (Vergabesperre des Platzes).
+
+**Endpunkte:**
+
+| Endpunkt | Wirkung |
+|---|---|
+| `POST /v1/putaway/simulations` `{ barcode, group?, ruleSetId? }` | Probelauf, auch mit Entwurf; speichert und weist nichts zu (`id: null`, `simulated: true`) |
+| `POST /v1/putaway/decisions` `{ barcode, group?, assign }` | echte Entscheidung mit dem aktiven Regelsatz; wird gespeichert, Event `putaway.decided`; mit `assign: true` wird der Platz als Ziel der TU gesetzt |
+| `GET /v1/strategy-decisions?subject=<barcode>`, `GET …/{id}` | gespeicherte Entscheidungen mit Begründung |
+
+**Begründung (Decision Trace):** Regel und Index, Strategie mit vollständigen Parametern, Fakten, gewählter Kandidat mit Punktzahl, Zusammenfassung (`evaluated`, `eligible`, `excludedByRule`) und bis zu 20 Kandidaten mit Verstößen bzw. Bewertungsanteilen. Wird nichts gewählt, erklärt `note` warum.
+
+**Parallele Zuweisungen:** Der gewählte Platz wird ohne Warten gesperrt (`FOR UPDATE SKIP LOCKED`) und mit frisch gelesener Belegung erneut geprüft. Ist er inzwischen vergeben oder wird er gerade von einer anderen Anfrage vergeben (`LOCATION_BUSY`), wird er ausgeschlossen und neu gewählt (höchstens 5 Versuche, siehe `attempts` und `rejectedOnAssign`). Da nie auf eine Sperre gewartet wird, sind Deadlocks ausgeschlossen; ein Platz, dessen parallele Vergabe doch scheitert, wird in diesem Durchlauf nicht berücksichtigt.
+
+**Neuen Entscheidungspunkt ergänzen:** Definition mit Feldkatalog und Strategien (Vorbild `strategy/putaway/putaway.point.ts`), in `StrategyRegistry` eintragen, Service für Kontext und Ergebnis.
 
 ## Events
 

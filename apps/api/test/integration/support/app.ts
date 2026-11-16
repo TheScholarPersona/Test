@@ -13,7 +13,7 @@ export function configFor(env: TestEnvironment, overrides: Record<string, string
 }
 
 export async function startApp(config: AppConfig): Promise<{ app: INestApplication; baseUrl: string }> {
-  const app = await createApp(config, { logger: false });
+  const app = await createApp(config, { logger: process.env['TEST_LOG'] ? ['error', 'warn'] : false });
   await app.listen(0, '127.0.0.1');
   return { app, baseUrl: (await app.getUrl()).replace('[::1]', '127.0.0.1') };
 }

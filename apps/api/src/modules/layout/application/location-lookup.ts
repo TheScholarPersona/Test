@@ -48,6 +48,27 @@ export class LocationLookup {
     return location;
   }
 
+  /**
+   * Versucht, die Zeile eines Lagerplatzes für die laufende Transaktion zu
+   * sperren, ohne zu warten (`FOR UPDATE SKIP LOCKED`). `false`, wenn eine
+   * andere Transaktion den Platz gerade gesperrt hat. Da nie gewartet wird,
+   * können mehrere solcher Sperren in einer Transaktion keinen Deadlock auslösen.
+   */
+  async tryLock(em: EntityManager, locationId: string): Promise<boolean> {
+    const rows = await em.execute<{ id: string }[]>('select "id" from "location" where "id" = ? for update skip locked', [locationId]);
+    return rows.length > 0;
+  }
+
+  /**
+   * Alle Plätze einer Gruppe (optional mit Untergruppen), mit geladenem Typ
+   * und geladener Hierarchie; sortiert nach `sortOrder`, dann Koordinate.
+   */
+  async inGroup(em: EntityManager, groupName: string, includeSubgroups: boolean): Promise<Location[]> {
+    const hierarchy = await GroupHierarchy.load(em);
+    const groups = includeSubgroups ? hierarchy.subtree(groupName) : [hierarchy.get(groupName)];
+    return em.find(Location, { group: { $in: groups } }, { populate: ['type'], orderBy: { sortOrder: 'asc', locationId: 'asc' } });
+  }
+
   /** Setzt voraus, dass der Platz über `resolve` (oder mit geladener Hierarchie) geladen wurde. */
   locks(location: Location): LocationLocks {
     const chain = location.lockChain();

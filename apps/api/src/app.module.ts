@@ -6,6 +6,7 @@ import { databaseOptions } from './database.js';
 import { OutboxModule } from './infrastructure/outbox/outbox.module.js';
 import { HealthModule } from './modules/health/index.js';
 import { LayoutModule } from './modules/layout/index.js';
+import { StrategyModule } from './modules/strategy/index.js';
 import { TestSupportModule } from './modules/test-support/index.js';
 import { TransportModule } from './modules/transport/index.js';
 
@@ -39,6 +40,7 @@ export class AppModule {
         HealthModule,
         LayoutModule,
         TransportModule,
+        StrategyModule,
         ...testModules,
       ],
     };
