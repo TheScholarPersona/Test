@@ -364,7 +364,7 @@
     "type": "function",
     "z": "f000000000000004",
     "name": "Nächster Schritt",
-    "func": "    const s = msg.scenario;\n    const def = (global.get('stepScenarios') || {})[s.id];\n    const fail = (name, detail) => {\n      s.steps.push({ name, passed: false, detail });\n      if (!s.failed) {\n        s.failed = true;\n        s.error = `${name}: ${detail}`;\n      }\n    };\n    if (!def) {\n      fail('Szenario laden', `Szenario [${s.id}] ist nicht definiert`);\n      s.passed = false;\n      return [null, null, msg];\n    }\n    if (s.vars === undefined) {\n      s.vars = def.init ? def.init(s.runId) : {};\n      s.idx = 0;\n      s.failed = false;\n    }\n    for (;;) {\n      // Nach einem Fehler nur noch Aufräumschritte ausführen.\n      while (s.idx < def.steps.length && s.failed && !def.steps[s.idx].cleanup) {\n        s.idx++;\n      }\n      if (s.idx >= def.steps.length) {\n        s.passed = !s.failed && s.steps.every((step) => step.passed === true);\n        return [null, null, msg];\n      }\n      const step = def.steps[s.idx];\n      if (step.event) {\n        return [null, msg, null];\n      }\n      try {\n        const request = step.request(s.vars);\n        if (request === null) {\n          // Schritt bewusst übersprungen, z. B. Aufräumen eines nie angelegten Objekts.\n          s.steps.push({ name: step.name, passed: true, detail: 'übersprungen' });\n          s.idx++;\n          continue;\n        }\n        msg.method = request.method;\n        msg.url = `${env.get('WMS_API_URL')}${request.path}`;\n        msg.headers = { 'content-type': 'application/json' };\n        msg.payload = request.body === undefined ? '' : request.body;\n        return [msg, null, null];\n      } catch (error) {\n        fail(step.name, `Anfrage konnte nicht erstellt werden: ${error.message}`);\n        s.idx++;\n      }\n    }\n",
+    "func": "    const s = msg.scenario;\n    const def = (global.get('stepScenarios') || {})[s.id];\n    const fail = (name, detail) => {\n      s.steps.push({ name, passed: false, detail });\n      if (!s.failed) {\n        s.failed = true;\n        s.error = `${name}: ${detail}`;\n      }\n    };\n    if (!def) {\n      fail('Szenario laden', `Szenario [${s.id}] ist nicht definiert`);\n      s.passed = false;\n      return [null, null, msg];\n    }\n    if (s.vars === undefined) {\n      s.vars = def.init ? def.init(s.runId) : {};\n      s.idx = 0;\n      s.failed = false;\n    }\n    for (;;) {\n      // Nach einem Fehler nur noch Aufräumschritte ausführen.\n      while (s.idx < def.steps.length && s.failed && !def.steps[s.idx].cleanup) {\n        s.idx++;\n      }\n      if (s.idx >= def.steps.length) {\n        s.passed = !s.failed && s.steps.every((step) => step.passed === true);\n        return [null, null, msg];\n      }\n      const step = def.steps[s.idx];\n      if (step.event) {\n        return [null, msg, null];\n      }\n      try {\n        const request = step.request(s.vars);\n        if (request === null) {\n          // Schritt bewusst übersprungen, z. B. Aufräumen eines nie angelegten Objekts.\n          s.steps.push({ name: step.name, passed: true, detail: 'übersprungen' });\n          s.idx++;\n          continue;\n        }\n        msg.method = request.method;\n        // service: 'simulator' spricht die Endpunkte des Anlagensimulators in diesem Node-RED an.\n        const base = request.service === 'simulator' ? `http://127.0.0.1:${env.get('PORT') || 1880}` : env.get('WMS_API_URL');\n        msg.url = `${base}${request.path}`;\n        msg.headers = { 'content-type': 'application/json' };\n        msg.payload = request.body === undefined ? '' : request.body;\n        return [msg, null, null];\n      } catch (error) {\n        fail(step.name, `Anfrage konnte nicht erstellt werden: ${error.message}`);\n        s.idx++;\n      }\n    }\n",
     "outputs": 3,
     "timeout": 0,
     "noerr": 0,
@@ -517,15 +517,15 @@
   {
     "id": "f502000000000000",
     "type": "tab",
-    "label": "Szenario: movement-flow",
+    "label": "Szenario: material-flow",
     "disabled": false,
-    "info": "Schrittliste aus flows/scenarios/movement-flow.js; ausgeführt vom Tab „Schritt-Engine“."
+    "info": "Schrittliste aus flows/scenarios/material-flow.js; ausgeführt vom Tab „Schritt-Engine“."
   },
   {
     "id": "f502000000000001",
     "type": "comment",
     "z": "f502000000000000",
-    "name": "Definition: flows/scenarios/movement-flow.js (im Repository bearbeiten, dann Flows neu erzeugen)",
+    "name": "Definition: flows/scenarios/material-flow.js (im Repository bearbeiten, dann Flows neu erzeugen)",
     "info": "",
     "x": 380,
     "y": 40,
@@ -535,6 +535,39 @@
     "id": "f502000000000002",
     "type": "function",
     "z": "f502000000000000",
+    "name": "Szenario material-flow anmelden",
+    "func": "return msg;\n",
+    "outputs": 0,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "const registerScenario = (definition) => {\n  const all = global.get('stepScenarios') || {};\n  all[definition.id] = definition;\n  global.set('stepScenarios', all);\n};\n/**\n * Szenario: Materialfluss mit Anlagensimulator.\n *\n * Fördertechnik I-Punkt → C1 → C2 → Hochregal. Das WMS beantwortet jede\n * Anfrage mit einem Fahrbefehl, der Simulator (Tab „Anlagensimulator“) fährt\n * und meldet am nächsten Platz – bis der Auftrag im Hochregal abgeschlossen ist.\n * Danach: geänderte Route wirkt sofort, Auftrag ohne Route meldet „keine\n * Route“ (R4), eine eingespeiste Störung unterbricht den Auftrag, und ein\n * Node-RED-Programm beantwortet eine Anfrage mit einem Fahrbefehl.\n * Aufträge und Entscheidungen bleiben als Historie erhalten.\n * Schrittformat: siehe flows/scenarios/layout-locks.js.\n */\nregisterScenario({\n  id: 'material-flow',\n  description: 'Simulator fährt TUs über die Route ins Hochregal; Routenänderung wirkt sofort; keine Route, Störung und Node-RED-Programm.',\n  init: (runId) => {\n    const s = runId.replace(/[^a-z0-9]/gi, '').slice(-8).toUpperCase();\n    const plc = { ip: `${s}-IP`, c1: `${s}-C1`, c2: `${s}-C2`, h1: `${s}-HRL1`, k1: `${s}-K1` };\n    return {\n      s,\n      locationType: `SM-${s}`,\n      ft: `SM-${s}-FT`,\n      hrl: `SM-${s}-HRL`,\n      nio: `SM-${s}-NIO`,\n      unitType: `SM-${s}`,\n      route: `SM-${s}`,\n      plc,\n      coords: { ip: `Q${s}/0001/0001/0001/0000`, c1: `Q${s}/0002/0001/0001/0000`, c2: `Q${s}/0003/0001/0001/0000`, h1: `Q${s}/0009/0001/0001/0000`, k1: `Q${s}/0008/0001/0001/0000` },\n      groupOf: { ip: 'ft', c1: 'ft', c2: 'ft', h1: 'hrl', k1: 'nio' },\n      loc: {},\n      tu: { t1: `${s}-T1`, t2: `${s}-T2`, t3: `${s}-T3`, t4: `${s}-T4`, t5: `${s}-T5` },\n      actions: [`sm-${s}-ip`, `sm-${s}-ft`, `sm-${s}-hrl`, `sm-${s}-err`, `sm-${s}-nio`],\n      orders: [],\n    };\n  },\n  steps: [\n    { name: 'Platztyp anlegen', request: (v) => ({ method: 'POST', path: '/v1/location-types', body: { code: v.locationType } }), expectStatus: 201 },\n    ...['ft', 'hrl', 'nio'].map((g) => ({ name: `Gruppe ${g} anlegen`, request: (v) => ({ method: 'POST', path: '/v1/location-groups', body: { name: v[g] } }), expectStatus: 201 })),\n    ...['ip', 'c1', 'c2', 'h1', 'k1'].map((key) => ({\n      name: `Platz ${key} anlegen`,\n      request: (v) => ({\n        method: 'POST',\n        path: '/v1/locations',\n        body: { locationId: v.coords[key], plcCode: v.plc[key], typeCode: v.locationType, groupName: v[v.groupOf[key]], maxTransportUnits: 20 },\n      }),\n      expectStatus: 201,\n      save: (body, v) => {\n        v.loc[key] = body.id;\n      },\n    })),\n    { name: 'TU-Typ anlegen', request: (v) => ({ method: 'POST', path: '/v1/transport-unit-types', body: { code: v.unitType } }), expectStatus: 201 },\n    {\n      name: 'Route I-Punkt → Hochregal mit Schritten anlegen',\n      request: (v) => ({\n        method: 'POST',\n        path: '/v1/flow/routes',\n        body: {\n          routeId: v.route,\n          source: { location: { plcCode: v.plc.ip } },\n          target: { group: v.hrl },\n          steps: [\n            { from: { plcCode: v.plc.ip }, next: { plcCode: v.plc.c1 } },\n            { from: { plcCode: v.plc.c1 }, next: { plcCode: v.plc.c2 } },\n            { from: { plcCode: v.plc.c2 }, next: { plcCode: v.plc.h1 } },\n          ],\n        },\n      }),\n      expectStatus: 201,\n    },\n    {\n      name: 'Action: Anfrage am I-Punkt legt TU und Auftrag an',\n      request: (v) => ({\n        method: 'POST',\n        path: '/v1/flow/actions',\n        body: { name: v.actions[0], eventType: 'request', place: { location: { plcCode: v.plc.ip } }, program: 'create-order', params: { target: { group: v.hrl }, typeCode: v.unitType } },\n      }),\n      expectStatus: 201,\n    },\n    {\n      name: 'Action: Anfragen in der Fördertechnik fahren weiter',\n      request: (v) => ({ method: 'POST', path: '/v1/flow/actions', body: { name: v.actions[1], eventType: 'request', place: { group: v.ft }, program: 'route-next' } }),\n      expectStatus: 201,\n    },\n    {\n      name: 'Action: Ankunft im Hochregal schließt ab',\n      request: (v) => ({ method: 'POST', path: '/v1/flow/actions', body: { name: v.actions[2], eventType: 'arrived', place: { group: v.hrl }, program: 'route-next' } }),\n      expectStatus: 201,\n    },\n    {\n      name: 'Action: Störung in der Fördertechnik unterbricht den Auftrag',\n      request: (v) => ({ method: 'POST', path: '/v1/flow/actions', body: { name: v.actions[3], eventType: 'error', place: { group: v.ft }, program: 'interrupt-order' } }),\n      expectStatus: 201,\n    },\n    {\n      name: 'Action: Anfrage am Klärplatz geht an das Node-RED-Programm send-to-plc',\n      request: (v) => ({\n        method: 'POST',\n        path: '/v1/flow/actions',\n        body: { name: v.actions[4], eventType: 'request', place: { group: v.nio }, program: 'node-red', params: { flow: 'send-to-plc', toPlc: v.plc.c2 } },\n      }),\n      expectStatus: 201,\n    },\n    {\n      name: 'Simulator ist aktiv',\n      request: () => ({ service: 'simulator', method: 'DELETE', path: '/sim/faults' }),\n      expectStatus: 200,\n      check: (body) => (body.enabled === true ? null : 'Simulator ist deaktiviert (SIMULATOR_ENABLED)'),\n    },\n\n    // --- 1. Fahrt über die Route ----------------------------------------------\n    {\n      name: 'Anfrage am I-Punkt (unbekannte TU) → Fahrbefehl nach C1',\n      request: (v) => ({ method: 'POST', path: '/v1/flow/events', body: { type: 'request', location: { plcCode: v.plc.ip }, barcode: v.tu.t1, deviceId: 'SIM' } }),\n      expectStatus: 200,\n      check: (body, v) =>\n        body.decision.outcome === 'COMMAND' && body.command.to.plcCode === v.plc.c1 && body.decision.routeId === v.route ? null : `Unerwartet: ${JSON.stringify(body.decision)}`,\n      save: (body, v) => {\n        v.orders.push(body.decision.orderNumber);\n      },\n    },\n    { name: 'Simulator fährt; Auftrag im Hochregal abgeschlossen', event: (e, v) => e.type === 'transport-order.finished' && e.payload.barcode === v.tu.t1 },\n    {\n      name: 'TU steht im Hochregal',\n      request: (v) => ({ method: 'GET', path: `/v1/transport-units/${v.tu.t1}` }),\n      expectStatus: 200,\n      check: (body, v) => (body.location.id === v.loc.h1 && body.target === null ? null : `Unerwartet: ${JSON.stringify(body.location)}`),\n    },\n    {\n      name: 'Entscheidungsprotokoll: I-Punkt, C1, C2 → Fahrbefehle, Hochregal → abgeschlossen',\n      request: (v) => ({ method: 'GET', path: `/v1/flow/decisions?barcode=${v.tu.t1}` }),\n      expectStatus: 200,\n      check: (body, v) => {\n        const seen = body.items.map((d) => `${d.outcome}:${d.next || '-'}`).reverse().join(' ');\n        const expected = `COMMAND:${v.coords.c1} COMMAND:${v.coords.c2} COMMAND:${v.coords.h1} FINISHED:-`;\n        return seen === expected ? null : `Erwartet ${expected}, erhalten ${seen}`;\n      },\n    },\n\n    // --- 2. Routenänderung wirkt sofort ---------------------------------------\n    {\n      name: 'Route ändern: C1 fährt direkt ins Hochregal',\n      request: (v) => ({\n        method: 'PUT',\n        path: `/v1/flow/routes/${v.route}/steps`,\n        body: {\n          steps: [\n            { from: { plcCode: v.plc.ip }, next: { plcCode: v.plc.c1 } },\n            { from: { plcCode: v.plc.c1 }, next: { plcCode: v.plc.h1 } },\n          ],\n        },\n      }),\n      expectStatus: 200,\n    },\n    {\n      name: 'Zweite TU am I-Punkt anmelden',\n      request: (v) => ({ method: 'POST', path: '/v1/flow/events', body: { type: 'request', location: { plcCode: v.plc.ip }, barcode: v.tu.t2, deviceId: 'SIM' } }),\n      expectStatus: 200,\n      save: (body, v) => {\n        v.orders.push(body.decision.orderNumber);\n      },\n    },\n    { name: 'Zweite TU im Hochregal angekommen', event: (e, v) => e.type === 'transport-order.finished' && e.payload.barcode === v.tu.t2 },\n    {\n      name: 'Zweite TU fuhr ohne C2',\n      request: (v) => ({ method: 'GET', path: `/v1/flow/decisions?barcode=${v.tu.t2}` }),\n      expectStatus: 200,\n      check: (body, v) => {\n        const nexts = body.items.map((d) => d.next).filter(Boolean);\n        return nexts.includes(v.coords.c2) || !nexts.includes(v.coords.h1) ? `Unerwartete Fahrt: ${JSON.stringify(nexts)}` : null;\n      },\n    },\n\n    // --- 3. Keine Route (R4) --------------------------------------------------\n    {\n      name: 'TU auf C2 anlegen',\n      request: (v) => ({ method: 'POST', path: '/v1/transport-units', body: { barcode: v.tu.t3, typeCode: v.unitType, location: { id: v.loc.c2 } } }),\n      expectStatus: 201,\n    },\n    {\n      name: 'Auftrag C2 → Klärplatz (keine Route konfiguriert)',\n      request: (v) => ({ method: 'POST', path: '/v1/transport-orders', body: { barcode: v.tu.t3, target: { location: { id: v.loc.k1 } } } }),\n      expectStatus: 201,\n      save: (body, v) => {\n        v.orders.push(body.number);\n      },\n    },\n    {\n      name: 'Anfrage an C2 liefert keinen Fahrbefehl',\n      request: (v) => ({ method: 'POST', path: '/v1/flow/events', body: { type: 'request', location: { plcCode: v.plc.c2 }, barcode: v.tu.t3 } }),\n      expectStatus: 200,\n      check: (body) => (body.command === null && body.decision.outcome === 'NO_NEXT_STEP' && body.decision.routeId === null ? null : `Unerwartet: ${JSON.stringify(body.decision)}`),\n    },\n    { name: 'Event flow.no-route empfangen', event: (e, v) => e.type === 'flow.no-route' && e.payload.barcode === v.tu.t3 },\n\n    // --- 4. Störung -----------------------------------------------------------\n    {\n      name: 'Störung auf dem Weg nach C1 einspeisen',\n      request: (v) => ({ service: 'simulator', method: 'POST', path: '/sim/faults', body: { plcCode: v.plc.c1, code: 'LS1', message: 'Lichtschranke verdeckt' } }),\n      expectStatus: 200,\n    },\n    {\n      name: 'Vierte TU am I-Punkt anmelden',\n      request: (v) => ({ method: 'POST', path: '/v1/flow/events', body: { type: 'request', location: { plcCode: v.plc.ip }, barcode: v.tu.t4, deviceId: 'SIM' } }),\n      expectStatus: 200,\n      save: (body, v) => {\n        v.orders.push(body.decision.orderNumber);\n      },\n    },\n    { name: 'Auftrag wegen Störung unterbrochen', event: (e, v) => e.type === 'transport-order.interrupted' && e.payload.barcode === v.tu.t4 },\n\n    // --- 5. Node-RED-Programm -------------------------------------------------\n    {\n      name: 'TU auf dem Klärplatz anlegen',\n      request: (v) => ({ method: 'POST', path: '/v1/transport-units', body: { barcode: v.tu.t5, typeCode: v.unitType, location: { id: v.loc.k1 } } }),\n      expectStatus: 201,\n    },\n    {\n      name: 'Anfrage am Klärplatz wird an Node-RED übergeben',\n      request: (v) => ({ method: 'POST', path: '/v1/flow/events', body: { type: 'request', location: { plcCode: v.plc.k1 }, barcode: v.tu.t5 } }),\n      expectStatus: 200,\n      check: (body) => (body.decision.outcome === 'DELEGATED' ? null : `Unerwartet: ${body.decision.outcome}`),\n    },\n    { name: 'Node-RED-Programm sendet Fahrbefehl nach C2', event: (e, v) => e.type === 'flow.command' && e.payload.barcode === v.tu.t5 && e.payload.to.plcCode === v.plc.c2 },\n\n    // --- Aufräumen --------------------------------------------------------------\n    ...[0, 1, 2, 3].map((i) => ({\n      name: `Aufräumen: Auftrag ${i + 1} stornieren`,\n      cleanup: true,\n      request: (v) => (v.orders[i] ? { method: 'POST', path: `/v1/transport-orders/${v.orders[i]}/cancel`, body: { reason: 'Aufräumen' } } : null),\n    })),\n    { name: 'Aufräumen: Störungen entfernen', cleanup: true, request: () => ({ service: 'simulator', method: 'DELETE', path: '/sim/faults' }) },\n    ...[0, 1, 2, 3, 4].map((i) => ({\n      name: `Aufräumen: Action ${i + 1} löschen`,\n      cleanup: true,\n      request: (v) => ({ method: 'DELETE', path: `/v1/flow/actions/${v.actions[i]}` }),\n    })),\n    { name: 'Aufräumen: Route löschen', cleanup: true, request: (v) => ({ method: 'DELETE', path: `/v1/flow/routes/${v.route}` }) },\n    // Der Simulator meldet T5 nach dem Fahrbefehl noch an C2. Kommt die Meldung nach dem Löschen an,\n    // antwortet das WMS mit 404 – unschädlich, sie steht nur im Simulatorprotokoll.\n    ...['t1', 't2', 't3', 't4', 't5'].map((t) => ({\n      name: `Aufräumen: TU ${t} löschen`,\n      cleanup: true,\n      request: (v) => ({ method: 'DELETE', path: `/v1/transport-units/${v.tu[t]}` }),\n    })),\n    ...['ip', 'c1', 'c2', 'h1', 'k1'].map((key) => ({\n      name: `Aufräumen: Platz ${key} löschen`,\n      cleanup: true,\n      request: (v) => (v.loc[key] ? { method: 'DELETE', path: `/v1/locations/${v.loc[key]}` } : null),\n      expectStatus: 204,\n    })),\n    ...['ft', 'hrl', 'nio'].map((g) => ({\n      name: `Aufräumen: Gruppe ${g} löschen`,\n      cleanup: true,\n      request: (v) => ({ method: 'DELETE', path: `/v1/location-groups/${v[g]}` }),\n      expectStatus: 204,\n    })),\n    { name: 'Aufräumen: TU-Typ löschen', cleanup: true, request: (v) => ({ method: 'DELETE', path: `/v1/transport-unit-types/${v.unitType}` }), expectStatus: 204 },\n    { name: 'Aufräumen: Platztyp löschen', cleanup: true, request: (v) => ({ method: 'DELETE', path: `/v1/location-types/${v.locationType}` }), expectStatus: 204 },\n  ],\n});\n",
+    "finalize": "",
+    "libs": [],
+    "x": 200,
+    "y": 100,
+    "wires": []
+  },
+  {
+    "id": "f503000000000000",
+    "type": "tab",
+    "label": "Szenario: movement-flow",
+    "disabled": false,
+    "info": "Schrittliste aus flows/scenarios/movement-flow.js; ausgeführt vom Tab „Schritt-Engine“."
+  },
+  {
+    "id": "f503000000000001",
+    "type": "comment",
+    "z": "f503000000000000",
+    "name": "Definition: flows/scenarios/movement-flow.js (im Repository bearbeiten, dann Flows neu erzeugen)",
+    "info": "",
+    "x": 380,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "f503000000000002",
+    "type": "function",
+    "z": "f503000000000000",
     "name": "Szenario movement-flow anmelden",
     "func": "return msg;\n",
     "outputs": 0,
@@ -548,16 +581,16 @@
     "wires": []
   },
   {
-    "id": "f503000000000000",
+    "id": "f504000000000000",
     "type": "tab",
     "label": "Szenario: putaway-strategy",
     "disabled": false,
     "info": "Schrittliste aus flows/scenarios/putaway-strategy.js; ausgeführt vom Tab „Schritt-Engine“."
   },
   {
-    "id": "f503000000000001",
+    "id": "f504000000000001",
     "type": "comment",
-    "z": "f503000000000000",
+    "z": "f504000000000000",
     "name": "Definition: flows/scenarios/putaway-strategy.js (im Repository bearbeiten, dann Flows neu erzeugen)",
     "info": "",
     "x": 380,
@@ -565,9 +598,9 @@
     "wires": []
   },
   {
-    "id": "f503000000000002",
+    "id": "f504000000000002",
     "type": "function",
-    "z": "f503000000000000",
+    "z": "f504000000000000",
     "name": "Szenario putaway-strategy anmelden",
     "func": "return msg;\n",
     "outputs": 0,
@@ -581,16 +614,16 @@
     "wires": []
   },
   {
-    "id": "f504000000000000",
+    "id": "f505000000000000",
     "type": "tab",
     "label": "Szenario: receiving-flow",
     "disabled": false,
     "info": "Schrittliste aus flows/scenarios/receiving-flow.js; ausgeführt vom Tab „Schritt-Engine“."
   },
   {
-    "id": "f504000000000001",
+    "id": "f505000000000001",
     "type": "comment",
-    "z": "f504000000000000",
+    "z": "f505000000000000",
     "name": "Definition: flows/scenarios/receiving-flow.js (im Repository bearbeiten, dann Flows neu erzeugen)",
     "info": "",
     "x": 380,
@@ -598,9 +631,9 @@
     "wires": []
   },
   {
-    "id": "f504000000000002",
+    "id": "f505000000000002",
     "type": "function",
-    "z": "f504000000000000",
+    "z": "f505000000000000",
     "name": "Szenario receiving-flow anmelden",
     "func": "return msg;\n",
     "outputs": 0,
@@ -614,16 +647,16 @@
     "wires": []
   },
   {
-    "id": "f505000000000000",
+    "id": "f506000000000000",
     "type": "tab",
     "label": "Szenario: transport-order-flow",
     "disabled": false,
     "info": "Schrittliste aus flows/scenarios/transport-order-flow.js; ausgeführt vom Tab „Schritt-Engine“."
   },
   {
-    "id": "f505000000000001",
+    "id": "f506000000000001",
     "type": "comment",
-    "z": "f505000000000000",
+    "z": "f506000000000000",
     "name": "Definition: flows/scenarios/transport-order-flow.js (im Repository bearbeiten, dann Flows neu erzeugen)",
     "info": "",
     "x": 380,
@@ -631,9 +664,9 @@
     "wires": []
   },
   {
-    "id": "f505000000000002",
+    "id": "f506000000000002",
     "type": "function",
-    "z": "f505000000000000",
+    "z": "f506000000000000",
     "name": "Szenario transport-order-flow anmelden",
     "func": "return msg;\n",
     "outputs": 0,
@@ -647,16 +680,16 @@
     "wires": []
   },
   {
-    "id": "f506000000000000",
+    "id": "f507000000000000",
     "type": "tab",
     "label": "Szenario: tu-placement",
     "disabled": false,
     "info": "Schrittliste aus flows/scenarios/tu-placement.js; ausgeführt vom Tab „Schritt-Engine“."
   },
   {
-    "id": "f506000000000001",
+    "id": "f507000000000001",
     "type": "comment",
-    "z": "f506000000000000",
+    "z": "f507000000000000",
     "name": "Definition: flows/scenarios/tu-placement.js (im Repository bearbeiten, dann Flows neu erzeugen)",
     "info": "",
     "x": 380,
@@ -664,9 +697,9 @@
     "wires": []
   },
   {
-    "id": "f506000000000002",
+    "id": "f507000000000002",
     "type": "function",
-    "z": "f506000000000000",
+    "z": "f507000000000000",
     "name": "Szenario tu-placement anmelden",
     "func": "return msg;\n",
     "outputs": 0,
@@ -684,16 +717,273 @@
     "type": "tab",
     "label": "Anlagensimulator",
     "disabled": false,
-    "info": "Platzhalter. Ab Schritt 5 simuliert dieser Tab Fördertechnik und Scanner (siehe docs/openwms-analyse.md, Kap. 5.1d)."
+    "info": "Simuliert die Anlage: Auf jeden Fahrbefehl (`wms/flow/command`) fährt die TU mit der konfigurierten Fahrzeit zum Ziel und meldet dort `request` (Entscheidungspunkt) bzw. `arrived` (Platz passt zu `arrivedPatterns`) an `POST /v1/flow/events`.\n\nKonfiguration: `flows/simulator/config.json` (Fahrzeiten je plcCode). Aktiv nur mit `SIMULATOR_ENABLED=true`.\n\n- `GET /sim/state` – Konfiguration, Protokoll, eingespeiste Störungen\n- `POST /sim/faults` `{ plcCode, code?, message? }` – nächste Fahrt zu diesem Platz endet mit einer Störung (`error`)\n- `DELETE /sim/faults` – Störungen entfernen"
   },
   {
     "id": "f300000000000001",
-    "type": "comment",
+    "type": "function",
     "z": "f000000000000003",
-    "name": "Anlagensimulator – folgt in Schritt 5 (Materialfluss)",
-    "info": "",
-    "x": 260,
-    "y": 60,
+    "name": "Konfiguration laden",
+    "func": "return msg;\n",
+    "outputs": 0,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "// Aus flows/simulator/config.json (vom Generator eingebettet).\nglobal.set('simConfig', {\"deviceId\":\"SIM\",\"defaultTravelMs\":200,\"travelMs\":{},\"arrivedPatterns\":[\"(^|-)HRL\\\\d*$\"],\"logSize\":200});\nglobal.set('simFaults', {});\nglobal.set('simLog', []);\n",
+    "finalize": "",
+    "libs": [],
+    "x": 170,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "f300000000000002",
+    "type": "mqtt in",
+    "z": "f000000000000003",
+    "name": "wms/flow/command",
+    "topic": "wms/flow/command",
+    "qos": "1",
+    "datatype": "json",
+    "broker": "b0000000000000b1",
+    "nl": false,
+    "rap": true,
+    "rh": 0,
+    "inputs": 0,
+    "x": 150,
+    "y": 100,
+    "wires": [
+      [
+        "f300000000000003"
+      ]
+    ]
+  },
+  {
+    "id": "f300000000000003",
+    "type": "function",
+    "z": "f000000000000003",
+    "name": "Fahren",
+    "func": "    if (String(env.get('SIMULATOR_ENABLED')) !== 'true') {\n      return null;\n    }\n    const cfg = global.get('simConfig');\n    const event = msg.payload;\n    if (!event || event.type !== 'flow.command') {\n      return null;\n    }\n    // Events kommen mindestens einmal: Duplikate über die Event-ID erkennen.\n    const seen = context.get('seen') || [];\n    if (seen.includes(event.id)) {\n      return null;\n    }\n    seen.push(event.id);\n    while (seen.length > 1000) {\n      seen.shift();\n    }\n    context.set('seen', seen);\n\n    const c = event.payload;\n    const toRef = c.to.plcCode ? { plcCode: c.to.plcCode } : { locationId: c.to.locationId };\n    const key = c.to.plcCode || c.to.locationId;\n    const travelMs = Number(cfg.travelMs[key] ?? cfg.defaultTravelMs);\n    const faults = global.get('simFaults') || {};\n    const fault = faults[key];\n    let body;\n    if (fault) {\n      // Störung: die TU bleibt am Ausgangsplatz liegen, die Anlage meldet einen Fehler.\n      delete faults[key];\n      global.set('simFaults', faults);\n      const fromRef = c.from.plcCode ? { plcCode: c.from.plcCode } : { locationId: c.from.locationId };\n      body = { type: 'error', location: fromRef, barcode: c.barcode, deviceId: cfg.deviceId, code: fault.code || 'SIM_FAULT', message: fault.message || `Störung auf dem Weg nach ${key}` };\n    } else {\n      const arrived = (cfg.arrivedPatterns || []).some((p) => new RegExp(p).test(key));\n      body = { type: arrived ? 'arrived' : 'request', location: toRef, barcode: c.barcode, deviceId: cfg.deviceId };\n    }\n    setTimeout(() => {\n      node.send({\n        method: 'POST',\n        url: `${env.get('WMS_API_URL')}/v1/flow/events`,\n        headers: { 'content-type': 'application/json' },\n        payload: body,\n        sim: { barcode: c.barcode, to: key, type: body.type, travelMs, commandId: event.id },\n      });\n    }, travelMs);\n    return null;\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 350,
+    "y": 100,
+    "wires": [
+      [
+        "f300000000000004"
+      ]
+    ]
+  },
+  {
+    "id": "f300000000000004",
+    "type": "http request",
+    "z": "f000000000000003",
+    "name": "Geräte-Ereignis an WMS",
+    "method": "use",
+    "ret": "obj",
+    "paytoqs": "ignore",
+    "url": "",
+    "tls": "",
+    "persist": false,
+    "proxy": "",
+    "insecureHTTPParser": false,
+    "authType": "",
+    "senderr": false,
+    "headers": [],
+    "x": 560,
+    "y": 100,
+    "wires": [
+      [
+        "f300000000000005"
+      ]
+    ]
+  },
+  {
+    "id": "f300000000000005",
+    "type": "function",
+    "z": "f000000000000003",
+    "name": "Protokollieren",
+    "func": "    const cfg = global.get('simConfig');\n    const log = global.get('simLog') || [];\n    const decision = msg.payload && msg.payload.decision;\n    log.push({\n      at: new Date().toISOString(),\n      barcode: msg.sim.barcode,\n      to: msg.sim.to,\n      reported: msg.sim.type,\n      status: msg.statusCode,\n      outcome: decision ? decision.outcome : null,\n      next: msg.payload && msg.payload.command ? msg.payload.command.to.plcCode || msg.payload.command.to.locationId : null,\n      error: msg.statusCode >= 400 ? msg.payload : undefined,\n    });\n    while (log.length > (cfg.logSize || 200)) {\n      log.shift();\n    }\n    global.set('simLog', log);\n    node.status({ fill: msg.statusCode < 400 ? 'green' : 'red', shape: 'dot', text: `${msg.sim.barcode} → ${msg.sim.to}: ${decision ? decision.outcome : msg.statusCode}` });\n    return null;\n",
+    "outputs": 0,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 770,
+    "y": 100,
+    "wires": []
+  },
+  {
+    "id": "f300000000000010",
+    "type": "http in",
+    "z": "f000000000000003",
+    "name": "GET /sim/state",
+    "url": "/sim/state",
+    "method": "get",
+    "upload": false,
+    "swaggerDoc": "",
+    "x": 150,
+    "y": 200,
+    "wires": [
+      [
+        "f300000000000007"
+      ]
+    ]
+  },
+  {
+    "id": "f300000000000011",
+    "type": "http in",
+    "z": "f000000000000003",
+    "name": "POST /sim/faults",
+    "url": "/sim/faults",
+    "method": "post",
+    "upload": false,
+    "swaggerDoc": "",
+    "x": 150,
+    "y": 250,
+    "wires": [
+      [
+        "f300000000000007"
+      ]
+    ]
+  },
+  {
+    "id": "f300000000000012",
+    "type": "http in",
+    "z": "f000000000000003",
+    "name": "DELETE /sim/faults",
+    "url": "/sim/faults",
+    "method": "delete",
+    "upload": false,
+    "swaggerDoc": "",
+    "x": 150,
+    "y": 300,
+    "wires": [
+      [
+        "f300000000000007"
+      ]
+    ]
+  },
+  {
+    "id": "f300000000000007",
+    "type": "function",
+    "z": "f000000000000003",
+    "name": "Simulator steuern",
+    "func": "    const method = msg.req.method;\n    const faults = global.get('simFaults') || {};\n    msg.headers = { 'content-type': 'application/json' };\n    msg.statusCode = 200;\n    if (method === 'POST') {\n      const f = msg.payload || {};\n      if (!f.plcCode) {\n        msg.statusCode = 400;\n        msg.payload = { message: 'plcCode fehlt' };\n        return msg;\n      }\n      faults[f.plcCode] = { code: f.code, message: f.message };\n      global.set('simFaults', faults);\n    } else if (method === 'DELETE') {\n      global.set('simFaults', {});\n    }\n    msg.payload = {\n      enabled: String(env.get('SIMULATOR_ENABLED')) === 'true',\n      config: global.get('simConfig'),\n      faults: global.get('simFaults') || {},\n      log: (global.get('simLog') || []).slice(-100),\n    };\n    return msg;\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 380,
+    "y": 250,
+    "wires": [
+      [
+        "f300000000000008"
+      ]
+    ]
+  },
+  {
+    "id": "f300000000000008",
+    "type": "http response",
+    "z": "f000000000000003",
+    "name": "Antwort",
+    "statusCode": "",
+    "headers": {},
+    "x": 580,
+    "y": 250,
+    "wires": []
+  },
+  {
+    "id": "f000000000000006",
+    "type": "tab",
+    "label": "Programm: send-to-plc",
+    "disabled": false,
+    "info": "Beispiel für ein Materialfluss-Programm in Node-RED. Eine Action mit `program: node-red` und `params: { flow: \"send-to-plc\", toPlc: \"<plcCode>\" }` veröffentlicht `wms/flow/program-requested`; dieser Flow antwortet mit einem Fahrbefehl über `POST /v1/flow/commands`."
+  },
+  {
+    "id": "f600000000000001",
+    "type": "mqtt in",
+    "z": "f000000000000006",
+    "name": "wms/flow/program-requested",
+    "topic": "wms/flow/program-requested",
+    "qos": "1",
+    "datatype": "json",
+    "broker": "b0000000000000b1",
+    "nl": false,
+    "rap": true,
+    "rh": 0,
+    "inputs": 0,
+    "x": 180,
+    "y": 80,
+    "wires": [
+      [
+        "f600000000000002"
+      ]
+    ]
+  },
+  {
+    "id": "f600000000000002",
+    "type": "function",
+    "z": "f000000000000006",
+    "name": "Ziel bestimmen",
+    "func": "    const e = msg.payload;\n    if (!e || e.type !== 'flow.program-requested' || e.payload.flow !== 'send-to-plc') {\n      return null;\n    }\n    const seen = context.get('seen') || [];\n    if (seen.includes(e.id)) {\n      return null;\n    }\n    seen.push(e.id);\n    while (seen.length > 1000) {\n      seen.shift();\n    }\n    context.set('seen', seen);\n    const p = e.payload;\n    if (!p.barcode || !p.params.toPlc) {\n      node.warn(`send-to-plc: Barcode oder toPlc fehlt (${e.id})`);\n      return null;\n    }\n    msg.method = 'POST';\n    msg.url = `${env.get('WMS_API_URL')}/v1/flow/commands`;\n    msg.headers = { 'content-type': 'application/json' };\n    msg.payload = { barcode: p.barcode, to: { plcCode: p.params.toPlc }, deviceId: p.deviceId || undefined, reason: `node-red:send-to-plc (${p.decisionId})` };\n    return msg;\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 420,
+    "y": 80,
+    "wires": [
+      [
+        "f600000000000003"
+      ]
+    ]
+  },
+  {
+    "id": "f600000000000003",
+    "type": "http request",
+    "z": "f000000000000006",
+    "name": "Fahrbefehl an WMS",
+    "method": "use",
+    "ret": "obj",
+    "paytoqs": "ignore",
+    "url": "",
+    "tls": "",
+    "persist": false,
+    "proxy": "",
+    "insecureHTTPParser": false,
+    "authType": "",
+    "senderr": false,
+    "headers": [],
+    "x": 630,
+    "y": 80,
+    "wires": [
+      [
+        "f600000000000004"
+      ]
+    ]
+  },
+  {
+    "id": "f600000000000004",
+    "type": "function",
+    "z": "f000000000000006",
+    "name": "Ergebnis",
+    "func": "    node.status({ fill: msg.statusCode < 400 ? 'green' : 'red', shape: 'dot', text: `HTTP ${msg.statusCode}` });\n    if (msg.statusCode >= 400) {\n      node.warn(`Fahrbefehl abgelehnt: ${JSON.stringify(msg.payload)}`);\n    }\n    return null;\n",
+    "outputs": 0,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 820,
+    "y": 80,
     "wires": []
   }
 ]

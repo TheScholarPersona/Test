@@ -22,6 +22,7 @@ apps/api/                  WMS-Kern (NestJS)
     inventory/             Bestand: Produkte, Bestand je TU, Buchungsjournal, Korrekturen
     receiving/             Wareneingang: Avis, Erfassung, Blind-Erfassung
     transport-order/       Transportaufträge: Zustandsautomat, Start-Steuerung, Zielumleitung
+    flow/                  Materialfluss: Routen, Schritte, Action-Matrix, Geräte-Ereignisse
     test-support/          Test-Endpunkte, nur im Profil "test"
   test/unit/               Unit-Tests (ohne Datenbank)
   test/integration/        Integrationstests mit Testcontainers
@@ -29,6 +30,7 @@ packages/shared/           gemeinsamer Kern: Kennungen, Quantity, Event-Format u
 packages/scenario-runner/  führt Node-RED-Szenarien aus, schreibt reports/e2e-junit.xml
 flows/
   scenarios/*.js           Schritt-Szenarien (lesbare Schrittlisten)
+  simulator/config.json    Anlagensimulator: Fahrzeiten, Meldeart je Platz
   scripts/build-flows.mjs  erzeugt flows/node-red/flows.json
   node-red/flows.json      von Node-RED geladene Flows (generiert, versioniert)
 docker/                    Konfiguration für Hilfsdienste (Mosquitto)
@@ -310,6 +312,62 @@ Endzustände sind final (O-03). `INTERRUPTED` belegt die TU weiter.
 **Löschschutz:** TUs mit offenen Aufträgen und Plätze, die Ziel offener Aufträge sind, können nicht gelöscht werden (Einwand `transport-orders`).
 
 Events: `transport-order.created|started|start-blocked|interrupted|resumed|finished|canceled|failed` (`packages/shared/src/transport-order-events.ts`).
+
+## Modul Materialfluss (`/v1/flow/…`)
+
+Ersetzt das TMS-Routing von OpenWMS (Analyse Kap. 3.7, Plan 5.1c). Eine Anlage meldet „TU X steht an Platz Y“, das WMS entscheidet und antwortet mit einem Fahrbefehl. Plätze werden von Anlagen über ihren `plcCode` angesprochen (`{ "plcCode": "CV01" }` ist überall als Platzverweis erlaubt).
+
+**Konfiguration** (wirkt sofort, es gibt keinen Zwischenspeicher):
+
+| Baustein | Endpunkt | Inhalt |
+|---|---|---|
+| Route | `POST /v1/flow/routes` | `routeId`, `source` und `target` je `{ location }` oder `{ group }`, `steps` |
+| Schritte | `PUT /v1/flow/routes/{routeId}/steps` | Nächster-Schritt-Tabelle: steht die TU auf `from`, fährt sie nach `next`; optional nur für einen TU-Typ (`unitType`, hat Vorrang) |
+| Action | `POST /v1/flow/actions` | `eventType`, optional `routeId` und `place` (Platz oder Gruppe) → `program` + `params` |
+| Programme | `GET /v1/flow/programs` | eingebaute Programme mit JSON-Schema ihrer Parameter |
+
+**Suche** (je eine Datenbankabfrage, vom Spezifischen zum Allgemeinen):
+
+- *Route* für Quelle und Ziel des laufenden Transportauftrags: Quellplatz vor Quellgruppe vor deren Eltern; darin Zielplatz vor Zielgruppe vor deren Eltern.
+- *Action* für das Ereignis am gemeldeten Platz: Platz vor Gruppe vor Elterngruppen vor „überall“; je Ort zuerst die Action der gefundenen Route, dann die routenunabhängige.
+
+**Geräte-Ereignis** `POST /v1/flow/events`:
+
+```json
+{ "type": "request", "location": { "plcCode": "CV01" }, "barcode": "P1", "deviceId": "SPS1" }
+```
+
+`type`: `request` (Zielanfrage), `arrived` (angekommen), `location-status` (Platzzustand, `state: { inbound?, outbound? }`), `error` (Störung, `code`, `message`). Mit `dryRun: true` wird nur entschieden und begründet, nichts gebucht oder gesendet. Die Antwort enthält die Entscheidung mit Begründung (`trace`) und den Fahrbefehl; zusätzlich geht der Fahrbefehl als Event `flow.command` an die Anlage (Node-RED). Alle Entscheidungen: `GET /v1/flow/decisions?barcode=…`.
+
+| Programm | Ereignisse | Wirkung |
+|---|---|---|
+| `route-next` | request, arrived | TU auf den Platz buchen; am Zielplatz (bzw. in der Zielgruppe ohne weiteren Schritt) Auftrag abschließen, sonst nächsten Schritt senden |
+| `create-order` | request | I-Punkt: unbekannte TU anlegen (`typeCode`), Auftrag zu `target` anlegen und starten, dann wie `route-next` |
+| `send-to` | request | fest an `location` schicken (z. B. Klärplatz) |
+| `book`, `finish-order` | request, arrived | nur buchen bzw. buchen und Auftrag abschließen |
+| `lock-location` | location-status, error | Sperren aus der Meldung (`state`) oder aus `params` übernehmen |
+| `interrupt-order` | error | laufenden Auftrag unterbrechen |
+| `node-red` | alle | Event `flow.program-requested` mit `params.flow`; der Node-RED-Flow antwortet z. B. mit `POST /v1/flow/commands` |
+
+**Ergebnisse** (`outcome`): `COMMAND`, `FINISHED`, `HANDLED`, `DELEGATED`, `NO_ACTION`, `NO_NEXT_STEP`. „Keine Route“ für einen laufenden Auftrag erzeugt `flow.no-route`, `NO_ACTION`/`NO_NEXT_STEP` erzeugen `flow.unhandled` – nichts wird still ignoriert (R4). Fachfehler eines Programms (z. B. unbekannte TU) brechen die Verarbeitung ab und kommen als HTTP-Fehler zurück; es wird dann keine Entscheidung gespeichert.
+
+**Löschschutz:** Plätze, die in Routen, Schritten oder Actions vorkommen, können nicht gelöscht werden (Einwand `flow`); Routen mit Actions ebenfalls nicht (`ROUTE_IN_USE`).
+
+Events: `flow.command`, `flow.no-route`, `flow.unhandled`, `flow.program-requested`, `flow.config-changed` (`packages/shared/src/flow-events.ts`).
+
+Noch nicht enthalten: Geräte-Ereignisse per MQTT statt REST, zeitgesteuerte Programme, Lastverteilung auf parallele Strecken.
+
+## Anlagensimulator (Node-RED)
+
+Tab „Anlagensimulator“: Auf jeden `flow.command` fährt die TU mit der Fahrzeit aus `flows/simulator/config.json` (`defaultTravelMs`, `travelMs` je plcCode) zum Ziel und meldet dort `request` oder – wenn der plcCode zu `arrivedPatterns` passt – `arrived`. Aktiv nur mit `SIMULATOR_ENABLED=true` (in Compose Standard).
+
+| Endpunkt (Node-RED, Port 1880) | Zweck |
+|---|---|
+| `GET /sim/state` | Konfiguration, eingespeiste Störungen, letzte Fahrten mit Ergebnis |
+| `POST /sim/faults` `{ plcCode, code?, message? }` | nächste Fahrt zu diesem Platz endet mit `error` am Ausgangsplatz |
+| `DELETE /sim/faults` | Störungen entfernen |
+
+Schritt-Szenarien erreichen diese Endpunkte mit `request: () => ({ service: 'simulator', method: 'GET', path: '/sim/state' })`. Tab „Programm: send-to-plc“ ist ein Beispiel für ein Materialfluss-Programm in Node-RED. Szenario `material-flow` prüft den ganzen Ablauf.
 
 ## Events
 

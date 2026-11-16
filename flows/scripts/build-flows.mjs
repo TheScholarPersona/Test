@@ -570,7 +570,9 @@ add({
           continue;
         }
         msg.method = request.method;
-        msg.url = `${env.get('WMS_API_URL')}${request.path}`;
+        // service: 'simulator' spricht die Endpunkte des Anlagensimulators in diesem Node-RED an.
+        const base = request.service === 'simulator' ? `http://127.0.0.1:${env.get('PORT') || 1880}` : env.get('WMS_API_URL');
+        msg.url = `${base}${request.path}`;
         msg.headers = { 'content-type': 'application/json' };
         msg.payload = request.body === undefined ? '' : request.body;
         return [msg, null, null];
@@ -826,24 +828,340 @@ readdirSync(scenarioDir)
   });
 
 // ---------------------------------------------------------------------------
-// Tab: Anlagensimulator (folgt in Schritt 5)
+// Tab: Anlagensimulator (Fördertechnik, Regalbediengerät)
 // ---------------------------------------------------------------------------
+const simConfig = JSON.parse(readFileSync(fileURLToPath(new URL('../simulator/config.json', import.meta.url)), 'utf8'));
+delete simConfig.$comment;
 const TAB_SIM = 'f000000000000003';
+const SIM_DRIVE = 'f300000000000003';
+const SIM_HTTP = 'f300000000000004';
+const SIM_LOG = 'f300000000000005';
+const SIM_STATE = 'f300000000000007';
 add({
   id: TAB_SIM,
   type: 'tab',
   label: 'Anlagensimulator',
   disabled: false,
-  info: 'Platzhalter. Ab Schritt 5 simuliert dieser Tab Fördertechnik und Scanner (siehe docs/openwms-analyse.md, Kap. 5.1d).',
+  info:
+    'Simuliert die Anlage: Auf jeden Fahrbefehl (`wms/flow/command`) fährt die TU mit der konfigurierten Fahrzeit zum Ziel ' +
+    'und meldet dort `request` (Entscheidungspunkt) bzw. `arrived` (Platz passt zu `arrivedPatterns`) an `POST /v1/flow/events`.\n\n' +
+    'Konfiguration: `flows/simulator/config.json` (Fahrzeiten je plcCode). Aktiv nur mit `SIMULATOR_ENABLED=true`.\n\n' +
+    '- `GET /sim/state` – Konfiguration, Protokoll, eingespeiste Störungen\n' +
+    '- `POST /sim/faults` `{ plcCode, code?, message? }` – nächste Fahrt zu diesem Platz endet mit einer Störung (`error`)\n' +
+    '- `DELETE /sim/faults` – Störungen entfernen',
 });
 add({
   id: 'f300000000000001',
-  type: 'comment',
+  type: 'function',
   z: TAB_SIM,
-  name: 'Anlagensimulator – folgt in Schritt 5 (Materialfluss)',
-  info: '',
-  x: 260,
-  y: 60,
+  name: 'Konfiguration laden',
+  func: 'return msg;\n',
+  outputs: 0,
+  timeout: 0,
+  noerr: 0,
+  initialize: `// Aus flows/simulator/config.json (vom Generator eingebettet).\nglobal.set('simConfig', ${JSON.stringify(simConfig)});\nglobal.set('simFaults', {});\nglobal.set('simLog', []);\n`,
+  finalize: '',
+  libs: [],
+  x: 170,
+  y: 40,
+  wires: [],
+});
+add({
+  id: 'f300000000000002',
+  type: 'mqtt in',
+  z: TAB_SIM,
+  name: 'wms/flow/command',
+  topic: 'wms/flow/command',
+  qos: '1',
+  datatype: 'json',
+  broker: BROKER,
+  nl: false,
+  rap: true,
+  rh: 0,
+  inputs: 0,
+  x: 150,
+  y: 100,
+  wires: [[SIM_DRIVE]],
+});
+add({
+  id: SIM_DRIVE,
+  type: 'function',
+  z: TAB_SIM,
+  name: 'Fahren',
+  func: body(function () {
+    if (String(env.get('SIMULATOR_ENABLED')) !== 'true') {
+      return null;
+    }
+    const cfg = global.get('simConfig');
+    const event = msg.payload;
+    if (!event || event.type !== 'flow.command') {
+      return null;
+    }
+    // Events kommen mindestens einmal: Duplikate über die Event-ID erkennen.
+    const seen = context.get('seen') || [];
+    if (seen.includes(event.id)) {
+      return null;
+    }
+    seen.push(event.id);
+    while (seen.length > 1000) {
+      seen.shift();
+    }
+    context.set('seen', seen);
+
+    const c = event.payload;
+    const toRef = c.to.plcCode ? { plcCode: c.to.plcCode } : { locationId: c.to.locationId };
+    const key = c.to.plcCode || c.to.locationId;
+    const travelMs = Number(cfg.travelMs[key] ?? cfg.defaultTravelMs);
+    const faults = global.get('simFaults') || {};
+    const fault = faults[key];
+    let body;
+    if (fault) {
+      // Störung: die TU bleibt am Ausgangsplatz liegen, die Anlage meldet einen Fehler.
+      delete faults[key];
+      global.set('simFaults', faults);
+      const fromRef = c.from.plcCode ? { plcCode: c.from.plcCode } : { locationId: c.from.locationId };
+      body = { type: 'error', location: fromRef, barcode: c.barcode, deviceId: cfg.deviceId, code: fault.code || 'SIM_FAULT', message: fault.message || `Störung auf dem Weg nach ${key}` };
+    } else {
+      const arrived = (cfg.arrivedPatterns || []).some((p) => new RegExp(p).test(key));
+      body = { type: arrived ? 'arrived' : 'request', location: toRef, barcode: c.barcode, deviceId: cfg.deviceId };
+    }
+    setTimeout(() => {
+      node.send({
+        method: 'POST',
+        url: `${env.get('WMS_API_URL')}/v1/flow/events`,
+        headers: { 'content-type': 'application/json' },
+        payload: body,
+        sim: { barcode: c.barcode, to: key, type: body.type, travelMs, commandId: event.id },
+      });
+    }, travelMs);
+    return null;
+  }),
+  outputs: 1,
+  timeout: 0,
+  noerr: 0,
+  initialize: '',
+  finalize: '',
+  libs: [],
+  x: 350,
+  y: 100,
+  wires: [[SIM_HTTP]],
+});
+add({
+  id: SIM_HTTP,
+  type: 'http request',
+  z: TAB_SIM,
+  name: 'Geräte-Ereignis an WMS',
+  method: 'use',
+  ret: 'obj',
+  paytoqs: 'ignore',
+  url: '',
+  tls: '',
+  persist: false,
+  proxy: '',
+  insecureHTTPParser: false,
+  authType: '',
+  senderr: false,
+  headers: [],
+  x: 560,
+  y: 100,
+  wires: [[SIM_LOG]],
+});
+add({
+  id: SIM_LOG,
+  type: 'function',
+  z: TAB_SIM,
+  name: 'Protokollieren',
+  func: body(function () {
+    const cfg = global.get('simConfig');
+    const log = global.get('simLog') || [];
+    const decision = msg.payload && msg.payload.decision;
+    log.push({
+      at: new Date().toISOString(),
+      barcode: msg.sim.barcode,
+      to: msg.sim.to,
+      reported: msg.sim.type,
+      status: msg.statusCode,
+      outcome: decision ? decision.outcome : null,
+      next: msg.payload && msg.payload.command ? msg.payload.command.to.plcCode || msg.payload.command.to.locationId : null,
+      error: msg.statusCode >= 400 ? msg.payload : undefined,
+    });
+    while (log.length > (cfg.logSize || 200)) {
+      log.shift();
+    }
+    global.set('simLog', log);
+    node.status({ fill: msg.statusCode < 400 ? 'green' : 'red', shape: 'dot', text: `${msg.sim.barcode} → ${msg.sim.to}: ${decision ? decision.outcome : msg.statusCode}` });
+    return null;
+  }),
+  outputs: 0,
+  timeout: 0,
+  noerr: 0,
+  initialize: '',
+  finalize: '',
+  libs: [],
+  x: 770,
+  y: 100,
+  wires: [],
+});
+for (const [i, [method, url, name]] of [
+  ['get', '/sim/state', 'GET /sim/state'],
+  ['post', '/sim/faults', 'POST /sim/faults'],
+  ['delete', '/sim/faults', 'DELETE /sim/faults'],
+].entries()) {
+  add({ id: `f30000000000001${i}`, type: 'http in', z: TAB_SIM, name, url, method, upload: false, swaggerDoc: '', x: 150, y: 200 + i * 50, wires: [[SIM_STATE]] });
+}
+add({
+  id: SIM_STATE,
+  type: 'function',
+  z: TAB_SIM,
+  name: 'Simulator steuern',
+  func: body(function () {
+    const method = msg.req.method;
+    const faults = global.get('simFaults') || {};
+    msg.headers = { 'content-type': 'application/json' };
+    msg.statusCode = 200;
+    if (method === 'POST') {
+      const f = msg.payload || {};
+      if (!f.plcCode) {
+        msg.statusCode = 400;
+        msg.payload = { message: 'plcCode fehlt' };
+        return msg;
+      }
+      faults[f.plcCode] = { code: f.code, message: f.message };
+      global.set('simFaults', faults);
+    } else if (method === 'DELETE') {
+      global.set('simFaults', {});
+    }
+    msg.payload = {
+      enabled: String(env.get('SIMULATOR_ENABLED')) === 'true',
+      config: global.get('simConfig'),
+      faults: global.get('simFaults') || {},
+      log: (global.get('simLog') || []).slice(-100),
+    };
+    return msg;
+  }),
+  outputs: 1,
+  timeout: 0,
+  noerr: 0,
+  initialize: '',
+  finalize: '',
+  libs: [],
+  x: 380,
+  y: 250,
+  wires: [['f300000000000008']],
+});
+add({ id: 'f300000000000008', type: 'http response', z: TAB_SIM, name: 'Antwort', statusCode: '', headers: {}, x: 580, y: 250, wires: [] });
+
+// ---------------------------------------------------------------------------
+// Tab: Node-RED-Programm „send-to-plc“ (Beispiel für das Programm node-red)
+// ---------------------------------------------------------------------------
+const TAB_PROGRAM = 'f000000000000006';
+add({
+  id: TAB_PROGRAM,
+  type: 'tab',
+  label: 'Programm: send-to-plc',
+  disabled: false,
+  info:
+    'Beispiel für ein Materialfluss-Programm in Node-RED. Eine Action mit `program: node-red` und ' +
+    '`params: { flow: "send-to-plc", toPlc: "<plcCode>" }` veröffentlicht `wms/flow/program-requested`; ' +
+    'dieser Flow antwortet mit einem Fahrbefehl über `POST /v1/flow/commands`.',
+});
+add({
+  id: 'f600000000000001',
+  type: 'mqtt in',
+  z: TAB_PROGRAM,
+  name: 'wms/flow/program-requested',
+  topic: 'wms/flow/program-requested',
+  qos: '1',
+  datatype: 'json',
+  broker: BROKER,
+  nl: false,
+  rap: true,
+  rh: 0,
+  inputs: 0,
+  x: 180,
+  y: 80,
+  wires: [['f600000000000002']],
+});
+add({
+  id: 'f600000000000002',
+  type: 'function',
+  z: TAB_PROGRAM,
+  name: 'Ziel bestimmen',
+  func: body(function () {
+    const e = msg.payload;
+    if (!e || e.type !== 'flow.program-requested' || e.payload.flow !== 'send-to-plc') {
+      return null;
+    }
+    const seen = context.get('seen') || [];
+    if (seen.includes(e.id)) {
+      return null;
+    }
+    seen.push(e.id);
+    while (seen.length > 1000) {
+      seen.shift();
+    }
+    context.set('seen', seen);
+    const p = e.payload;
+    if (!p.barcode || !p.params.toPlc) {
+      node.warn(`send-to-plc: Barcode oder toPlc fehlt (${e.id})`);
+      return null;
+    }
+    msg.method = 'POST';
+    msg.url = `${env.get('WMS_API_URL')}/v1/flow/commands`;
+    msg.headers = { 'content-type': 'application/json' };
+    msg.payload = { barcode: p.barcode, to: { plcCode: p.params.toPlc }, deviceId: p.deviceId || undefined, reason: `node-red:send-to-plc (${p.decisionId})` };
+    return msg;
+  }),
+  outputs: 1,
+  timeout: 0,
+  noerr: 0,
+  initialize: '',
+  finalize: '',
+  libs: [],
+  x: 420,
+  y: 80,
+  wires: [['f600000000000003']],
+});
+add({
+  id: 'f600000000000003',
+  type: 'http request',
+  z: TAB_PROGRAM,
+  name: 'Fahrbefehl an WMS',
+  method: 'use',
+  ret: 'obj',
+  paytoqs: 'ignore',
+  url: '',
+  tls: '',
+  persist: false,
+  proxy: '',
+  insecureHTTPParser: false,
+  authType: '',
+  senderr: false,
+  headers: [],
+  x: 630,
+  y: 80,
+  wires: [['f600000000000004']],
+});
+add({
+  id: 'f600000000000004',
+  type: 'function',
+  z: TAB_PROGRAM,
+  name: 'Ergebnis',
+  func: body(function () {
+    node.status({ fill: msg.statusCode < 400 ? 'green' : 'red', shape: 'dot', text: `HTTP ${msg.statusCode}` });
+    if (msg.statusCode >= 400) {
+      node.warn(`Fahrbefehl abgelehnt: ${JSON.stringify(msg.payload)}`);
+    }
+    return null;
+  }),
+  outputs: 0,
+  timeout: 0,
+  noerr: 0,
+  initialize: '',
+  finalize: '',
+  libs: [],
+  x: 820,
+  y: 80,
   wires: [],
 });
 

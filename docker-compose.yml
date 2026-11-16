@@ -67,6 +67,7 @@ services:
       MQTT_HOST: mosquitto
       MQTT_PORT: "1883"
       SCENARIO_EVENT_TIMEOUT_MS: "10000"
+      SIMULATOR_ENABLED: ${SIMULATOR_ENABLED:-true}
     ports:
       - "1880:1880"
     volumes:
