@@ -7,6 +7,7 @@ import { OutboxModule } from './infrastructure/outbox/outbox.module.js';
 import { HealthModule } from './modules/health/index.js';
 import { LayoutModule } from './modules/layout/index.js';
 import { TestSupportModule } from './modules/test-support/index.js';
+import { TransportModule } from './modules/transport/index.js';
 
 @Global()
 @Module({})
@@ -37,6 +38,7 @@ export class AppModule {
         OutboxModule,
         HealthModule,
         LayoutModule,
+        TransportModule,
         ...testModules,
       ],
     };

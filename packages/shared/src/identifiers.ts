@@ -57,6 +57,18 @@ export const LocationTypeCodeSchema = z
   .brand<'LocationTypeCode'>();
 export type LocationTypeCode = z.infer<typeof LocationTypeCodeSchema>;
 
+/** Kennung eines Transporteinheiten-Typs, z. B. `EURO-PALETTE`. */
+export const TransportUnitTypeCodeSchema = z
+  .string()
+  .trim()
+  .regex(/^[A-Z0-9][A-Z0-9_-]{0,39}$/, 'Typkennung: 1–40 Zeichen A–Z, 0–9, _ oder -, beginnend mit Buchstabe oder Ziffer')
+  .brand<'TransportUnitTypeCode'>();
+export type TransportUnitTypeCode = z.infer<typeof TransportUnitTypeCodeSchema>;
+
+/** Zustand einer Transporteinheit. */
+export const TransportUnitStateSchema = z.enum(['AVAILABLE', 'BLOCKED', 'QUALITY_CHECK']);
+export type TransportUnitState = z.infer<typeof TransportUnitStateSchema>;
+
 export const barcode = (value: string): Barcode => BarcodeSchema.parse(value);
 export const erpCode = (value: string): ErpCode => ErpCodeSchema.parse(value);
 export const locationId = (value: string): LocationId => LocationIdSchema.parse(value);

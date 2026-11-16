@@ -1,16 +1,11 @@
 import type { z } from 'zod';
 import type { LocationGroupSnapshotSchema, LocationSnapshotSchema, LocationTypeSnapshotSchema } from '@wms/shared';
+import { timestampsOf as timestamps, toWeightKg } from '../../../http/common-schemas.js';
 import { effectiveLock } from '../domain/lock-state.js';
 import type { LocationGroup } from '../entities/location-group.entity.js';
 import type { LocationType } from '../entities/location-type.entity.js';
 import type { Location } from '../entities/location.entity.js';
 import type { LocationDto, LocationGroupDto, LocationTypeDto } from '../http/schemas.js';
-
-const timestamps = (entity: { version: number; createdAt: Date; updatedAt: Date }) => ({
-  version: entity.version,
-  createdAt: entity.createdAt.toISOString(),
-  updatedAt: entity.updatedAt.toISOString(),
-});
 
 export function toLocationTypeDto(type: LocationType): LocationTypeDto {
   return {
@@ -48,7 +43,7 @@ export function toLocationDto(location: Location): LocationDto {
     groupName: (location.group as LocationGroup).name,
     capacity: {
       maxTransportUnits: location.maxTransportUnits,
-      maxWeight: location.maxWeightKg == null ? null : { amount: normalizeDecimal(location.maxWeightKg), unit: 'KG' },
+      maxWeight: toWeightKg(location.maxWeightKg),
     },
     locks: {
       inbound: effectiveLock(chain, 'inbound'),
@@ -57,11 +52,6 @@ export function toLocationDto(location: Location): LocationDto {
     },
     ...timestamps(location),
   };
-}
-
-/** PostgreSQL liefert NUMERIC mit fester Nachkommazahl ("1250.500"); ohne überflüssige Nullen zurückgeben. */
-function normalizeDecimal(value: string): string {
-  return value.includes('.') ? value.replace(/0+$/, '').replace(/\.$/, '') : value;
 }
 
 // --- Event-Payloads --------------------------------------------------------

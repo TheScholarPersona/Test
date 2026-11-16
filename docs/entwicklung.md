@@ -15,6 +15,7 @@ apps/api/                  WMS-Kern (NestJS)
   src/modules/<modul>/     Fachmodule; öffentliche Schnittstelle nur über index.ts
     health/                GET /health
     layout/                Lagerstruktur: Platztypen, Gruppen, Lagerplätze, Sperren
+    transport/             Transporteinheiten: Typen, Regeln, TUs, Bewegen, Stapeln
     test-support/          Test-Endpunkte, nur im Profil "test"
   test/unit/               Unit-Tests (ohne Datenbank)
   test/integration/        Integrationstests mit Testcontainers
@@ -86,6 +87,35 @@ Fachliche Fehler haben ein einheitliches Format; `code` ist stabil und für Auto
 Sperren ändern: `PATCH /v1/location-groups/{name}/locks` bzw. `PATCH /v1/locations/{id}/locks` mit z. B. `{ "inbound": true, "reason": "Inventur" }`.
 
 Events: `location-type.*`, `location-group.created|updated|deleted|lock-changed`, `location.created|updated|deleted|lock-changed` (Payload-Schemas in `packages/shared/src/layout-events.ts`). Eine Sperränderung an einer Gruppe erzeugt nur ein Event für diese Gruppe; die Wirkung auf Untergruppen und Plätze ergibt sich aus der Hierarchie.
+
+## Modul Transporteinheiten (`/v1/transport-unit-types`, `/v1/transport-units`)
+
+| Konzept | Regeln |
+|---|---|
+| TU-Typ | Kennung eindeutig; Maße, Leergewicht, zulässige Zuladung; löschbar nur ohne TUs und ohne Verwendung in Stapelregeln anderer Typen (`TU_TYPE_IN_USE`) |
+| Platzierungsregeln | `PUT …/{code}/placement-rules` ersetzt die Liste erlaubter Platztypen (mit `privilegeLevel` für die spätere Einlagerstrategie); leere Liste = überall erlaubt |
+| Stapelregeln | `PUT …/{code}/stacking-rules`: welche TU-Typen wie oft auf diesen Typ gestapelt werden dürfen; leer = nicht stapelbar |
+| TU | Barcode eindeutig, ohne Angabe erzeugt (`TU0000000001`, Datenbanksequenz); Zustand `AVAILABLE`, `BLOCKED`, `QUALITY_CHECK`; Gewicht optional (sonst Leergewicht des Typs); Zuladung wird geprüft (`TU_OVERWEIGHT`) |
+
+**Platzieren (Anlegen, Bewegen, Abstapeln).** Geprüft werden alle Regeln, gemeldet werden alle Verstöße auf einmal:
+
+| Regel | Bedeutung |
+|---|---|
+| `SOURCE_OUTBOUND_BLOCKED` | Quellplatz (geerbt) für Auslagerung gesperrt |
+| `TARGET_INBOUND_BLOCKED` | Zielplatz (geerbt) für Einlagerung gesperrt |
+| `LOCATION_FULL` | Höchstzahl direkt abgestellter TUs erreicht (gestapelte TUs zählen nicht; `maxTransportUnits = 0` = keine Abstellung) |
+| `WEIGHT_EXCEEDED` | Gewicht aller TUs auf dem Platz inklusive Stapel über dem Höchstgewicht |
+| `PLACEMENT_NOT_ALLOWED` | Platztyp laut Platzierungsregeln nicht erlaubt |
+
+`mode: "checked"` (Standard) lehnt bei Verstößen mit `409 PLACEMENT_REJECTED` ab, `details.violations` listet sie. `mode: "physical"` ist für gemeldete Ist-Positionen (Scanner, SPS): Die Buchung wird immer ausgeführt, die Verstöße stehen in der Antwort und im Event `transport-unit.moved`/`created` – Node-RED kann darauf reagieren, z. B. eine Meldung an den Leitstand senden.
+
+Der Zielplatz wird während der Prüfung in der Datenbank gesperrt (`SELECT … FOR UPDATE`); parallele Buchungen auf denselben Platz werden nacheinander geprüft und überbelegen ihn nicht.
+
+**Stapeln.** `POST …/{barcode}/stack` mit `{ "onto": "<barcode>" }`: nur mit Stapelregel und bis zur Höchstzahl (`STACK_FULL`), nur auf demselben Platz, ohne Zyklen; Ablehnung mit `409 STACKING_REJECTED`. Gestapelte TUs lassen sich nicht einzeln bewegen (`TU_STACKED`); wird die Basis bewegt, wandert der ganze Stapel mit (`movedWith` im Event). `POST …/unstack` stellt die TU als eigene Einheit auf denselben Platz (Kapazitätsprüfung wie beim Platzieren).
+
+**Löschschutz.** Ein Lagerplatz mit TUs kann nicht gelöscht werden (`LOCATION_IN_USE`, Einwand `transport-units`). Eine TU mit aufgestapelten TUs ebenfalls nicht (`TU_HAS_CHILDREN`); weitere Einwände anderer Module über `TransportUnitRemovalPolicy` (ab Schritt 5: laufende Transportaufträge).
+
+Events: `transport-unit-type.created|updated|deleted`, `transport-unit.created|moved|updated|state-changed|stacked|unstacked|deleted` (Schemas in `packages/shared/src/transport-events.ts`).
 
 ## Events
 

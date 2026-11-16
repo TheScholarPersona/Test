@@ -1,5 +1,8 @@
 import { ErpCodeSchema, LocationGroupNameSchema, LocationIdSchema, LocationTypeCodeSchema } from '@wms/shared';
 import { z } from 'zod';
+import { itemsOf, pageOf, Timestamps, WeightKgSchema } from '../../../http/common-schemas.js';
+
+export { itemsOf, pageOf, WeightKgSchema };
 
 // ---------------------------------------------------------------------------
 // Bausteine
@@ -10,19 +13,6 @@ const DimensionMm = z.number().int().min(1).max(100_000);
 const PlcCode = z.string().trim().min(1).max(64);
 const LockReason = z.string().trim().min(1).max(200);
 
-/** Gewicht in Kilogramm, höchstens 9 Vor- und 3 Nachkommastellen (Spalte NUMERIC(12,3)). */
-export const WeightKgSchema = z
-  .object({
-    amount: z.string().regex(/^\d{1,9}(\.\d{1,3})?$/, 'Gewicht: nicht negativ, höchstens 9 Vor- und 3 Nachkommastellen, z. B. "1250.5"'),
-    unit: z.literal('KG'),
-  })
-  .meta({ id: 'WeightKg' });
-
-const Timestamps = {
-  version: z.number().int(),
-  createdAt: z.iso.datetime(),
-  updatedAt: z.iso.datetime(),
-};
 
 export const LockHolderSchema = z.object({
   kind: z.enum(['location', 'location-group']),
@@ -207,6 +197,3 @@ export const LocationDtoSchema = z
   })
   .meta({ id: 'Location' });
 export type LocationDto = z.infer<typeof LocationDtoSchema>;
-
-export const itemsOf = <T extends z.ZodType>(item: T) => z.object({ items: z.array(item) });
-export const pageOf = <T extends z.ZodType>(item: T) => z.object({ items: z.array(item), total: z.number().int() });

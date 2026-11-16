@@ -515,6 +515,39 @@
     "wires": []
   },
   {
+    "id": "f502000000000000",
+    "type": "tab",
+    "label": "Szenario: tu-placement",
+    "disabled": false,
+    "info": "Schrittliste aus flows/scenarios/tu-placement.js; ausgeführt vom Tab „Schritt-Engine“."
+  },
+  {
+    "id": "f502000000000001",
+    "type": "comment",
+    "z": "f502000000000000",
+    "name": "Definition: flows/scenarios/tu-placement.js (im Repository bearbeiten, dann Flows neu erzeugen)",
+    "info": "",
+    "x": 380,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "f502000000000002",
+    "type": "function",
+    "z": "f502000000000000",
+    "name": "Szenario tu-placement anmelden",
+    "func": "return msg;\n",
+    "outputs": 0,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "const registerScenario = (definition) => {\n  const all = global.get('stepScenarios') || {};\n  all[definition.id] = definition;\n  global.set('stepScenarios', all);\n};\n/**\n * Szenario: Platzierungsregeln für Transporteinheiten.\n *\n * Prüft Kapazität und Höchstgewicht eines Platzes (L-06), die Meldung aller\n * Verstöße, die physische Buchung (Ist-Position wird trotz Verstoß gebucht\n * und im Event gemeldet) und den Löschschutz für belegte Plätze (L-05).\n * Schrittformat: siehe flows/scenarios/layout-locks.js.\n */\nregisterScenario({\n  id: 'tu-placement',\n  description: 'Voller oder zu schwerer Platz wird abgelehnt; physische Buchung wird mit Verstößen gemeldet.',\n  init: (runId) => {\n    const s = runId.replace(/[^a-z0-9]/gi, '').slice(-8).toUpperCase();\n    return {\n      locationType: `SZ-${s}`,\n      group: `SZ-${s}-TU`,\n      unitType: `SZ-${s}`,\n      tu1: `SZ-${s}-1`,\n      tu2: `SZ-${s}-2`,\n      l1Coord: `S${s}/0001/0001/0001/0000`,\n      l2Coord: `S${s}/0001/0002/0001/0000`,\n      l1: null,\n      l2: null,\n    };\n  },\n  steps: [\n    {\n      name: 'Platztyp anlegen',\n      request: (v) => ({ method: 'POST', path: '/v1/location-types', body: { code: v.locationType } }),\n      expectStatus: 201,\n    },\n    {\n      name: 'Gruppe anlegen',\n      request: (v) => ({ method: 'POST', path: '/v1/location-groups', body: { name: v.group } }),\n      expectStatus: 201,\n    },\n    {\n      name: 'Platz L1 anlegen (1 TU, höchstens 100 kg)',\n      request: (v) => ({\n        method: 'POST',\n        path: '/v1/locations',\n        body: { locationId: v.l1Coord, typeCode: v.locationType, groupName: v.group, maxTransportUnits: 1, maxWeight: { amount: '100', unit: 'KG' } },\n      }),\n      expectStatus: 201,\n      save: (body, v) => {\n        v.l1 = body.id;\n      },\n    },\n    {\n      name: 'Platz L2 anlegen (2 TUs, ohne Gewichtsgrenze)',\n      request: (v) => ({ method: 'POST', path: '/v1/locations', body: { locationId: v.l2Coord, typeCode: v.locationType, groupName: v.group, maxTransportUnits: 2 } }),\n      expectStatus: 201,\n      save: (body, v) => {\n        v.l2 = body.id;\n      },\n    },\n    {\n      name: 'TU-Typ anlegen (Leergewicht 20 kg)',\n      request: (v) => ({ method: 'POST', path: '/v1/transport-unit-types', body: { code: v.unitType, tareWeight: { amount: '20', unit: 'KG' } } }),\n      expectStatus: 201,\n    },\n    {\n      name: 'TU 1 auf L1 anlegen',\n      request: (v) => ({ method: 'POST', path: '/v1/transport-units', body: { barcode: v.tu1, typeCode: v.unitType, location: { id: v.l1 } } }),\n      expectStatus: 201,\n    },\n    {\n      name: 'Event transport-unit.created für TU 1 empfangen',\n      event: (e, v) => e.type === 'transport-unit.created' && e.payload.barcode === v.tu1,\n    },\n    {\n      name: 'TU 2 auf dem vollen Platz L1 wird abgelehnt',\n      request: (v) => ({ method: 'POST', path: '/v1/transport-units', body: { barcode: v.tu2, typeCode: v.unitType, location: { id: v.l1 } } }),\n      expectStatus: 409,\n      check: (body) => {\n        const rules = ((body.details && body.details.violations) || []).map((x) => x.rule);\n        return body.code === 'PLACEMENT_REJECTED' && rules.join() === 'LOCATION_FULL' ? null : `Erwartet LOCATION_FULL, erhalten ${JSON.stringify(body)}`;\n      },\n    },\n    {\n      name: 'TU 2 mit 120 kg auf L2 anlegen',\n      request: (v) => ({\n        method: 'POST',\n        path: '/v1/transport-units',\n        body: { barcode: v.tu2, typeCode: v.unitType, location: { id: v.l2 }, weight: { amount: '120', unit: 'KG' } },\n      }),\n      expectStatus: 201,\n    },\n    {\n      name: 'Bewegen nach L1 meldet beide Verstöße (voll und zu schwer)',\n      request: (v) => ({ method: 'POST', path: `/v1/transport-units/${v.tu2}/move`, body: { to: { id: v.l1 } } }),\n      expectStatus: 409,\n      check: (body) => {\n        const rules = ((body.details && body.details.violations) || []).map((x) => x.rule).sort();\n        return rules.join() === 'LOCATION_FULL,WEIGHT_EXCEEDED' ? null : `Erwartet LOCATION_FULL und WEIGHT_EXCEEDED, erhalten ${rules.join()}`;\n      },\n    },\n    {\n      name: 'Gemeldete Ist-Position wird trotzdem gebucht (mode physical)',\n      request: (v) => ({ method: 'POST', path: `/v1/transport-units/${v.tu2}/move`, body: { to: { id: v.l1 }, mode: 'physical' } }),\n      expectStatus: 200,\n      check: (body, v) =>\n        body.unit.location.id === v.l1 && body.violations.length === 2 ? null : `Unerwartetes Ergebnis: ${JSON.stringify(body)}`,\n    },\n    {\n      name: 'Event transport-unit.moved mit Verstößen empfangen',\n      event: (e, v) => e.type === 'transport-unit.moved' && e.payload.barcode === v.tu2 && e.payload.mode === 'physical' && e.payload.violations.length === 2,\n    },\n    {\n      name: 'Belegter Platz L1 kann nicht gelöscht werden',\n      request: (v) => ({ method: 'DELETE', path: `/v1/locations/${v.l1}` }),\n      expectStatus: 409,\n      check: (body) => (body.code === 'LOCATION_IN_USE' ? null : `Erwartet LOCATION_IN_USE, erhalten ${body.code}`),\n    },\n    {\n      name: 'Aufräumen: TU 2 löschen',\n      cleanup: true,\n      request: (v) => ({ method: 'DELETE', path: `/v1/transport-units/${v.tu2}` }),\n    },\n    {\n      name: 'Aufräumen: TU 1 löschen',\n      cleanup: true,\n      request: (v) => ({ method: 'DELETE', path: `/v1/transport-units/${v.tu1}` }),\n    },\n    {\n      name: 'Aufräumen: Platz L1 löschen',\n      cleanup: true,\n      request: (v) => (v.l1 ? { method: 'DELETE', path: `/v1/locations/${v.l1}` } : null),\n      expectStatus: 204,\n    },\n    {\n      name: 'Aufräumen: Platz L2 löschen',\n      cleanup: true,\n      request: (v) => (v.l2 ? { method: 'DELETE', path: `/v1/locations/${v.l2}` } : null),\n      expectStatus: 204,\n    },\n    {\n      name: 'Aufräumen: Gruppe löschen',\n      cleanup: true,\n      request: (v) => ({ method: 'DELETE', path: `/v1/location-groups/${v.group}` }),\n      expectStatus: 204,\n    },\n    {\n      name: 'Aufräumen: TU-Typ löschen',\n      cleanup: true,\n      request: (v) => ({ method: 'DELETE', path: `/v1/transport-unit-types/${v.unitType}` }),\n      expectStatus: 204,\n    },\n    {\n      name: 'Aufräumen: Platztyp löschen',\n      cleanup: true,\n      request: (v) => ({ method: 'DELETE', path: `/v1/location-types/${v.locationType}` }),\n      expectStatus: 204,\n    },\n  ],\n});\n",
+    "finalize": "",
+    "libs": [],
+    "x": 200,
+    "y": 100,
+    "wires": []
+  },
+  {
     "id": "f000000000000003",
     "type": "tab",
     "label": "Anlagensimulator",

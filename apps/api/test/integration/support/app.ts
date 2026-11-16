@@ -39,6 +39,7 @@ export function httpClient(baseUrl: string) {
     get: <T = any>(path: string) => call<T>('GET', path),
     post: <T = any>(path: string, body?: unknown) => call<T>('POST', path, body),
     patch: <T = any>(path: string, body?: unknown) => call<T>('PATCH', path, body),
+    put: <T = any>(path: string, body?: unknown) => call<T>('PUT', path, body),
     delete: <T = any>(path: string) => call<T>('DELETE', path),
   };
 }
