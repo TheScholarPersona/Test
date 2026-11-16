@@ -1,0 +1,358 @@
+[
+  {
+    "id": "b0000000000000b1",
+    "type": "mqtt-broker",
+    "name": "WMS-Broker",
+    "broker": "${MQTT_HOST}",
+    "port": "${MQTT_PORT}",
+    "clientid": "",
+    "autoConnect": true,
+    "usetls": false,
+    "protocolVersion": "4",
+    "keepalive": "60",
+    "cleansession": true,
+    "autoUnsubscribe": true,
+    "birthTopic": "",
+    "closeTopic": "",
+    "willTopic": ""
+  },
+  {
+    "id": "f000000000000001",
+    "type": "tab",
+    "label": "Test-Framework",
+    "disabled": false,
+    "info": "Steuert die Szenario-Tests.\n\n- `GET /test/scenarios` listet alle Szenarien.\n- `POST /test/scenarios/:id/run` führt ein Szenario aus und antwortet mit dem Ergebnis.\n\nEin Szenario ist ein eigener Tab mit einem `link in`-Node namens `scenario:<id>` und endet mit einem `link out` im Modus „return“. Neue Szenarien im Katalog eintragen."
+  },
+  {
+    "id": "f100000000000001",
+    "type": "comment",
+    "z": "f000000000000001",
+    "name": "Szenario-Katalog – neue Szenarien hier eintragen",
+    "info": "",
+    "x": 230,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "f100000000000002",
+    "type": "function",
+    "z": "f000000000000001",
+    "name": "Szenario-Katalog",
+    "func": "return msg;\n",
+    "outputs": 0,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "    // Jedes Szenario: id = Name des link-in-Nodes ohne Präfix \"scenario:\".\n    global.set('scenarioCatalog', [\n      {\n        id: 'system-ping',\n        description: 'API erzeugt ein system.ping-Event; es kommt über Outbox und MQTT in Node-RED an.',\n      },\n    ]);\n",
+    "finalize": "",
+    "libs": [],
+    "x": 200,
+    "y": 80,
+    "wires": []
+  },
+  {
+    "id": "f100000000000011",
+    "type": "http in",
+    "z": "f000000000000001",
+    "name": "GET /test/scenarios",
+    "url": "/test/scenarios",
+    "method": "get",
+    "upload": false,
+    "swaggerDoc": "",
+    "x": 160,
+    "y": 140,
+    "wires": [
+      [
+        "f100000000000012"
+      ]
+    ]
+  },
+  {
+    "id": "f100000000000012",
+    "type": "function",
+    "z": "f000000000000001",
+    "name": "Szenarien auflisten",
+    "func": "    msg.statusCode = 200;\n    msg.headers = { 'content-type': 'application/json' };\n    msg.payload = { scenarios: global.get('scenarioCatalog') || [] };\n    return msg;\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 390,
+    "y": 140,
+    "wires": [
+      [
+        "f100000000000013"
+      ]
+    ]
+  },
+  {
+    "id": "f100000000000013",
+    "type": "http response",
+    "z": "f000000000000001",
+    "name": "",
+    "statusCode": "",
+    "headers": {},
+    "x": 590,
+    "y": 140,
+    "wires": []
+  },
+  {
+    "id": "f100000000000021",
+    "type": "http in",
+    "z": "f000000000000001",
+    "name": "POST /test/scenarios/:id/run",
+    "url": "/test/scenarios/:id/run",
+    "method": "post",
+    "upload": false,
+    "swaggerDoc": "",
+    "x": 180,
+    "y": 220,
+    "wires": [
+      [
+        "f100000000000022"
+      ]
+    ]
+  },
+  {
+    "id": "f100000000000022",
+    "type": "function",
+    "z": "f000000000000001",
+    "name": "Szenario wählen",
+    "func": "    const catalog = global.get('scenarioCatalog') || [];\n    const id = msg.req.params.id;\n    if (!catalog.some((entry) => entry.id === id)) {\n      msg.statusCode = 404;\n      msg.headers = { 'content-type': 'application/json' };\n      msg.payload = { scenario: id, passed: false, error: `Unbekanntes Szenario [${id}]` };\n      return [null, msg];\n    }\n    const requested = msg.payload && typeof msg.payload.runId === 'string' ? msg.payload.runId : undefined;\n    msg.scenario = {\n      id,\n      runId: requested || `${id}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,\n      startedAt: Date.now(),\n      steps: [],\n      passed: false,\n    };\n    msg.target = `scenario:${id}`;\n    return [msg, null];\n",
+    "outputs": 2,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 420,
+    "y": 220,
+    "wires": [
+      [
+        "f100000000000023"
+      ],
+      [
+        "f100000000000025"
+      ]
+    ]
+  },
+  {
+    "id": "f100000000000023",
+    "type": "link call",
+    "z": "f000000000000001",
+    "name": "Szenario ausführen",
+    "links": [],
+    "linkType": "dynamic",
+    "timeout": "60",
+    "x": 640,
+    "y": 200,
+    "wires": [
+      [
+        "f100000000000024"
+      ]
+    ]
+  },
+  {
+    "id": "f100000000000024",
+    "type": "function",
+    "z": "f000000000000001",
+    "name": "Ergebnis senden",
+    "func": "    const s = msg.scenario;\n    // Antwort-Header der API aus dem Szenario nicht weiterreichen.\n    msg.headers = { 'content-type': 'application/json' };\n    msg.statusCode = 200;\n    msg.payload = {\n      scenario: s.id,\n      runId: s.runId,\n      passed: s.passed === true && s.steps.length > 0 && s.steps.every((step) => step.passed === true),\n      durationMs: Date.now() - s.startedAt,\n      steps: s.steps,\n      error: s.error,\n    };\n    return msg;\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 850,
+    "y": 200,
+    "wires": [
+      [
+        "f100000000000025"
+      ]
+    ]
+  },
+  {
+    "id": "f100000000000025",
+    "type": "http response",
+    "z": "f000000000000001",
+    "name": "",
+    "statusCode": "",
+    "headers": {},
+    "x": 1050,
+    "y": 220,
+    "wires": []
+  },
+  {
+    "id": "f100000000000026",
+    "type": "catch",
+    "z": "f000000000000001",
+    "name": "Fehler im Szenario",
+    "scope": [
+      "f100000000000023"
+    ],
+    "uncaught": false,
+    "x": 650,
+    "y": 280,
+    "wires": [
+      [
+        "f100000000000027"
+      ]
+    ]
+  },
+  {
+    "id": "f100000000000027",
+    "type": "function",
+    "z": "f000000000000001",
+    "name": "Fehler melden",
+    "func": "    const s = msg.scenario || { id: 'unbekannt', runId: '', startedAt: Date.now(), steps: [] };\n    msg.headers = { 'content-type': 'application/json' };\n    msg.statusCode = 200;\n    msg.payload = {\n      scenario: s.id,\n      runId: s.runId,\n      passed: false,\n      durationMs: Date.now() - s.startedAt,\n      steps: s.steps,\n      error: `Szenario abgebrochen: ${msg.error && msg.error.message}`,\n    };\n    return msg;\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 850,
+    "y": 280,
+    "wires": [
+      [
+        "f100000000000025"
+      ]
+    ]
+  },
+  {
+    "id": "f000000000000002",
+    "type": "tab",
+    "label": "Szenario: system-ping",
+    "disabled": false,
+    "info": "Prüft die Kette API → Outbox → MQTT → Node-RED.\n\n1. Ping über `POST /test/events/ping` anfordern (HTTP 201 erwartet).\n2. Auf `wms/system/ping` mit passender `correlationId` warten (Timeout `SCENARIO_EVENT_TIMEOUT_MS`, Standard 10 s)."
+  },
+  {
+    "id": "f200000000000001",
+    "type": "link in",
+    "z": "f000000000000002",
+    "name": "scenario:system-ping",
+    "links": [],
+    "x": 140,
+    "y": 80,
+    "wires": [
+      [
+        "f200000000000002"
+      ]
+    ]
+  },
+  {
+    "id": "f200000000000002",
+    "type": "function",
+    "z": "f000000000000002",
+    "name": "Ping anfordern",
+    "func": "    const s = msg.scenario;\n    s.steps.push({ name: 'Ping-Event über die API anfordern', passed: null });\n    msg.url = `${env.get('WMS_API_URL')}/test/events/ping`;\n    msg.method = 'POST';\n    msg.headers = { 'content-type': 'application/json' };\n    msg.payload = { message: s.runId, correlationId: s.runId };\n    return msg;\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 350,
+    "y": 80,
+    "wires": [
+      [
+        "f200000000000003"
+      ]
+    ]
+  },
+  {
+    "id": "f200000000000003",
+    "type": "http request",
+    "z": "f000000000000002",
+    "name": "WMS-API",
+    "method": "use",
+    "ret": "obj",
+    "paytoqs": "ignore",
+    "url": "",
+    "tls": "",
+    "persist": false,
+    "proxy": "",
+    "insecureHTTPParser": false,
+    "authType": "",
+    "senderr": false,
+    "headers": [],
+    "x": 540,
+    "y": 80,
+    "wires": [
+      [
+        "f200000000000004"
+      ]
+    ]
+  },
+  {
+    "id": "f200000000000005",
+    "type": "mqtt in",
+    "z": "f000000000000002",
+    "name": "wms/system/ping",
+    "topic": "wms/system/ping",
+    "qos": "1",
+    "datatype": "json",
+    "broker": "b0000000000000b1",
+    "nl": false,
+    "rap": true,
+    "rh": 0,
+    "inputs": 0,
+    "x": 540,
+    "y": 160,
+    "wires": [
+      [
+        "f200000000000004"
+      ]
+    ]
+  },
+  {
+    "id": "f200000000000004",
+    "type": "function",
+    "z": "f000000000000002",
+    "name": "Auf Event warten",
+    "func": "    // Zwei Eingänge: HTTP-Antwort der API (mit msg.scenario) und MQTT-Events.\n    const STEP = 'Event system.ping über MQTT empfangen';\n    const timeoutMs = Number(env.get('SCENARIO_EVENT_TIMEOUT_MS') || 10000);\n    const pending = context.get('pending') || {};\n    const recent = context.get('recent') || {};\n\n    const complete = (waiting, event) => {\n      const s = waiting.scenario;\n      const ok = event.type === 'system.ping' && event.id === s.eventId && event.payload && event.payload.message === s.runId;\n      s.steps.push({ name: STEP, passed: ok, detail: ok ? `Event ${event.id}` : `Unerwartetes Event: ${JSON.stringify(event)}` });\n      s.passed = ok;\n      if (!ok) {\n        s.error = 'Event entspricht nicht der Erwartung';\n      }\n      return waiting;\n    };\n\n    if (msg.scenario === undefined) {\n      const event = msg.payload;\n      const runId = event && event.correlationId;\n      if (!runId) {\n        return null;\n      }\n      const entry = pending[runId];\n      if (!entry) {\n        // Event kam vor der HTTP-Antwort an: kurz merken.\n        recent[runId] = event;\n        const keys = Object.keys(recent);\n        if (keys.length > 100) {\n          delete recent[keys[0]];\n        }\n        context.set('recent', recent);\n        return null;\n      }\n      clearTimeout(entry.timer);\n      delete pending[runId];\n      context.set('pending', pending);\n      return complete(entry.msg, event);\n    }\n\n    const s = msg.scenario;\n    const step = s.steps[s.steps.length - 1];\n    step.passed = msg.statusCode === 201;\n    step.detail = `HTTP ${msg.statusCode}`;\n    if (!step.passed) {\n      s.passed = false;\n      s.error = `API antwortete mit HTTP ${msg.statusCode}: ${JSON.stringify(msg.payload)}`;\n      return msg;\n    }\n    s.eventId = msg.payload.eventId;\n\n    if (recent[s.runId]) {\n      const event = recent[s.runId];\n      delete recent[s.runId];\n      context.set('recent', recent);\n      return complete(msg, event);\n    }\n\n    const timer = setTimeout(() => {\n      const open = context.get('pending') || {};\n      if (!open[s.runId]) {\n        return;\n      }\n      delete open[s.runId];\n      context.set('pending', open);\n      s.steps.push({ name: STEP, passed: false, detail: `Kein Event innerhalb von ${timeoutMs} ms` });\n      s.passed = false;\n      s.error = 'Event nicht empfangen';\n      node.send(msg);\n    }, timeoutMs);\n    pending[s.runId] = { msg, timer };\n    context.set('pending', pending);\n    return null;\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 760,
+    "y": 120,
+    "wires": [
+      [
+        "f200000000000006"
+      ]
+    ]
+  },
+  {
+    "id": "f200000000000006",
+    "type": "link out",
+    "z": "f000000000000002",
+    "name": "Ergebnis zurück",
+    "mode": "return",
+    "links": [],
+    "x": 960,
+    "y": 120,
+    "wires": []
+  },
+  {
+    "id": "f000000000000003",
+    "type": "tab",
+    "label": "Anlagensimulator",
+    "disabled": false,
+    "info": "Platzhalter. Ab Schritt 5 simuliert dieser Tab Fördertechnik und Scanner (siehe docs/openwms-analyse.md, Kap. 5.1d)."
+  },
+  {
+    "id": "f300000000000001",
+    "type": "comment",
+    "z": "f000000000000003",
+    "name": "Anlagensimulator – folgt in Schritt 5 (Materialfluss)",
+    "info": "",
+    "x": 260,
+    "y": 60,
+    "wires": []
+  }
+]

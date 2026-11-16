@@ -1,0 +1,10 @@
+packages:
+  - apps/*
+  - packages/*
+
+# Installationsskripte nur für ausdrücklich freigegebene Pakete.
+# Diese gehören zu optionalen Testcontainers-Funktionen (SSH) und werden nicht benötigt.
+ignoredBuiltDependencies:
+  - cpu-features
+  - protobufjs
+  - ssh2
