@@ -15,8 +15,9 @@ export const LocationReferenceSchema = z
     z.strictObject({ id: z.uuid() }),
     z.strictObject({ locationId: LocationIdSchema }),
     z.strictObject({ erpCode: ErpCodeSchema }),
+    z.strictObject({ plcCode: z.string().trim().min(1).max(64) }),
   ])
-  .meta({ id: 'LocationReference', description: 'Lagerplatz über id, Koordinate (locationId) oder ERP-Code' });
+  .meta({ id: 'LocationReference', description: 'Lagerplatz über id, Koordinate (locationId), ERP-Code oder Anlagen-Code (plcCode)' });
 export type LocationReference = z.infer<typeof LocationReferenceSchema>;
 
 export interface LocationLocks {
@@ -37,7 +38,8 @@ export class LocationLookup {
    */
   async resolve(em: EntityManager, ref: LocationReference, options: { lock?: boolean } = {}): Promise<Location> {
     await GroupHierarchy.load(em);
-    const where = 'id' in ref ? { id: ref.id } : 'locationId' in ref ? { locationId: ref.locationId } : { erpCode: ref.erpCode };
+    const where =
+      'id' in ref ? { id: ref.id } : 'locationId' in ref ? { locationId: ref.locationId } : 'erpCode' in ref ? { erpCode: ref.erpCode } : { plcCode: ref.plcCode };
     const location = await em.findOne(Location, where, {
       populate: ['type'],
       ...(options.lock ? { lockMode: LockMode.PESSIMISTIC_WRITE } : {}),

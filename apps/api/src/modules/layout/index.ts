@@ -16,6 +16,7 @@ export {
   type LocationReference,
 } from './application/location-lookup.js';
 export type { EffectiveLock } from './domain/lock-state.js';
+export type { ChangeLocationLocks } from './http/schemas.js';
 export { Location, LocationGroup, LocationType };
 
 export const layoutEntities = [LocationType, LocationGroup, Location];

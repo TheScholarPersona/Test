@@ -107,7 +107,12 @@ export class LocationService {
   }
 
   changeLocks(id: string, input: ChangeLocationLocks): Promise<Location> {
-    return this.em.transactional(async (tx) => {
+    return this.em.transactional((tx) => this.changeLocksIn(tx, id, input));
+  }
+
+  /** Wie `changeLocks`, aber innerhalb einer bestehenden Transaktion (z. B. Platzmeldung einer Anlage). */
+  async changeLocksIn(tx: EntityManager, id: string, input: ChangeLocationLocks): Promise<Location> {
+    {
       await GroupHierarchy.load(tx);
       const location = await this.load(tx, id);
       const change: LockChange & { allocation?: { before: boolean; after: boolean } } =
@@ -123,7 +128,7 @@ export class LocationService {
         });
       }
       return location;
-    });
+    }
   }
 
   /** Löschen nur, wenn kein anderes Modul widerspricht (z. B. Transporteinheit auf dem Platz). */

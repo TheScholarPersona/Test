@@ -8,3 +8,4 @@ export * from './movement-events.js';
 export * from './inventory-events.js';
 export * from './receiving-events.js';
 export * from './transport-order-events.js';
+export * from './flow-events.js';
