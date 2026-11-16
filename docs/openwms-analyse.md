@@ -585,6 +585,69 @@ flowchart LR
 
 Damit erfüllt Node-RED die Rolle, für die OpenWMS BPMN einsetzt – Materialfluss ändern ohne Neukompilierung –, während Zustände und Regeln im Kern bleiben (Leitplanken aus 5.1a). Eine BPMN-Engine ist im ersten Ausbau nicht nötig.
 
+### 5.1d Teststrategie mit Node-RED
+
+```mermaid
+flowchart TB
+    E2E["System- und Abnahmetests<br/><b>Node-RED-Szenarien</b> + Anlagensimulator"]
+    CON["Vertragstests<br/>OpenAPI- und Event-Schemas (Zod)"]
+    INT["Integrationstests<br/>Vitest + Testcontainers (PostgreSQL, Mosquitto)"]
+    UNIT["Unit-Tests<br/>Vitest: Domänenmodell, Zustandsautomaten, Strategien, Regeln"]
+    E2E --- CON --- INT --- UNIT
+```
+
+| Ebene | Werkzeug | Inhalt | Läuft |
+|---|---|---|---|
+| Unit | Vitest | Zustandsübergänge, harte Regeln, Strategien als Tabellen-Tests | bei jedem Commit, Sekunden |
+| Integration | Vitest + Testcontainers | Repositories, Migrationen, Outbox → MQTT, REST-Endpunkte | bei jedem Commit, Minuten |
+| Vertrag | Vitest | Events und API gegen die Zod-/OpenAPI-Schemas; dieselben Schemas nutzt Node-RED | bei jedem Commit |
+| Eigene Node-RED-Nodes | `node-red-node-test-helper` | Nodes aus `packages/node-red-nodes` isoliert testen | bei jedem Commit |
+| **System/Abnahme** | **Node-RED** (Szenario-Flows + Simulator) | fachliche Ende-zu-Ende-Abläufe gegen die laufende Anwendung | in der CI nach dem Build und nachts; Last-/Dauertests manuell |
+
+#### Bausteine in Node-RED
+
+1. **Anlagensimulator** (`flows/simulator/`): bildet Fördertechnik, Regalbediengerät und Scanner nach. Reagiert auf „nächstes Ziel“ mit konfigurierbarer Fahrzeit und meldet `arrived`; kann Störungen einspeisen (`error`, Platz gesperrt, Zeitüberschreitung). Das Layout (Plätze, Strecken, Fahrzeiten) kommt aus einer Konfigurationsdatei, nicht aus dem Flow.
+2. **Szenario-Flows** (`flows/scenarios/`): je Szenario ein Flow nach dem Muster *Vorbereiten → Auslösen → Warten auf Ereignis → Prüfen → Ergebnis melden*. Beispiele:
+   - Wareneingang: Avis anlegen, Menge erfassen, Überbuchung ohne Freigabe wird abgelehnt (R-02).
+   - Einlagerung: TU erfassen, Einlagerstrategie wählt Platz, Simulator fährt hin, TU steht am Ziel, Decision Trace vorhanden.
+   - Transportauftrag: zweiter Start für dieselbe TU wird abgelehnt (O-02), gesperrtes Ziel verhindert Start (O-04).
+   - Materialfluss: Anfrage an Station ohne Route erzeugt ein „keine Route“-Ereignis (R4).
+   - Kapazität: Platz voll → Einlagerung wählt anderen Platz (L-06).
+3. **Gemeinsame Test-Nodes** (Teil von Schritt 7): „Szenario starten“, „auf WMS-Ereignis warten (mit Timeout)“, „prüfen“ (Feldvergleich), „Ergebnis melden“.
+
+#### Einbindung in die CI
+
+```mermaid
+sequenceDiagram
+    participant CI as CI-Runner (Vitest)
+    participant DC as docker compose
+    participant APP as WMS-Kern
+    participant NR as Node-RED (Szenarien + Simulator)
+    CI->>DC: Umgebung starten (PostgreSQL, Mosquitto, Kern, Node-RED)
+    CI->>APP: Testdaten anlegen (Lagerlayout, Produkte) über die API
+    loop je Szenario
+        CI->>NR: POST /test/scenarios/{id}/run
+        NR->>APP: REST-Aufrufe
+        APP-->>NR: Ereignisse (MQTT)
+        NR-->>CI: Ergebnis (bestanden/fehlgeschlagen, Schritte, Dauer)
+    end
+    CI->>CI: JUnit-Bericht schreiben, Umgebung abbauen
+```
+
+Ein schlanker Vitest-Runner steuert die Szenarien. So erscheinen Node-RED-Tests als normale Testfälle mit JUnit-Bericht in der CI.
+
+#### Regeln, damit die Tests verlässlich bleiben
+
+| Regel | Umsetzung |
+|---|---|
+| **Unabhängige Szenarien** | Jedes Szenario erzeugt eigene Testdaten mit eindeutigem Präfix (z. B. Barcode `T-<lauf>-<nr>`), keine gemeinsamen Datensätze |
+| **Kein festes Warten** | Auf Ereignisse warten mit Timeout statt `delay`-Nodes; Timeouts zentral konfigurierbar |
+| **Steuerbare Zeit** | Simulator-Fahrzeiten im Testlauf verkürzt; Uhrzeit-abhängige Regeln mit injizierbarer Uhr im Kern |
+| **Nur über die öffentliche API** | Szenarien nutzen dieselben Schnittstellen wie produktive Flows; kein Datenbankzugriff |
+| **Test-Endpunkte nur im Testprofil** | z. B. Daten zurücksetzen oder Uhr setzen – im Produktivprofil nicht vorhanden |
+| **Flows versioniert** | Szenarien und Simulator im Monorepo unter `flows/`, Änderungen per Pull Request |
+| **Klare Fehlermeldung** | Ergebnis enthält Szenario, Schritt, erwarteten und tatsächlichen Wert sowie die Korrelations-ID des Ereignisses |
+
 ### 5.2 Eigenbau oder Wiederverwendung
 
 | Baustein | Entscheidung | Begründung |
@@ -606,18 +669,18 @@ Reihenfolge wie gewünscht. Eine fachliche Abhängigkeit ist zu beachten: Der Wa
 
 | Prio | Schritt | Umfang | Fachliche Regeln (aus Katalog) | Abnahmekriterien |
 |---|---|---|---|---|
-| 0 | **Grundgerüst** | pnpm-Monorepo, TypeScript strict, NestJS, MikroORM + Migrationen, Zod → OpenAPI, Outbox + MQTT-Publisher, Vitest, Testcontainers, CI; `docker compose` mit PostgreSQL, Mosquitto, Node-RED | – | `pnpm test` grün, Modulgrenzen geprüft, Test-Event kommt in Node-RED an |
+| 0 | **Grundgerüst** | pnpm-Monorepo, TypeScript strict, NestJS, MikroORM + Migrationen, Zod → OpenAPI, Outbox + MQTT-Publisher, Vitest, Testcontainers, CI; `docker compose` mit PostgreSQL, Mosquitto, Node-RED; **Test-Gerüst nach 5.1d** (Vitest-Runner für Node-RED-Szenarien, JUnit-Bericht, Testprofil) | – | `pnpm test` grün, Modulgrenzen geprüft, Test-Event kommt in Node-RED an, ein Beispiel-Szenario läuft in der CI |
 | 1 | **Lagerstruktur** | `LocationType`, `LocationGroup` (Hierarchie), `Location` (area/aisle/x/y/z, erpCode, plcCode), Sperren In/Out/Permanent | L-01 … L-05, plus **L-06 aktiv** | Anlegen/Abfragen/Sperren per REST; Sperrvererbung getestet |
 | 2 | **Transporteinheiten** | `TransportUnitType`, `TransportUnit`, Barcode-Generator, Bewegen, Zustände, Fehler, Reservierungen, Eltern/Kind | T-01, T-02, **T-03/T-04 als echte Policies** (Kapazität, Gewicht, Platzierung, Stapelung), T-05 | TU anlegen, bewegen, blockieren; Policy-Verletzungen liefern fachliche Fehler; MOVED-Event enthält korrekten Vorplatz |
 | 2a | **Strategie-Kern** | Strategie-Schnittstellen, Registry, Entscheidungstabelle mit typisiertem Bedingungsmodell, harte Regeln als gemeinsame Filter, Decision Trace, Simulations-Endpunkt, Versionierung (Kap. 5.1b) | T-03/T-04/L-06 als harte Regeln | Beispielstrategie wählt nachvollziehbar; Regeländerung per Simulation prüfbar; harte Regeln nicht abschaltbar |
 | 3 | **Lagerbewegungen** | `Movement`, `MovementGroup`, Typen, Handler je Typ; **erste Einlagerstrategien** (erster freier Platz, nächster Platz, ABC-Zone) und Leergutstrategie | M-01 … M-04 mit explizitem Zustandsautomaten | Movement anlegen, bewegen, abschließen, stornieren; ungültige Übergänge abgelehnt |
 | 4 | **Wareneingang** | `ReceivingOrder`, Mengen- und TU-Positionen, Erfassung (gegen Auftrag, blind), Abschluss; **minimales Produkt + Bestandsbuchung** | R-01 … R-07 | Avis anlegen, Teil-/Vollerfassung, Überbuchung nur bei Freigabe, Auftragsstatus korrekt abgeleitet |
-| 5 | **Transportaufträge und Materialfluss** | `TransportOrder`, Zustandsautomat, Start-Steuerung, Löschschutz für TUs; Umleitungs- und Priorisierungsstrategien; **Materialfluss-Modul nach Kap. 5.1c**: Routen, Nächster-Schritt-Tabelle, Action-Matrix, Programme als TS-Handler oder Node-RED-Flow, Geräte-Ereignisse (`request`, `arrived`, `location-status`, `error`) | O-01 … O-07, `INTERRUPTED` definiert; Schwachstellen R1–R4 vermieden | Auftrag durchläuft CREATED→FINISHED; zweiter Start für dieselbe TU abgelehnt; gesperrtes Ziel verhindert Start; simulierte Anlagenanfrage liefert nächstes Ziel samt Begründung; Routenänderung wirkt sofort |
+| 5 | **Transportaufträge und Materialfluss** | `TransportOrder`, Zustandsautomat, Start-Steuerung, Löschschutz für TUs; Umleitungs- und Priorisierungsstrategien; **Materialfluss-Modul nach Kap. 5.1c**: Routen, Nächster-Schritt-Tabelle, Action-Matrix, Programme als TS-Handler oder Node-RED-Flow, Geräte-Ereignisse (`request`, `arrived`, `location-status`, `error`) | O-01 … O-07, `INTERRUPTED` definiert; Schwachstellen R1–R4 vermieden | Auftrag durchläuft CREATED→FINISHED; zweiter Start für dieselbe TU abgelehnt; gesperrtes Ziel verhindert Start; simulierte Anlagenanfrage liefert nächstes Ziel samt Begründung; Routenänderung wirkt sofort; **Anlagensimulator in Node-RED** fährt TUs über die konfigurierten Routen |
 | 6 | **Bestandsführung** | **Bestand je Ladeeinheit (entschieden):** Packaging Unit = Produkt + Menge + Einheit (+ Charge, MHD, Seriennummer optional) **auf genau einer TU**; Platzbestand ergibt sich aus den TUs auf dem Platz. Produkte, Einheiten/Umrechnungen, Buchungsjournal (Zugang, Abgang, Umbuchung zwischen TUs, Korrektur), Reservierung, Inventur-Grundlage | neu zu definieren (Original privat) | Bestand pro Produkt/Platz/TU abfragbar, jede Änderung als Buchung nachvollziehbar |
 | 8 | **Auslagerung** | Auslageraufträge (Bedarf: Produkt + Menge), Bestandsauswahl per **Auslagerstrategie** (FIFO, FEFO, LIFO, Anbruch zuerst, ganze TU), Reservierung, Erzeugung von Movements/Transportaufträgen | neu (Picking/Shipping im Original privat) | Bedarf wird gemäß Strategie und Begründung bedient; reservierter Bestand nicht doppelt vergeben |
-| 7 | **Node-RED-Nodes und Beispiel-Flows** | npm-Paket mit Config-Node und fachlichen Nodes; Beispiel-Flows: ERP-CSV → Wareneingang, Scan → TU bewegen, Event → Etikett/Meldung | Leitplanken aus 5.1a | Nodes in Node-RED installierbar; Flows laufen gegen die lokale Umgebung; Regelverletzung erscheint als Fehler im Flow |
+| 7 | **Node-RED-Nodes und Beispiel-Flows** | npm-Paket mit Config-Node und fachlichen Nodes **plus Test-Nodes** (Szenario starten, auf Ereignis warten, prüfen, Ergebnis melden) mit `node-red-node-test-helper`-Tests; Beispiel-Flows: ERP-CSV → Wareneingang, Scan → TU bewegen, Event → Etikett/Meldung | Leitplanken aus 5.1a | Nodes in Node-RED installierbar; Flows laufen gegen die lokale Umgebung; Regelverletzung erscheint als Fehler im Flow |
 
-Je Schritt: Migration, Domänenmodell mit Unit-Tests, Service, REST-Controller mit Zod-Schema/OpenAPI, Domain-Events über Outbox → MQTT, Integrationstest mit Testcontainers. Weil jeder Schritt seine Events veröffentlicht, kann Node-RED schon ab Schritt 1 für Prototypen genutzt werden; Schritt 7 macht daraus wiederverwendbare Nodes. Schritt 8 (Auslagerung) war im ursprünglichen Umfang nicht enthalten, ist aber Voraussetzung für Auslagerstrategien; Schritt 7 kann auch nach Schritt 8 erfolgen.
+Je Schritt: Migration, Domänenmodell mit Unit-Tests, **mindestens ein Node-RED-Szenario für den fachlichen Hauptablauf**, Service, REST-Controller mit Zod-Schema/OpenAPI, Domain-Events über Outbox → MQTT, Integrationstest mit Testcontainers. Weil jeder Schritt seine Events veröffentlicht, kann Node-RED schon ab Schritt 1 für Prototypen genutzt werden; Schritt 7 macht daraus wiederverwendbare Nodes. Schritt 8 (Auslagerung) war im ursprünglichen Umfang nicht enthalten, ist aber Voraussetzung für Auslagerstrategien; Schritt 7 kann auch nach Schritt 8 erfolgen.
 
 ### 5.4 Nicht 1:1 übernehmen – gefundene Schwachstellen
 
