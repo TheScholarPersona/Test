@@ -12,7 +12,14 @@ import { ConflictError, NotFoundError, RuleViolationError } from '../../../commo
 import { OutboxService } from '../../../infrastructure/outbox/outbox.service.js';
 import { type Location, LocationLookup, LocationRemovalPolicy } from '../../layout/index.js';
 import { PutawayService } from '../../strategy/index.js';
-import { PlacementChecker, type PlacementViolation, type TransportUnit, TransportUnitRemovalPolicy, TransportUnitService } from '../../transport/index.js';
+import {
+  PlacementChecker,
+  type PlacementViolation,
+  type TransportUnit,
+  TransportUnitClaims,
+  TransportUnitRemovalPolicy,
+  TransportUnitService,
+} from '../../transport/index.js';
 import { ACTIVE_STATES, transition } from '../domain/movement-state.js';
 import { Movement, priorityRank } from '../entities/movement.entity.js';
 import type { CancelMovement, CompleteMovement, CreateMovement, MovementQuery, StartMovement } from '../http/schemas.js';
@@ -36,10 +43,15 @@ export class MovementService implements OnModuleInit {
     private readonly putaway: PutawayService,
     private readonly unitRemoval: TransportUnitRemovalPolicy,
     private readonly locationRemoval: LocationRemovalPolicy,
+    private readonly claims: TransportUnitClaims,
   ) {}
 
   /** TUs mit offener Bewegung und Plätze, die Ziel einer offenen Bewegung sind, dürfen nicht gelöscht werden. */
   onModuleInit(): void {
+    this.claims.register('movement', async (em, unit) => {
+      const open = await em.findOne(Movement, { unit: unit.id, state: { $in: [...ACTIVE_STATES] } });
+      return open ? `offene Lagerbewegung ${open.number}` : null;
+    });
     this.unitRemoval.register('open-movements', async (unit) => {
       const open = await this.em.fork().findOne(Movement, { unit: unit.id, state: { $in: [...ACTIVE_STATES] } });
       return open ? `Offene Lagerbewegung ${open.number}` : null;
@@ -86,6 +98,7 @@ export class MovementService implements OnModuleInit {
         parentBarcode: (unit.parent as TransportUnit).barcode,
       });
     }
+    await this.units.lockRow(tx, unit);
     const open = await tx.findOne(Movement, { unit, state: { $in: [...ACTIVE_STATES] } });
     if (open) {
       throw new ConflictError('MOVEMENT_EXISTS', `Für TU ${unit.barcode} ist bereits Bewegung ${open.number} offen`, {
@@ -93,6 +106,7 @@ export class MovementService implements OnModuleInit {
         number: open.number,
       });
     }
+    await this.claims.assertFree(tx, unit, 'movement');
     const source = await this.lookup.resolve(tx, { id: (unit.location as Location).id });
 
     let target: Location;

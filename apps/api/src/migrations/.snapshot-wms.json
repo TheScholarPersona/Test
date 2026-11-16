@@ -3618,6 +3618,623 @@
       "comment": null
     },
     {
+      "name": "transport_order",
+      "schema": "public",
+      "columns": {
+        "barcode": {
+          "name": "barcode",
+          "type": "varchar(64)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 64,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamptz(6)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 6,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "datetime"
+        },
+        "decision_id": {
+          "name": "decision_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "deviated": {
+          "name": "deviated",
+          "type": "boolean",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": "false",
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "boolean"
+        },
+        "end_reason": {
+          "name": "end_reason",
+          "type": "varchar(200)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": 200,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "ended_at": {
+          "name": "ended_at",
+          "type": "timestamptz(6)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": 6,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "datetime"
+        },
+        "finished_at": {
+          "name": "finished_at",
+          "type": "timestamptz(6)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": 6,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "datetime"
+        },
+        "finished_coordinate": {
+          "name": "finished_coordinate",
+          "type": "varchar(54)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": 54,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": true,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "initiator": {
+          "name": "initiator",
+          "type": "varchar(100)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": 100,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "number": {
+          "name": "number",
+          "type": "varchar(20)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": true,
+          "length": 20,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "priority": {
+          "name": "priority",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": "'NORMAL'",
+          "comment": null,
+          "collation": null,
+          "enumItems": [
+            "HIGHEST",
+            "HIGH",
+            "NORMAL",
+            "LOW",
+            "LOWEST"
+          ],
+          "mappedType": "enum"
+        },
+        "priority_rank": {
+          "name": "priority_rank",
+          "type": "int",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": "3",
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "integer"
+        },
+        "problem_at": {
+          "name": "problem_at",
+          "type": "timestamptz(6)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": 6,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "datetime"
+        },
+        "problem_code": {
+          "name": "problem_code",
+          "type": "varchar(60)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": 60,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "problem_message": {
+          "name": "problem_message",
+          "type": "varchar(500)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": 500,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "redirect": {
+          "name": "redirect",
+          "type": "boolean",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": "false",
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "boolean"
+        },
+        "source_coordinate": {
+          "name": "source_coordinate",
+          "type": "varchar(54)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 54,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "source_id": {
+          "name": "source_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "started_at": {
+          "name": "started_at",
+          "type": "timestamptz(6)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": 6,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "datetime"
+        },
+        "state": {
+          "name": "state",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": "'INITIALIZED'",
+          "comment": null,
+          "collation": null,
+          "enumItems": [
+            "INITIALIZED",
+            "STARTED",
+            "INTERRUPTED",
+            "FINISHED",
+            "CANCELED",
+            "ONFAILURE"
+          ],
+          "mappedType": "enum"
+        },
+        "target_coordinate": {
+          "name": "target_coordinate",
+          "type": "varchar(54)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": 54,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "target_group": {
+          "name": "target_group",
+          "type": "varchar(40)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": 40,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "target_id": {
+          "name": "target_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "unit_id": {
+          "name": "unit_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": true,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamptz(6)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 6,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "datetime"
+        },
+        "version": {
+          "name": "version",
+          "type": "int",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": "1",
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "integer"
+        }
+      },
+      "indexes": [
+        {
+          "columnNames": [
+            "barcode"
+          ],
+          "composite": false,
+          "constraint": false,
+          "keyName": "transport_order_barcode_index",
+          "primary": false,
+          "unique": false
+        },
+        {
+          "columnNames": [
+            "number"
+          ],
+          "composite": false,
+          "constraint": true,
+          "keyName": "transport_order_number_unique",
+          "primary": false,
+          "unique": true
+        },
+        {
+          "columnNames": [
+            "unit_id"
+          ],
+          "composite": false,
+          "constraint": false,
+          "keyName": "transport_order_one_active_per_unit",
+          "primary": false,
+          "unique": true,
+          "where": "\"state\" in ('STARTED', 'INTERRUPTED')"
+        },
+        {
+          "columnNames": [
+            "id"
+          ],
+          "composite": false,
+          "constraint": true,
+          "keyName": "transport_order_pkey",
+          "primary": true,
+          "unique": true
+        },
+        {
+          "columnNames": [
+            "source_id"
+          ],
+          "composite": false,
+          "constraint": false,
+          "keyName": "transport_order_source_id_index",
+          "primary": false,
+          "unique": false
+        },
+        {
+          "columnNames": [
+            "state",
+            "priority_rank",
+            "created_at"
+          ],
+          "composite": true,
+          "constraint": false,
+          "keyName": "transport_order_start_order_idx",
+          "primary": false,
+          "unique": false
+        },
+        {
+          "columnNames": [
+            "target_id"
+          ],
+          "composite": false,
+          "constraint": false,
+          "keyName": "transport_order_target_id_index",
+          "primary": false,
+          "unique": false
+        },
+        {
+          "columnNames": [
+            "unit_id"
+          ],
+          "composite": false,
+          "constraint": false,
+          "keyName": "transport_order_unit_id_index",
+          "primary": false,
+          "unique": false
+        }
+      ],
+      "checks": [
+        {
+          "name": "transport_order_priority_check",
+          "expression": "\"priority\" in ('HIGHEST', 'HIGH', 'NORMAL', 'LOW', 'LOWEST')",
+          "definition": "check (\"priority\" in ('HIGHEST', 'HIGH', 'NORMAL', 'LOW', 'LOWEST'))",
+          "columnName": "priority"
+        },
+        {
+          "name": "transport_order_state_check",
+          "expression": "\"state\" in ('INITIALIZED', 'STARTED', 'INTERRUPTED', 'FINISHED', 'CANCELED', 'ONFAILURE')",
+          "definition": "check (\"state\" in ('INITIALIZED', 'STARTED', 'INTERRUPTED', 'FINISHED', 'CANCELED', 'ONFAILURE'))",
+          "columnName": "state"
+        }
+      ],
+      "triggers": [],
+      "foreignKeys": {
+        "transport_order_source_id_foreign": {
+          "columnNames": [
+            "source_id"
+          ],
+          "constraintName": "transport_order_source_id_foreign",
+          "localTableName": "public.transport_order",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.location",
+          "deleteRule": "set null"
+        },
+        "transport_order_target_id_foreign": {
+          "columnNames": [
+            "target_id"
+          ],
+          "constraintName": "transport_order_target_id_foreign",
+          "localTableName": "public.transport_order",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.location",
+          "deleteRule": "set null"
+        },
+        "transport_order_unit_id_foreign": {
+          "columnNames": [
+            "unit_id"
+          ],
+          "constraintName": "transport_order_unit_id_foreign",
+          "localTableName": "public.transport_order",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.transport_unit",
+          "deleteRule": "set null"
+        }
+      },
+      "comment": null
+    },
+    {
       "name": "transport_unit",
       "schema": "public",
       "columns": {

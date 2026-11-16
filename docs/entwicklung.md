@@ -21,6 +21,7 @@ apps/api/                  WMS-Kern (NestJS)
     movement/              Lagerbewegungen mit Zustandsautomat
     inventory/             Bestand: Produkte, Bestand je TU, Buchungsjournal, Korrekturen
     receiving/             Wareneingang: Avis, Erfassung, Blind-Erfassung
+    transport-order/       Transportaufträge: Zustandsautomat, Start-Steuerung, Zielumleitung
     test-support/          Test-Endpunkte, nur im Profil "test"
   test/unit/               Unit-Tests (ohne Datenbank)
   test/integration/        Integrationstests mit Testcontainers
@@ -266,6 +267,49 @@ Erfassungen auf einen abgeschlossenen Auftrag: `409 ORDER_CLOSED`. Parallele Erf
 Events: `receiving-order.created|state-changed`, `receiving-position.state-changed`, `receiving.captured` (`packages/shared/src/receiving-events.ts`).
 
 Noch nicht enthalten: Qualitätsprüfung/Sperrbestand, Etikettendruck, Lieferanten-Stammdaten, Rückmeldung an ein ERP.
+
+## Modul Transportaufträge (`/v1/transport-orders`)
+
+Ein Transportauftrag bringt eine TU automatisch (z. B. über Fördertechnik) zu einem Zielplatz oder in eine Zielgruppe. Nummer im Format `TO00000001`. Lagerbewegungen (manuell, Bediener) und Transportaufträge (Anlage) sind getrennt; eine TU wird immer nur von einem Auftrag gesteuert (`TU_CLAIMED`).
+
+**Anlegen** `POST /v1/transport-orders`:
+
+```json
+{ "barcode": "P1", "target": { "location": { "erpCode": "A1" } }, "priority": "HIGH", "redirect": true, "autoStart": true }
+```
+
+TU und Ziel sind Pflicht (O-01), deshalb beginnt ein Auftrag `INITIALIZED`. Mit `autoStart` (Standard) wird sofort gestartet, wenn es geht; sonst wartet er mit `problem` (Code und Grund) und dem Event `transport-order.start-blocked`.
+
+**Zustände:**
+
+| Aktion | Endpunkt | Von → Nach |
+|---|---|---|
+| starten | `POST …/{number}/start` | INITIALIZED → STARTED (wirft mit Grund, wenn es nicht geht) |
+| unterbrechen | `POST …/{number}/interrupt` `{ reason? }` | STARTED → INTERRUPTED |
+| fortsetzen | `POST …/{number}/resume` | INTERRUPTED → STARTED |
+| abschließen | `POST …/{number}/finish` `{ location?, mode? }` | STARTED → FINISHED |
+| stornieren | `POST …/{number}/cancel` `{ reason? }` | INITIALIZED, STARTED, INTERRUPTED → CANCELED |
+| scheitern | `POST …/{number}/fail` `{ code?, reason }` | INITIALIZED, STARTED, INTERRUPTED → ONFAILURE |
+
+Endzustände sind final (O-03). `INTERRUPTED` belegt die TU weiter.
+
+**Start-Steuerung:**
+
+| Regel | Umsetzung |
+|---|---|
+| O-02 | Höchstens ein gestarteter oder unterbrochener Auftrag je TU (`TRANSPORT_ORDER_ACTIVE`); per eindeutigem Teilindex und Sperre der TU-Zeile abgesichert |
+| O-04 | Zielplatz bzw. Zielgruppe nicht für Einlagerung gesperrt (`TARGET_LOCKED`); bei Zielplätzen zusätzlich die harten Platzregeln (`PLACEMENT_REJECTED`, z. B. voll) |
+| O-05 | Wartende Aufträge einer TU starten nach Priorität, dann Alter |
+| O-06 | Nach Abschluss, Storno oder Scheitern startet der nächste wartende Auftrag der TU |
+| O-07 | Mit `redirect: true` wird bei gesperrtem oder vollem Zielplatz über die Einlagerstrategie ein Ersatzplatz in dessen Gruppe gewählt (`decisionId`, `redirectedFrom` im Event) |
+
+`POST /v1/transport-orders/start-pending` versucht für alle TUs ohne laufenden Auftrag den nächsten wartenden zu starten (z. B. nach dem Entsperren eines Ziels; eignet sich für einen zeitgesteuerten Node-RED-Flow).
+
+**Abschluss** bucht die TU (Standard `mode: physical`, weil Anlagen Tatsachen melden) auf `location`, sonst den Zielplatz bzw. bei Zielgruppe den aktuellen Platz. `deviated` ist gesetzt, wenn der Platz nicht dem Ziel entspricht bzw. nicht in der Zielgruppe liegt.
+
+**Löschschutz:** TUs mit offenen Aufträgen und Plätze, die Ziel offener Aufträge sind, können nicht gelöscht werden (Einwand `transport-orders`).
+
+Events: `transport-order.created|started|start-blocked|interrupted|resumed|finished|canceled|failed` (`packages/shared/src/transport-order-events.ts`).
 
 ## Events
 

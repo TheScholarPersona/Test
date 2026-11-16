@@ -275,6 +275,14 @@ export class TransportUnitService implements OnModuleInit {
   }
 
   /**
+   * Sperrt die Zeile der TU bis zum Ende der Transaktion (`FOR UPDATE`), damit
+   * gleichzeitige Aufträge für dieselbe TU nacheinander geprüft werden.
+   */
+  async lockRow(em: EntityManager, unit: { id: string }): Promise<void> {
+    await em.execute('select "id" from "transport_unit" where "id" = ? for update', [unit.id]);
+  }
+
+  /**
    * Setzt oder entfernt (`null`) das geplante Ziel einer TU innerhalb einer
    * bestehenden Transaktion (z. B. nach einer Einlagerentscheidung oder beim
    * Storno einer Bewegung) und veröffentlicht die Änderung.

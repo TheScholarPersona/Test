@@ -75,6 +75,22 @@ export class LocationLookup {
     return { inbound: effectiveLock(chain, 'inbound'), outbound: effectiveLock(chain, 'outbound') };
   }
 
+  /** Wirksame Sperren einer Gruppe (eigene oder von übergeordneten Gruppen geerbte). */
+  async groupLocks(em: EntityManager, groupName: string): Promise<LocationLocks> {
+    const chain = (await GroupHierarchy.load(em)).get(groupName).lockChain();
+    return { inbound: effectiveLock(chain, 'inbound'), outbound: effectiveLock(chain, 'outbound') };
+  }
+
+  /** Gruppe und alle übergeordneten Gruppen, von unten nach oben. Wirft, wenn die Gruppe fehlt. */
+  async groupPath(em: EntityManager, groupName: string): Promise<string[]> {
+    return (await GroupHierarchy.load(em)).get(groupName).lockChain().map((entry) => entry.name);
+  }
+
+  /** Gruppenpfad eines Platzes (eigene Gruppe zuerst); setzt geladene Hierarchie voraus (`resolve`). */
+  groupPathOf(location: Location): string[] {
+    return (location.group as LocationGroup).lockChain().map((entry) => entry.name);
+  }
+
   typeCode(location: Location): string {
     return (location.type as LocationType).code;
   }

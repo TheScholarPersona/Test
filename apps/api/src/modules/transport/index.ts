@@ -12,6 +12,7 @@ export {
   type TransportUnitRemovalCheck,
   type TransportUnitRef,
 } from './application/transport-unit-removal-policy.js';
+export { TransportUnitClaims, type TransportUnitClaimCheck } from './application/transport-unit-claims.js';
 export type { PlacementViolation } from './domain/placement.js';
 export type { CreateTransportUnit } from './http/schemas.js';
 export { PlacementChecker, type PreparedUnit, type TargetEvaluation } from './application/placement-checker.js';

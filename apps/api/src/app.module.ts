@@ -9,6 +9,7 @@ import { InventoryModule } from './modules/inventory/index.js';
 import { LayoutModule } from './modules/layout/index.js';
 import { MovementModule } from './modules/movement/index.js';
 import { ReceivingModule } from './modules/receiving/index.js';
+import { TransportOrderModule } from './modules/transport-order/index.js';
 import { StrategyModule } from './modules/strategy/index.js';
 import { TestSupportModule } from './modules/test-support/index.js';
 import { TransportModule } from './modules/transport/index.js';
@@ -47,6 +48,7 @@ export class AppModule {
         MovementModule,
         InventoryModule,
         ReceivingModule,
+        TransportOrderModule,
         ...testModules,
       ],
     };

@@ -616,15 +616,15 @@
   {
     "id": "f505000000000000",
     "type": "tab",
-    "label": "Szenario: tu-placement",
+    "label": "Szenario: transport-order-flow",
     "disabled": false,
-    "info": "Schrittliste aus flows/scenarios/tu-placement.js; ausgeführt vom Tab „Schritt-Engine“."
+    "info": "Schrittliste aus flows/scenarios/transport-order-flow.js; ausgeführt vom Tab „Schritt-Engine“."
   },
   {
     "id": "f505000000000001",
     "type": "comment",
     "z": "f505000000000000",
-    "name": "Definition: flows/scenarios/tu-placement.js (im Repository bearbeiten, dann Flows neu erzeugen)",
+    "name": "Definition: flows/scenarios/transport-order-flow.js (im Repository bearbeiten, dann Flows neu erzeugen)",
     "info": "",
     "x": 380,
     "y": 40,
@@ -634,6 +634,39 @@
     "id": "f505000000000002",
     "type": "function",
     "z": "f505000000000000",
+    "name": "Szenario transport-order-flow anmelden",
+    "func": "return msg;\n",
+    "outputs": 0,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "const registerScenario = (definition) => {\n  const all = global.get('stepScenarios') || {};\n  all[definition.id] = definition;\n  global.set('stepScenarios', all);\n};\n/**\n * Szenario: Start-Steuerung der Transportaufträge.\n *\n * Erster Auftrag startet und reserviert sein Ziel, ein zweiter für dieselbe\n * TU wartet (O-02) und startet automatisch nach dem Abschluss des ersten\n * (O-06). Ein gesperrtes Ziel verhindert den Start (O-04), nach dem\n * Entsperren startet `start-pending` den Auftrag.\n * Aufträge bleiben als Historie erhalten (kein Löschen).\n * Schrittformat: siehe flows/scenarios/layout-locks.js.\n */\nregisterScenario({\n  id: 'transport-order-flow',\n  description: 'Transportaufträge: zweiter Start für dieselbe TU abgelehnt, Folgeauftrag startet nach Abschluss, gesperrtes Ziel verhindert den Start.',\n  init: (runId) => {\n    const s = runId.replace(/[^a-z0-9]/gi, '').slice(-8).toUpperCase();\n    return {\n      locationType: `ST-${s}`,\n      group: `ST-${s}-G`,\n      unitType: `ST-${s}`,\n      tu: `ST-${s}-P`,\n      coords: { src: `O${s}/0001/0001/0001/0000`, a: `O${s}/0002/0001/0001/0000`, b: `O${s}/0003/0001/0001/0000` },\n      loc: { src: null, a: null, b: null },\n      first: null,\n      second: null,\n      third: null,\n    };\n  },\n  steps: [\n    { name: 'Platztyp anlegen', request: (v) => ({ method: 'POST', path: '/v1/location-types', body: { code: v.locationType } }), expectStatus: 201 },\n    { name: 'Gruppe anlegen', request: (v) => ({ method: 'POST', path: '/v1/location-groups', body: { name: v.group } }), expectStatus: 201 },\n    ...['src', 'a', 'b'].map((key) => ({\n      name: `Platz ${key} anlegen`,\n      request: (v) => ({ method: 'POST', path: '/v1/locations', body: { locationId: v.coords[key], typeCode: v.locationType, groupName: v.group, maxTransportUnits: 5 } }),\n      expectStatus: 201,\n      save: (body, v) => {\n        v.loc[key] = body.id;\n      },\n    })),\n    { name: 'TU-Typ anlegen', request: (v) => ({ method: 'POST', path: '/v1/transport-unit-types', body: { code: v.unitType } }), expectStatus: 201 },\n    {\n      name: 'TU auf Quellplatz anlegen',\n      request: (v) => ({ method: 'POST', path: '/v1/transport-units', body: { barcode: v.tu, typeCode: v.unitType, location: { id: v.loc.src } } }),\n      expectStatus: 201,\n    },\n    {\n      name: 'Auftrag 1 nach A startet sofort',\n      request: (v) => ({ method: 'POST', path: '/v1/transport-orders', body: { barcode: v.tu, target: { location: { id: v.loc.a } }, initiator: 'node-red' } }),\n      expectStatus: 201,\n      check: (body, v) => (body.state === 'STARTED' && body.target.id === v.loc.a ? null : `Unerwartet: ${JSON.stringify(body)}`),\n      save: (body, v) => {\n        v.first = body.number;\n      },\n    },\n    { name: 'Event transport-order.started (Auftrag 1)', event: (e, v) => e.type === 'transport-order.started' && e.payload.number === v.first },\n    {\n      name: 'Auftrag 2 nach B wartet (O-02)',\n      request: (v) => ({ method: 'POST', path: '/v1/transport-orders', body: { barcode: v.tu, target: { location: { id: v.loc.b } } } }),\n      expectStatus: 201,\n      check: (body) => (body.state === 'INITIALIZED' ? null : `Erwartet INITIALIZED, erhalten ${body.state}`),\n      save: (body, v) => {\n        v.second = body.number;\n      },\n    },\n    {\n      name: 'Expliziter Start von Auftrag 2 wird abgelehnt (TRANSPORT_ORDER_ACTIVE)',\n      request: (v) => ({ method: 'POST', path: `/v1/transport-orders/${v.second}/start` }),\n      expectStatus: 409,\n      check: (body) => (body.code === 'TRANSPORT_ORDER_ACTIVE' ? null : `Erwartet TRANSPORT_ORDER_ACTIVE, erhalten ${body.code}`),\n    },\n    {\n      name: 'Auftrag 1 abschließen',\n      request: (v) => ({ method: 'POST', path: `/v1/transport-orders/${v.first}/finish`, body: {} }),\n      expectStatus: 200,\n      check: (body, v) => (body.state === 'FINISHED' && body.finished.locationId === v.coords.a ? null : `Unerwartet: ${JSON.stringify(body)}`),\n    },\n    { name: 'Event transport-order.started (Auftrag 2 automatisch, O-06)', event: (e, v) => e.type === 'transport-order.started' && e.payload.number === v.second },\n    {\n      name: 'Auftrag 2 abschließen',\n      request: (v) => ({ method: 'POST', path: `/v1/transport-orders/${v.second}/finish`, body: {} }),\n      expectStatus: 200,\n      check: (body) => (body.state === 'FINISHED' ? null : `Unerwartet: ${body.state}`),\n    },\n    {\n      name: 'Platz A für Einlagerung sperren',\n      request: (v) => ({ method: 'PATCH', path: `/v1/locations/${v.loc.a}/locks`, body: { inbound: true, reason: 'Szenario' } }),\n      expectStatus: 200,\n    },\n    {\n      name: 'Auftrag 3 nach A wartet wegen Sperre (O-04)',\n      request: (v) => ({ method: 'POST', path: '/v1/transport-orders', body: { barcode: v.tu, target: { location: { id: v.loc.a } } } }),\n      expectStatus: 201,\n      check: (body) => (body.state === 'INITIALIZED' && body.problem && body.problem.code === 'TARGET_LOCKED' ? null : `Unerwartet: ${JSON.stringify(body)}`),\n      save: (body, v) => {\n        v.third = body.number;\n      },\n    },\n    { name: 'Event transport-order.start-blocked', event: (e, v) => e.type === 'transport-order.start-blocked' && e.payload.number === v.third },\n    { name: 'Platz A entsperren', request: (v) => ({ method: 'PATCH', path: `/v1/locations/${v.loc.a}/locks`, body: { inbound: false } }), expectStatus: 200 },\n    {\n      name: 'start-pending startet Auftrag 3',\n      request: () => ({ method: 'POST', path: '/v1/transport-orders/start-pending' }),\n      expectStatus: 200,\n      check: (body, v) => (body.started.includes(v.third) ? null : `Nicht gestartet: ${JSON.stringify(body)}`),\n    },\n    {\n      name: 'Auftrag 3 stornieren gibt die Reservierung frei',\n      request: (v) => ({ method: 'POST', path: `/v1/transport-orders/${v.third}/cancel`, body: { reason: 'Szenario' } }),\n      expectStatus: 200,\n      check: (body) => (body.state === 'CANCELED' ? null : `Unerwartet: ${body.state}`),\n    },\n    { name: 'Event transport-order.canceled', event: (e, v) => e.type === 'transport-order.canceled' && e.payload.number === v.third && e.payload.releasedTarget === true },\n    ...['first', 'second', 'third'].map((key) => ({\n      name: `Aufräumen: Auftrag ${key} stornieren`,\n      cleanup: true,\n      request: (v) => (v[key] ? { method: 'POST', path: `/v1/transport-orders/${v[key]}/cancel`, body: { reason: 'Aufräumen' } } : null),\n    })),\n    { name: 'Aufräumen: Platz A entsperren', cleanup: true, request: (v) => (v.loc.a ? { method: 'PATCH', path: `/v1/locations/${v.loc.a}/locks`, body: { inbound: false } } : null) },\n    { name: 'Aufräumen: TU löschen', cleanup: true, request: (v) => ({ method: 'DELETE', path: `/v1/transport-units/${v.tu}` }), expectStatus: 204 },\n    ...['src', 'a', 'b'].map((key) => ({\n      name: `Aufräumen: Platz ${key} löschen`,\n      cleanup: true,\n      request: (v) => (v.loc[key] ? { method: 'DELETE', path: `/v1/locations/${v.loc[key]}` } : null),\n      expectStatus: 204,\n    })),\n    { name: 'Aufräumen: Gruppe löschen', cleanup: true, request: (v) => ({ method: 'DELETE', path: `/v1/location-groups/${v.group}` }), expectStatus: 204 },\n    { name: 'Aufräumen: TU-Typ löschen', cleanup: true, request: (v) => ({ method: 'DELETE', path: `/v1/transport-unit-types/${v.unitType}` }), expectStatus: 204 },\n    { name: 'Aufräumen: Platztyp löschen', cleanup: true, request: (v) => ({ method: 'DELETE', path: `/v1/location-types/${v.locationType}` }), expectStatus: 204 },\n  ],\n});\n",
+    "finalize": "",
+    "libs": [],
+    "x": 200,
+    "y": 100,
+    "wires": []
+  },
+  {
+    "id": "f506000000000000",
+    "type": "tab",
+    "label": "Szenario: tu-placement",
+    "disabled": false,
+    "info": "Schrittliste aus flows/scenarios/tu-placement.js; ausgeführt vom Tab „Schritt-Engine“."
+  },
+  {
+    "id": "f506000000000001",
+    "type": "comment",
+    "z": "f506000000000000",
+    "name": "Definition: flows/scenarios/tu-placement.js (im Repository bearbeiten, dann Flows neu erzeugen)",
+    "info": "",
+    "x": 380,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "f506000000000002",
+    "type": "function",
+    "z": "f506000000000000",
     "name": "Szenario tu-placement anmelden",
     "func": "return msg;\n",
     "outputs": 0,
