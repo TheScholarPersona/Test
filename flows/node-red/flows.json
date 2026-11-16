@@ -71,7 +71,7 @@
     "type": "function",
     "z": "f000000000000001",
     "name": "Szenarien auflisten",
-    "func": "    msg.statusCode = 200;\n    msg.headers = { 'content-type': 'application/json' };\n    msg.payload = { scenarios: global.get('scenarioCatalog') || [] };\n    return msg;\n",
+    "func": "    msg.statusCode = 200;\n    msg.headers = { 'content-type': 'application/json' };\n    const steps = global.get('stepScenarios') || {};\n    msg.payload = {\n      scenarios: [\n        ...(global.get('scenarioCatalog') || []),\n        ...Object.values(steps).map((def) => ({ id: def.id, description: def.description })),\n      ],\n    };\n    return msg;\n",
     "outputs": 1,
     "timeout": 0,
     "noerr": 0,
@@ -119,7 +119,7 @@
     "type": "function",
     "z": "f000000000000001",
     "name": "Szenario wählen",
-    "func": "    const catalog = global.get('scenarioCatalog') || [];\n    const id = msg.req.params.id;\n    if (!catalog.some((entry) => entry.id === id)) {\n      msg.statusCode = 404;\n      msg.headers = { 'content-type': 'application/json' };\n      msg.payload = { scenario: id, passed: false, error: `Unbekanntes Szenario [${id}]` };\n      return [null, msg];\n    }\n    const requested = msg.payload && typeof msg.payload.runId === 'string' ? msg.payload.runId : undefined;\n    msg.scenario = {\n      id,\n      runId: requested || `${id}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,\n      startedAt: Date.now(),\n      steps: [],\n      passed: false,\n    };\n    msg.target = `scenario:${id}`;\n    return [msg, null];\n",
+    "func": "    const catalog = global.get('scenarioCatalog') || [];\n    const steps = global.get('stepScenarios') || {};\n    const id = msg.req.params.id;\n    const isStepScenario = Object.prototype.hasOwnProperty.call(steps, id);\n    if (!isStepScenario && !catalog.some((entry) => entry.id === id)) {\n      msg.statusCode = 404;\n      msg.headers = { 'content-type': 'application/json' };\n      msg.payload = { scenario: id, passed: false, error: `Unbekanntes Szenario [${id}]` };\n      return [null, msg];\n    }\n    const requested = msg.payload && typeof msg.payload.runId === 'string' ? msg.payload.runId : undefined;\n    msg.scenario = {\n      id,\n      runId: requested || `${id}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,\n      startedAt: Date.now(),\n      steps: [],\n      passed: false,\n    };\n    // Schritt-Szenarien laufen in der gemeinsamen Engine, eigene Szenarien in ihrem Tab.\n    msg.target = isStepScenario ? 'engine:steps' : `scenario:${id}`;\n    return [msg, null];\n",
     "outputs": 2,
     "timeout": 0,
     "noerr": 0,
@@ -336,6 +336,182 @@
     "links": [],
     "x": 960,
     "y": 120,
+    "wires": []
+  },
+  {
+    "id": "f000000000000004",
+    "type": "tab",
+    "label": "Schritt-Engine",
+    "disabled": false,
+    "info": "Führt Szenarien aus, die als Schrittliste definiert sind (flows/scenarios/*.js).\n\nAblauf je Schritt: „Nächster Schritt“ → HTTP-Aufruf → „Antwort prüfen“ → zurück, oder „Auf Event warten“ (MQTT `wms/#`). Nach einem Fehler laufen nur noch Aufräumschritte (`cleanup: true`)."
+  },
+  {
+    "id": "f400000000000001",
+    "type": "link in",
+    "z": "f000000000000004",
+    "name": "engine:steps",
+    "links": [],
+    "x": 120,
+    "y": 100,
+    "wires": [
+      [
+        "f400000000000002"
+      ]
+    ]
+  },
+  {
+    "id": "f400000000000002",
+    "type": "function",
+    "z": "f000000000000004",
+    "name": "Nächster Schritt",
+    "func": "    const s = msg.scenario;\n    const def = (global.get('stepScenarios') || {})[s.id];\n    const fail = (name, detail) => {\n      s.steps.push({ name, passed: false, detail });\n      if (!s.failed) {\n        s.failed = true;\n        s.error = `${name}: ${detail}`;\n      }\n    };\n    if (!def) {\n      fail('Szenario laden', `Szenario [${s.id}] ist nicht definiert`);\n      s.passed = false;\n      return [null, null, msg];\n    }\n    if (s.vars === undefined) {\n      s.vars = def.init ? def.init(s.runId) : {};\n      s.idx = 0;\n      s.failed = false;\n    }\n    for (;;) {\n      // Nach einem Fehler nur noch Aufräumschritte ausführen.\n      while (s.idx < def.steps.length && s.failed && !def.steps[s.idx].cleanup) {\n        s.idx++;\n      }\n      if (s.idx >= def.steps.length) {\n        s.passed = !s.failed && s.steps.every((step) => step.passed === true);\n        return [null, null, msg];\n      }\n      const step = def.steps[s.idx];\n      if (step.event) {\n        return [null, msg, null];\n      }\n      try {\n        const request = step.request(s.vars);\n        if (request === null) {\n          // Schritt bewusst übersprungen, z. B. Aufräumen eines nie angelegten Objekts.\n          s.steps.push({ name: step.name, passed: true, detail: 'übersprungen' });\n          s.idx++;\n          continue;\n        }\n        msg.method = request.method;\n        msg.url = `${env.get('WMS_API_URL')}${request.path}`;\n        msg.headers = { 'content-type': 'application/json' };\n        msg.payload = request.body === undefined ? '' : request.body;\n        return [msg, null, null];\n      } catch (error) {\n        fail(step.name, `Anfrage konnte nicht erstellt werden: ${error.message}`);\n        s.idx++;\n      }\n    }\n",
+    "outputs": 3,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 330,
+    "y": 100,
+    "wires": [
+      [
+        "f400000000000003"
+      ],
+      [
+        "f400000000000005"
+      ],
+      [
+        "f400000000000007"
+      ]
+    ]
+  },
+  {
+    "id": "f400000000000003",
+    "type": "http request",
+    "z": "f000000000000004",
+    "name": "WMS-API",
+    "method": "use",
+    "ret": "obj",
+    "paytoqs": "ignore",
+    "url": "",
+    "tls": "",
+    "persist": false,
+    "proxy": "",
+    "insecureHTTPParser": false,
+    "authType": "",
+    "senderr": false,
+    "headers": [],
+    "x": 550,
+    "y": 60,
+    "wires": [
+      [
+        "f400000000000004"
+      ]
+    ]
+  },
+  {
+    "id": "f400000000000004",
+    "type": "function",
+    "z": "f000000000000004",
+    "name": "Antwort prüfen",
+    "func": "    const s = msg.scenario;\n    const step = global.get('stepScenarios')[s.id].steps[s.idx];\n    let error = null;\n    if (step.expectStatus !== undefined && msg.statusCode !== step.expectStatus) {\n      error = `HTTP ${msg.statusCode} statt ${step.expectStatus}: ${JSON.stringify(msg.payload)}`;\n    }\n    if (!error && step.check) {\n      try {\n        error = step.check(msg.payload, s.vars) || null;\n      } catch (e) {\n        error = `Prüfung fehlgeschlagen: ${e.message}`;\n      }\n    }\n    if (!error && step.save) {\n      try {\n        step.save(msg.payload, s.vars);\n      } catch (e) {\n        error = `Ergebnis konnte nicht übernommen werden: ${e.message}`;\n      }\n    }\n    if (error) {\n      s.steps.push({ name: step.name, passed: false, detail: error });\n      if (!s.failed) {\n        s.failed = true;\n        s.error = `${step.name}: ${error}`;\n      }\n    } else {\n      s.steps.push({ name: step.name, passed: true, detail: `HTTP ${msg.statusCode}` });\n    }\n    s.idx++;\n    return msg;\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 760,
+    "y": 60,
+    "wires": [
+      [
+        "f400000000000002"
+      ]
+    ]
+  },
+  {
+    "id": "f400000000000006",
+    "type": "mqtt in",
+    "z": "f000000000000004",
+    "name": "wms/#",
+    "topic": "wms/#",
+    "qos": "1",
+    "datatype": "json",
+    "broker": "b0000000000000b1",
+    "nl": false,
+    "rap": true,
+    "rh": 0,
+    "inputs": 0,
+    "x": 550,
+    "y": 200,
+    "wires": [
+      [
+        "f400000000000005"
+      ]
+    ]
+  },
+  {
+    "id": "f400000000000005",
+    "type": "function",
+    "z": "f000000000000004",
+    "name": "Auf Event warten",
+    "func": "    // Eingänge: wartender Schritt (mit msg.scenario) und alle MQTT-Events unter wms/#.\n    const timeoutMs = Number(env.get('SCENARIO_EVENT_TIMEOUT_MS') || 10000);\n    const recent = context.get('recent') || [];\n    const pending = context.get('pending') || [];\n    const stepOf = (waiting) => global.get('stepScenarios')[waiting.scenario.id].steps[waiting.scenario.idx];\n    const matches = (waiting, event) => {\n      try {\n        return stepOf(waiting).event(event, waiting.scenario.vars) === true;\n      } catch (e) {\n        return false;\n      }\n    };\n    const complete = (waiting, event) => {\n      const s = waiting.scenario;\n      s.steps.push({ name: stepOf(waiting).name, passed: true, detail: `Event ${event.type} ${event.id}` });\n      s.idx++;\n      node.send(waiting);\n    };\n\n    if (msg.scenario === undefined) {\n      const event = msg.payload;\n      if (!event || typeof event !== 'object') {\n        return null;\n      }\n      recent.push({ event, receivedAt: Date.now() });\n      while (recent.length > 500) {\n        recent.shift();\n      }\n      context.set('recent', recent);\n      for (const entry of [...pending]) {\n        if (matches(entry.msg, event)) {\n          clearTimeout(entry.timer);\n          pending.splice(pending.indexOf(entry), 1);\n          complete(entry.msg, event);\n        }\n      }\n      context.set('pending', pending);\n      return null;\n    }\n\n    const s = msg.scenario;\n    // Event kann schon vor diesem Schritt eingetroffen sein (nur Events seit Start des Laufs).\n    const earlier = recent.find((r) => r.receivedAt >= s.startedAt && matches(msg, r.event));\n    if (earlier) {\n      complete(msg, earlier.event);\n      return null;\n    }\n    const entry = { msg };\n    entry.timer = setTimeout(() => {\n      const open = context.get('pending') || [];\n      const index = open.indexOf(entry);\n      if (index < 0) {\n        return;\n      }\n      open.splice(index, 1);\n      context.set('pending', open);\n      const name = stepOf(msg).name;\n      const detail = `Kein passendes Event innerhalb von ${timeoutMs} ms`;\n      s.steps.push({ name, passed: false, detail });\n      if (!s.failed) {\n        s.failed = true;\n        s.error = `${name}: ${detail}`;\n      }\n      s.idx++;\n      node.send(msg);\n    }, timeoutMs);\n    pending.push(entry);\n    context.set('pending', pending);\n    return null;\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 770,
+    "y": 160,
+    "wires": [
+      [
+        "f400000000000002"
+      ]
+    ]
+  },
+  {
+    "id": "f400000000000007",
+    "type": "link out",
+    "z": "f000000000000004",
+    "name": "Ergebnis zurück",
+    "mode": "return",
+    "links": [],
+    "x": 560,
+    "y": 280,
+    "wires": []
+  },
+  {
+    "id": "f501000000000000",
+    "type": "tab",
+    "label": "Szenario: layout-locks",
+    "disabled": false,
+    "info": "Schrittliste aus flows/scenarios/layout-locks.js; ausgeführt vom Tab „Schritt-Engine“."
+  },
+  {
+    "id": "f501000000000001",
+    "type": "comment",
+    "z": "f501000000000000",
+    "name": "Definition: flows/scenarios/layout-locks.js (im Repository bearbeiten, dann Flows neu erzeugen)",
+    "info": "",
+    "x": 380,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "f501000000000002",
+    "type": "function",
+    "z": "f501000000000000",
+    "name": "Szenario layout-locks anmelden",
+    "func": "return msg;\n",
+    "outputs": 0,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "const registerScenario = (definition) => {\n  const all = global.get('stepScenarios') || {};\n  all[definition.id] = definition;\n  global.set('stepScenarios', all);\n};\n/**\n * Szenario: Sperrvererbung in der Lagerstruktur.\n *\n * Läuft in der Node-RED-Schritt-Engine (Tab „Schritt-Engine“). Verfügbar sind:\n *   registerScenario(definition)  – Szenario anmelden\n *\n * Ein Schritt ist entweder\n *   { name, request: (v) => ({ method, path, body? }), expectStatus?, check?: (body, v) => Fehlertext|null, save?: (body, v) => void }\n * oder\n *   { name, event: (event, v) => boolean }   – wartet auf ein passendes MQTT-Event (Timeout SCENARIO_EVENT_TIMEOUT_MS)\n * `cleanup: true` markiert Aufräumschritte; sie laufen auch nach einem Fehler.\n * Gibt `request` null zurück, wird der Schritt übersprungen.\n * `v` enthält die Variablen des Laufs (aus init) und wird von save ergänzt.\n *\n * Geprüfte Regeln (docs/openwms-analyse.md, Kap. 3.5): L-03 Sperrvererbung,\n * L-04 kein Entsperren unter gesperrter Gruppe, Event bei Sperränderung.\n */\nregisterScenario({\n  id: 'layout-locks',\n  description: 'Sperre einer Obergruppe wirkt auf Untergruppe und Platz; Entsperren darunter wird abgelehnt.',\n  init: (runId) => {\n    const suffix = runId.replace(/[^a-z0-9]/gi, '').slice(-8).toUpperCase();\n    return {\n      type: `SZ-${suffix}`,\n      root: `SZ-${suffix}-OBEN`,\n      child: `SZ-${suffix}-UNTEN`,\n      locationId: `S${suffix}/0001/0001/0001/0000`,\n      id: null,\n    };\n  },\n  steps: [\n    {\n      name: 'Platztyp anlegen',\n      request: (v) => ({ method: 'POST', path: '/v1/location-types', body: { code: v.type, description: 'Szenario layout-locks' } }),\n      expectStatus: 201,\n    },\n    {\n      name: 'Obergruppe anlegen',\n      request: (v) => ({ method: 'POST', path: '/v1/location-groups', body: { name: v.root } }),\n      expectStatus: 201,\n    },\n    {\n      name: 'Untergruppe anlegen',\n      request: (v) => ({ method: 'POST', path: '/v1/location-groups', body: { name: v.child, parentName: v.root } }),\n      expectStatus: 201,\n    },\n    {\n      name: 'Lagerplatz in der Untergruppe anlegen',\n      request: (v) => ({ method: 'POST', path: '/v1/locations', body: { locationId: v.locationId, typeCode: v.type, groupName: v.child } }),\n      expectStatus: 201,\n      save: (body, v) => {\n        v.id = body.id;\n      },\n    },\n    {\n      name: 'Obergruppe für Einlagerung sperren',\n      request: (v) => ({\n        method: 'PATCH',\n        path: `/v1/location-groups/${v.root}/locks`,\n        body: { inbound: true, reason: 'Szenario layout-locks' },\n      }),\n      expectStatus: 200,\n    },\n    {\n      name: 'Event location-group.lock-changed empfangen',\n      event: (e, v) =>\n        e.type === 'location-group.lock-changed' && e.payload.name === v.root && e.payload.change.inbound.after === true,\n    },\n    {\n      name: 'Platz ist über die Obergruppe gesperrt',\n      request: (v) => ({ method: 'GET', path: `/v1/locations/${v.id}` }),\n      expectStatus: 200,\n      check: (body, v) => {\n        const lock = body.locks.inbound;\n        if (lock.own !== false || lock.blocked !== true || !lock.blockedBy || lock.blockedBy.name !== v.root) {\n          return `Erwartet geerbte Sperre von ${v.root}, erhalten ${JSON.stringify(lock)}`;\n        }\n        return null;\n      },\n    },\n    {\n      name: 'Untergruppe kann nicht entsperrt werden (LOCK_INHERITED)',\n      request: (v) => ({ method: 'PATCH', path: `/v1/location-groups/${v.child}/locks`, body: { inbound: false } }),\n      expectStatus: 409,\n      check: (body) => (body.code === 'LOCK_INHERITED' ? null : `Erwartet Fehlercode LOCK_INHERITED, erhalten ${body.code}`),\n    },\n    {\n      name: 'Obergruppe entsperren',\n      request: (v) => ({ method: 'PATCH', path: `/v1/location-groups/${v.root}/locks`, body: { inbound: false } }),\n      expectStatus: 200,\n    },\n    {\n      name: 'Platz ist wieder frei',\n      request: (v) => ({ method: 'GET', path: `/v1/locations/${v.id}` }),\n      expectStatus: 200,\n      check: (body) => (body.locks.inbound.blocked === false ? null : `Platz noch gesperrt: ${JSON.stringify(body.locks.inbound)}`),\n    },\n    {\n      name: 'Aufräumen: Obergruppe entsperren',\n      cleanup: true,\n      request: (v) => ({ method: 'PATCH', path: `/v1/location-groups/${v.root}/locks`, body: { inbound: false } }),\n    },\n    {\n      name: 'Aufräumen: Lagerplatz löschen',\n      cleanup: true,\n      request: (v) => (v.id ? { method: 'DELETE', path: `/v1/locations/${v.id}` } : null),\n      expectStatus: 204,\n    },\n    {\n      name: 'Aufräumen: Untergruppe löschen',\n      cleanup: true,\n      request: (v) => ({ method: 'DELETE', path: `/v1/location-groups/${v.child}` }),\n      expectStatus: 204,\n    },\n    {\n      name: 'Aufräumen: Obergruppe löschen',\n      cleanup: true,\n      request: (v) => ({ method: 'DELETE', path: `/v1/location-groups/${v.root}` }),\n      expectStatus: 204,\n    },\n    {\n      name: 'Aufräumen: Platztyp löschen',\n      cleanup: true,\n      request: (v) => ({ method: 'DELETE', path: `/v1/location-types/${v.type}` }),\n      expectStatus: 204,\n    },\n  ],\n});\n",
+    "finalize": "",
+    "libs": [],
+    "x": 200,
+    "y": 100,
     "wires": []
   },
   {

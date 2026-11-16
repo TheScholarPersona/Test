@@ -2,9 +2,10 @@ import { MikroOrmModule } from '@mikro-orm/nestjs';
 import { type DynamicModule, Global, Module } from '@nestjs/common';
 import { APP_CONFIG, type AppConfig } from './config.js';
 import { HttpModule } from './http/http.module.js';
-import { createOrmOptions } from './infrastructure/database/orm-options.js';
+import { databaseOptions } from './database.js';
 import { OutboxModule } from './infrastructure/outbox/outbox.module.js';
 import { HealthModule } from './modules/health/index.js';
+import { LayoutModule } from './modules/layout/index.js';
 import { TestSupportModule } from './modules/test-support/index.js';
 
 @Global()
@@ -31,10 +32,11 @@ export class AppModule {
       module: AppModule,
       imports: [
         ConfigModule.forRoot(config),
-        MikroOrmModule.forRoot(createOrmOptions(config)),
+        MikroOrmModule.forRoot(databaseOptions(config)),
         HttpModule,
         OutboxModule,
         HealthModule,
+        LayoutModule,
         ...testModules,
       ],
     };

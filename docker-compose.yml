@@ -63,7 +63,7 @@ services:
     image: nodered/node-red:5.0.9
     environment:
       TZ: Europe/Berlin
-      WMS_API_URL: http://api:3000
+      WMS_API_URL: ${WMS_API_URL:-http://api:3000}
       MQTT_HOST: mosquitto
       MQTT_PORT: "1883"
       SCENARIO_EVENT_TIMEOUT_MS: "10000"

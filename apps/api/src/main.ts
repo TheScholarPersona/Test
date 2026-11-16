@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { Logger } from '@nestjs/common';
 import { createApp } from './app.factory.js';
 import { ConfigError, loadConfig } from './config.js';
+import { databaseOptions } from './database.js';
 import { runMigrations } from './infrastructure/database/migrate.js';
 
 const logger = new Logger('Bootstrap');
@@ -9,7 +10,7 @@ const logger = new Logger('Bootstrap');
 try {
   const config = loadConfig(process.env);
   if (config.dbMigrateOnStart) {
-    const executed = await runMigrations(config);
+    const executed = await runMigrations(databaseOptions(config));
     logger.log(executed.length > 0 ? `Migrationen ausgeführt: ${executed.join(', ')}` : 'Datenbankschema ist aktuell');
   }
   const app = await createApp(config);

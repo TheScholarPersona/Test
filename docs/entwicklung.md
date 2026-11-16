@@ -14,12 +14,14 @@ apps/api/                  WMS-Kern (NestJS)
   src/migrations/          versionierte Datenbankmigrationen (explizite Liste in index.ts)
   src/modules/<modul>/     Fachmodule; öffentliche Schnittstelle nur über index.ts
     health/                GET /health
+    layout/                Lagerstruktur: Platztypen, Gruppen, Lagerplätze, Sperren
     test-support/          Test-Endpunkte, nur im Profil "test"
   test/unit/               Unit-Tests (ohne Datenbank)
   test/integration/        Integrationstests mit Testcontainers
 packages/shared/           gemeinsamer Kern: Kennungen, Quantity, Event-Format und -Katalog
 packages/scenario-runner/  führt Node-RED-Szenarien aus, schreibt reports/e2e-junit.xml
 flows/
+  scenarios/*.js           Schritt-Szenarien (lesbare Schrittlisten)
   scripts/build-flows.mjs  erzeugt flows/node-red/flows.json
   node-red/flows.json      von Node-RED geladene Flows (generiert, versioniert)
 docker/                    Konfiguration für Hilfsdienste (Mosquitto)
@@ -54,6 +56,37 @@ docker/                    Konfiguration für Hilfsdienste (Mosquitto)
 - **Modulgrenzen:** Ein Fachmodul nutzt andere Module nur über deren `index.ts`. Infrastruktur kennt keine Fachmodule. `pnpm lint:deps` prüft das.
 - **Schema-Änderungen** nur über Migrationen. Nach einer Entity-Änderung `db:migration:create`, Datei prüfen, in `src/migrations/index.ts` eintragen. `db:migration:create` direkt nach `db:migrate` muss „Keine Schemaänderungen“ melden.
 
+## Fehlerantworten
+
+Fachliche Fehler haben ein einheitliches Format; `code` ist stabil und für Automatisierung (z. B. Node-RED) gedacht:
+
+```json
+{ "statusCode": 409, "error": "Conflict", "code": "LOCK_INHERITED",
+  "message": "Einlagersperre kann nicht aufgehoben werden, solange die übergeordnete Gruppe [HOCHREGAL] sperrt",
+  "details": { "direction": "inbound", "blockedBy": { "kind": "location-group", "name": "HOCHREGAL" } } }
+```
+
+| HTTP | Bedeutung |
+|---|---|
+| 400 | Feldprüfung fehlgeschlagen (`issues` mit Feldpfad); auch bei unbekannten Feldern |
+| 404 | Objekt oder referenziertes Objekt existiert nicht (`…_NOT_FOUND`) |
+| 409 | Konflikt mit dem Datenbestand (`…_EXISTS`, `…_IN_USE`, `DUPLICATE`, `CONCURRENT_MODIFICATION`) oder verletzte Geschäftsregel |
+
+## Modul Lagerstruktur (`/v1/location-types`, `/v1/location-groups`, `/v1/locations`)
+
+| Konzept | Regeln |
+|---|---|
+| Platztyp | Kennung eindeutig; löschbar nur, wenn kein Platz ihn nutzt (`LOCATION_TYPE_IN_USE`) |
+| Gruppe | Name eindeutig; übergeordnete Gruppe beim Anlegen, danach fest (keine Zyklen); löschbar nur leer (`LOCATION_GROUP_NOT_EMPTY`) |
+| Lagerplatz | Koordinate `BEREICH/GASSE/X/Y/Z`, ERP- und SPS-Code eindeutig; Koordinate und Typ unveränderlich (`LOCATION_ID_IMMUTABLE`, `LOCATION_TYPE_IMMUTABLE`); Gruppe änderbar; Kapazität (`maxTransportUnits`, `maxWeight` in KG) wird ab Schritt 2 durchgesetzt |
+| Löschen eines Platzes | andere Module können über `LocationRemovalPolicy` widersprechen (`LOCATION_IN_USE`) |
+
+**Sperren.** Gespeichert wird nur die eigene Sperre (`inbound`, `outbound`, bei Plätzen zusätzlich `allocation`). Wirksam ist eine Ein- oder Auslagersperre, wenn das Objekt selbst oder eine übergeordnete Gruppe sperrt. Jede Antwort enthält je Richtung `own`, `blocked` und `blockedBy` (nächstgelegenes sperrendes Objekt). Zusätzlich sperren ist immer erlaubt; Entsperren ist abgelehnt, solange eine übergeordnete Gruppe sperrt (`LOCK_INHERITED`). Wird die übergeordnete Sperre aufgehoben, bleiben eigene Sperren darunter bestehen.
+
+Sperren ändern: `PATCH /v1/location-groups/{name}/locks` bzw. `PATCH /v1/locations/{id}/locks` mit z. B. `{ "inbound": true, "reason": "Inventur" }`.
+
+Events: `location-type.*`, `location-group.created|updated|deleted|lock-changed`, `location.created|updated|deleted|lock-changed` (Payload-Schemas in `packages/shared/src/layout-events.ts`). Eine Sperränderung an einer Gruppe erzeugt nur ein Event für diese Gruppe; die Wirkung auf Untergruppen und Plätze ergibt sich aus der Hierarchie.
+
 ## Events
 
 1. Event im Katalog definieren (`packages/shared/src/events.ts`): `defineEvent('bereich.ereignis', 1, payloadSchema)`.
@@ -78,13 +111,43 @@ Event-Format:
 
 ## Node-RED-Szenarien
 
-Ein Szenario ist ein eigener Tab in Node-RED:
+### Schritt-Szenarien (empfohlen)
+
+Für fachliche Abläufe genügt eine Schrittliste in `flows/scenarios/<id>.js`; der Generator macht daraus einen Tab, die gemeinsame **Schritt-Engine** führt sie aus. Beispiel: `flows/scenarios/layout-locks.js`.
+
+```js
+registerScenario({
+  id: 'mein-szenario',
+  description: 'Was geprüft wird',
+  init: (runId) => ({ name: `SZ-${runId.slice(-8).toUpperCase()}` }),   // eindeutige Testdaten je Lauf
+  steps: [
+    { name: 'Gruppe anlegen', request: (v) => ({ method: 'POST', path: '/v1/location-groups', body: { name: v.name } }), expectStatus: 201 },
+    { name: 'Event empfangen', event: (e, v) => e.type === 'location-group.created' && e.payload.name === v.name },
+    { name: 'Aufräumen', cleanup: true, request: (v) => ({ method: 'DELETE', path: `/v1/location-groups/${v.name}` }), expectStatus: 204 },
+  ],
+});
+```
+
+| Feld | Bedeutung |
+|---|---|
+| `request(v)` | HTTP-Aufruf gegen die API; `null` überspringt den Schritt |
+| `expectStatus` | erwarteter HTTP-Status |
+| `check(body, v)` | Fehlertext zurückgeben, wenn die Antwort nicht passt, sonst `null` |
+| `save(body, v)` | Werte für spätere Schritte in `v` ablegen (z. B. erzeugte IDs) |
+| `event(e, v)` | wartet auf ein MQTT-Event unter `wms/#`, für das die Funktion `true` liefert (Timeout `SCENARIO_EVENT_TIMEOUT_MS`) |
+| `cleanup: true` | Aufräumschritt: läuft auch nach einem Fehler; davor liegende normale Schritte werden nach einem Fehler übersprungen |
+
+Nach dem Ändern: `node flows/scripts/build-flows.mjs` (prüft auch die Syntax aller Funktions-Nodes), dann Node-RED neu starten (`docker compose restart node-red`).
+
+### Eigene Szenario-Tabs
+
+Für Abläufe, die nicht in das Schrittschema passen, ist ein Szenario ein eigener Tab in Node-RED (Beispiel: `system-ping`):
 
 1. `link in`-Node mit Namen `scenario:<id>` als Einstieg; `msg.scenario` enthält `id`, `runId`, `steps`.
 2. Schritte ausführen und je Schritt `msg.scenario.steps.push({ name, passed, detail })`.
 3. Auf Ereignisse **mit Timeout** warten, nicht mit festen Pausen; Zuordnung über `correlationId = runId`.
 4. Mit `link out` im Modus „return“ enden; `msg.scenario.passed` setzen, bei Fehler `msg.scenario.error`.
-5. Szenario im Katalog (Tab „Test-Framework“, Node „Szenario-Katalog“) eintragen.
+5. Szenario im Generator unter „Szenario-Katalog“ eintragen.
 
 Die Flows werden mit `flows/scripts/build-flows.mjs` erzeugt; die CI prüft, dass `flows.json` dazu passt. Wer im Node-RED-Editor ändert, überträgt die Änderung in den Generator.
 
@@ -94,6 +157,20 @@ Das Testframework stellt bereit:
 |---|---|
 | `GET /test/scenarios` | `{ scenarios: [{ id, description }] }` |
 | `POST /test/scenarios/:id/run` | `{ scenario, runId, passed, durationMs, steps, error? }`; 404 bei unbekanntem Szenario |
+
+## API außerhalb von Docker gegen die Compose-Umgebung
+
+Zum schnellen Ausprobieren von API-Änderungen ohne Image-Build:
+
+```bash
+docker compose up -d --no-deps --wait postgres mosquitto
+(cd apps/api && pnpm build && APP_PROFILE=test DB_MIGRATE_ON_START=true \
+  DATABASE_URL=postgresql://wms:wms@localhost:5432/wms MQTT_URL=mqtt://localhost:1883 node dist/main.js) &
+WMS_API_URL=http://<Gateway-IP des Compose-Netzes>:3000 docker compose up -d --no-deps --wait node-red
+pnpm test:e2e
+```
+
+Die Gateway-IP liefert `docker network inspect wms_default -f '{{(index .IPAM.Config 0).Gateway}}'` (unter Docker Desktop stattdessen `host.docker.internal`).
 
 ## Hinter einem TLS-Proxy
 

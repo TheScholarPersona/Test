@@ -1,13 +1,16 @@
 import { Migrator } from '@mikro-orm/migrations';
-import { defineConfig, PostgreSqlDriver } from '@mikro-orm/postgresql';
+import { defineConfig, type Options, PostgreSqlDriver } from '@mikro-orm/postgresql';
 import type { AppConfig } from '../../config.js';
 import { migrations } from '../../migrations/index.js';
-import { OutboxMessage } from '../outbox/outbox-message.entity.js';
 
-/** Alle Entities der Anwendung; neue Fachmodule tragen ihre hier ein. */
-export const entities = [OutboxMessage];
+export type OrmEntities = NonNullable<Options['entities']>;
+export type OrmOptions = ReturnType<typeof createOrmOptions>;
 
-export function createOrmOptions(config: Pick<AppConfig, 'databaseUrl' | 'profile'>) {
+/**
+ * ORM-Konfiguration. Die Entities kommen von außen (src/database.ts),
+ * damit die Infrastruktur keine Fachmodule kennen muss.
+ */
+export function createOrmOptions(config: Pick<AppConfig, 'databaseUrl'>, entities: OrmEntities) {
   return defineConfig({
     driver: PostgreSqlDriver,
     clientUrl: config.databaseUrl,

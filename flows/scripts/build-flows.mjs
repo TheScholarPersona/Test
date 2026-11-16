@@ -11,10 +11,11 @@
  * Wer Flows lieber im Node-RED-Editor ändert, exportiert sie anschließend
  * nach flows/node-red/flows.json; dann ist dieses Skript nachzuziehen.
  */
-import { writeFileSync } from 'node:fs';
+import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const out = fileURLToPath(new URL('../node-red/flows.json', import.meta.url));
+const scenarioDir = fileURLToPath(new URL('../scenarios/', import.meta.url));
 
 /** Funktionsquelltext aus einer JS-Funktion lesen (nur der Rumpf). */
 const body = (fn) => {
@@ -126,7 +127,13 @@ add({
   func: body(function () {
     msg.statusCode = 200;
     msg.headers = { 'content-type': 'application/json' };
-    msg.payload = { scenarios: global.get('scenarioCatalog') || [] };
+    const steps = global.get('stepScenarios') || {};
+    msg.payload = {
+      scenarios: [
+        ...(global.get('scenarioCatalog') || []),
+        ...Object.values(steps).map((def) => ({ id: def.id, description: def.description })),
+      ],
+    };
     return msg;
   }),
   outputs: 1,
@@ -174,8 +181,10 @@ add({
   name: 'Szenario wählen',
   func: body(function () {
     const catalog = global.get('scenarioCatalog') || [];
+    const steps = global.get('stepScenarios') || {};
     const id = msg.req.params.id;
-    if (!catalog.some((entry) => entry.id === id)) {
+    const isStepScenario = Object.prototype.hasOwnProperty.call(steps, id);
+    if (!isStepScenario && !catalog.some((entry) => entry.id === id)) {
       msg.statusCode = 404;
       msg.headers = { 'content-type': 'application/json' };
       msg.payload = { scenario: id, passed: false, error: `Unbekanntes Szenario [${id}]` };
@@ -189,7 +198,8 @@ add({
       steps: [],
       passed: false,
     };
-    msg.target = `scenario:${id}`;
+    // Schritt-Szenarien laufen in der gemeinsamen Engine, eigene Szenarien in ihrem Tab.
+    msg.target = isStepScenario ? 'engine:steps' : `scenario:${id}`;
     return [msg, null];
   }),
   outputs: 2,
@@ -485,6 +495,337 @@ add({
 });
 
 // ---------------------------------------------------------------------------
+// Tab: Schritt-Engine (führt Szenarien aus flows/scenarios/*.js aus)
+// ---------------------------------------------------------------------------
+const TAB_ENGINE = 'f000000000000004';
+const ENGINE_NEXT = 'f400000000000002';
+const ENGINE_HTTP = 'f400000000000003';
+const ENGINE_CHECK = 'f400000000000004';
+const ENGINE_WAIT = 'f400000000000005';
+const ENGINE_RETURN = 'f400000000000007';
+add({
+  id: TAB_ENGINE,
+  type: 'tab',
+  label: 'Schritt-Engine',
+  disabled: false,
+  info:
+    'Führt Szenarien aus, die als Schrittliste definiert sind (flows/scenarios/*.js).\n\n' +
+    'Ablauf je Schritt: „Nächster Schritt“ → HTTP-Aufruf → „Antwort prüfen“ → zurück, ' +
+    'oder „Auf Event warten“ (MQTT `wms/#`). Nach einem Fehler laufen nur noch Aufräumschritte (`cleanup: true`).',
+});
+add({
+  id: 'f400000000000001',
+  type: 'link in',
+  z: TAB_ENGINE,
+  name: 'engine:steps',
+  links: [],
+  x: 120,
+  y: 100,
+  wires: [[ENGINE_NEXT]],
+});
+add({
+  id: ENGINE_NEXT,
+  type: 'function',
+  z: TAB_ENGINE,
+  name: 'Nächster Schritt',
+  func: body(function () {
+    const s = msg.scenario;
+    const def = (global.get('stepScenarios') || {})[s.id];
+    const fail = (name, detail) => {
+      s.steps.push({ name, passed: false, detail });
+      if (!s.failed) {
+        s.failed = true;
+        s.error = `${name}: ${detail}`;
+      }
+    };
+    if (!def) {
+      fail('Szenario laden', `Szenario [${s.id}] ist nicht definiert`);
+      s.passed = false;
+      return [null, null, msg];
+    }
+    if (s.vars === undefined) {
+      s.vars = def.init ? def.init(s.runId) : {};
+      s.idx = 0;
+      s.failed = false;
+    }
+    for (;;) {
+      // Nach einem Fehler nur noch Aufräumschritte ausführen.
+      while (s.idx < def.steps.length && s.failed && !def.steps[s.idx].cleanup) {
+        s.idx++;
+      }
+      if (s.idx >= def.steps.length) {
+        s.passed = !s.failed && s.steps.every((step) => step.passed === true);
+        return [null, null, msg];
+      }
+      const step = def.steps[s.idx];
+      if (step.event) {
+        return [null, msg, null];
+      }
+      try {
+        const request = step.request(s.vars);
+        if (request === null) {
+          // Schritt bewusst übersprungen, z. B. Aufräumen eines nie angelegten Objekts.
+          s.steps.push({ name: step.name, passed: true, detail: 'übersprungen' });
+          s.idx++;
+          continue;
+        }
+        msg.method = request.method;
+        msg.url = `${env.get('WMS_API_URL')}${request.path}`;
+        msg.headers = { 'content-type': 'application/json' };
+        msg.payload = request.body === undefined ? '' : request.body;
+        return [msg, null, null];
+      } catch (error) {
+        fail(step.name, `Anfrage konnte nicht erstellt werden: ${error.message}`);
+        s.idx++;
+      }
+    }
+  }),
+  outputs: 3,
+  timeout: 0,
+  noerr: 0,
+  initialize: '',
+  finalize: '',
+  libs: [],
+  x: 330,
+  y: 100,
+  wires: [[ENGINE_HTTP], [ENGINE_WAIT], [ENGINE_RETURN]],
+});
+add({
+  id: ENGINE_HTTP,
+  type: 'http request',
+  z: TAB_ENGINE,
+  name: 'WMS-API',
+  method: 'use',
+  ret: 'obj',
+  paytoqs: 'ignore',
+  url: '',
+  tls: '',
+  persist: false,
+  proxy: '',
+  insecureHTTPParser: false,
+  authType: '',
+  senderr: false,
+  headers: [],
+  x: 550,
+  y: 60,
+  wires: [[ENGINE_CHECK]],
+});
+add({
+  id: ENGINE_CHECK,
+  type: 'function',
+  z: TAB_ENGINE,
+  name: 'Antwort prüfen',
+  func: body(function () {
+    const s = msg.scenario;
+    const step = global.get('stepScenarios')[s.id].steps[s.idx];
+    let error = null;
+    if (step.expectStatus !== undefined && msg.statusCode !== step.expectStatus) {
+      error = `HTTP ${msg.statusCode} statt ${step.expectStatus}: ${JSON.stringify(msg.payload)}`;
+    }
+    if (!error && step.check) {
+      try {
+        error = step.check(msg.payload, s.vars) || null;
+      } catch (e) {
+        error = `Prüfung fehlgeschlagen: ${e.message}`;
+      }
+    }
+    if (!error && step.save) {
+      try {
+        step.save(msg.payload, s.vars);
+      } catch (e) {
+        error = `Ergebnis konnte nicht übernommen werden: ${e.message}`;
+      }
+    }
+    if (error) {
+      s.steps.push({ name: step.name, passed: false, detail: error });
+      if (!s.failed) {
+        s.failed = true;
+        s.error = `${step.name}: ${error}`;
+      }
+    } else {
+      s.steps.push({ name: step.name, passed: true, detail: `HTTP ${msg.statusCode}` });
+    }
+    s.idx++;
+    return msg;
+  }),
+  outputs: 1,
+  timeout: 0,
+  noerr: 0,
+  initialize: '',
+  finalize: '',
+  libs: [],
+  x: 760,
+  y: 60,
+  wires: [[ENGINE_NEXT]],
+});
+add({
+  id: 'f400000000000006',
+  type: 'mqtt in',
+  z: TAB_ENGINE,
+  name: 'wms/#',
+  topic: 'wms/#',
+  qos: '1',
+  datatype: 'json',
+  broker: BROKER,
+  nl: false,
+  rap: true,
+  rh: 0,
+  inputs: 0,
+  x: 550,
+  y: 200,
+  wires: [[ENGINE_WAIT]],
+});
+add({
+  id: ENGINE_WAIT,
+  type: 'function',
+  z: TAB_ENGINE,
+  name: 'Auf Event warten',
+  func: body(function () {
+    // Eingänge: wartender Schritt (mit msg.scenario) und alle MQTT-Events unter wms/#.
+    const timeoutMs = Number(env.get('SCENARIO_EVENT_TIMEOUT_MS') || 10000);
+    const recent = context.get('recent') || [];
+    const pending = context.get('pending') || [];
+    const stepOf = (waiting) => global.get('stepScenarios')[waiting.scenario.id].steps[waiting.scenario.idx];
+    const matches = (waiting, event) => {
+      try {
+        return stepOf(waiting).event(event, waiting.scenario.vars) === true;
+      } catch (e) {
+        return false;
+      }
+    };
+    const complete = (waiting, event) => {
+      const s = waiting.scenario;
+      s.steps.push({ name: stepOf(waiting).name, passed: true, detail: `Event ${event.type} ${event.id}` });
+      s.idx++;
+      node.send(waiting);
+    };
+
+    if (msg.scenario === undefined) {
+      const event = msg.payload;
+      if (!event || typeof event !== 'object') {
+        return null;
+      }
+      recent.push({ event, receivedAt: Date.now() });
+      while (recent.length > 500) {
+        recent.shift();
+      }
+      context.set('recent', recent);
+      for (const entry of [...pending]) {
+        if (matches(entry.msg, event)) {
+          clearTimeout(entry.timer);
+          pending.splice(pending.indexOf(entry), 1);
+          complete(entry.msg, event);
+        }
+      }
+      context.set('pending', pending);
+      return null;
+    }
+
+    const s = msg.scenario;
+    // Event kann schon vor diesem Schritt eingetroffen sein (nur Events seit Start des Laufs).
+    const earlier = recent.find((r) => r.receivedAt >= s.startedAt && matches(msg, r.event));
+    if (earlier) {
+      complete(msg, earlier.event);
+      return null;
+    }
+    const entry = { msg };
+    entry.timer = setTimeout(() => {
+      const open = context.get('pending') || [];
+      const index = open.indexOf(entry);
+      if (index < 0) {
+        return;
+      }
+      open.splice(index, 1);
+      context.set('pending', open);
+      const name = stepOf(msg).name;
+      const detail = `Kein passendes Event innerhalb von ${timeoutMs} ms`;
+      s.steps.push({ name, passed: false, detail });
+      if (!s.failed) {
+        s.failed = true;
+        s.error = `${name}: ${detail}`;
+      }
+      s.idx++;
+      node.send(msg);
+    }, timeoutMs);
+    pending.push(entry);
+    context.set('pending', pending);
+    return null;
+  }),
+  outputs: 1,
+  timeout: 0,
+  noerr: 0,
+  initialize: '',
+  finalize: '',
+  libs: [],
+  x: 770,
+  y: 160,
+  wires: [[ENGINE_NEXT]],
+});
+add({
+  id: ENGINE_RETURN,
+  type: 'link out',
+  z: TAB_ENGINE,
+  name: 'Ergebnis zurück',
+  mode: 'return',
+  links: [],
+  x: 560,
+  y: 280,
+  wires: [],
+});
+
+// ---------------------------------------------------------------------------
+// Tabs: Schritt-Szenarien aus flows/scenarios/*.js
+// ---------------------------------------------------------------------------
+const REGISTER_PRELUDE =
+  'const registerScenario = (definition) => {\n' +
+  "  const all = global.get('stepScenarios') || {};\n" +
+  '  all[definition.id] = definition;\n' +
+  "  global.set('stepScenarios', all);\n" +
+  '};\n';
+
+readdirSync(scenarioDir)
+  .filter((file) => file.endsWith('.js'))
+  .sort()
+  .forEach((file, index) => {
+    const id = file.replace(/\.js$/, '');
+    const n = String(index + 1).padStart(2, '0');
+    const tab = `f5${n}000000000000`;
+    add({
+      id: tab,
+      type: 'tab',
+      label: `Szenario: ${id}`,
+      disabled: false,
+      info: `Schrittliste aus flows/scenarios/${file}; ausgeführt vom Tab „Schritt-Engine“.`,
+    });
+    add({
+      id: `f5${n}000000000001`,
+      type: 'comment',
+      z: tab,
+      name: `Definition: flows/scenarios/${file} (im Repository bearbeiten, dann Flows neu erzeugen)`,
+      info: '',
+      x: 380,
+      y: 40,
+      wires: [],
+    });
+    add({
+      id: `f5${n}000000000002`,
+      type: 'function',
+      z: tab,
+      name: `Szenario ${id} anmelden`,
+      func: 'return msg;\n',
+      outputs: 0,
+      timeout: 0,
+      noerr: 0,
+      initialize: REGISTER_PRELUDE + readFileSync(`${scenarioDir}${file}`, 'utf8'),
+      finalize: '',
+      libs: [],
+      x: 200,
+      y: 100,
+      wires: [],
+    });
+  });
+
+// ---------------------------------------------------------------------------
 // Tab: Anlagensimulator (folgt in Schritt 5)
 // ---------------------------------------------------------------------------
 const TAB_SIM = 'f000000000000003';
@@ -505,6 +846,21 @@ add({
   y: 60,
   wires: [],
 });
+
+// Syntaxprüfung aller Funktions-Nodes: Fehler fallen beim Erzeugen auf, nicht erst in Node-RED.
+const SANDBOX = ['msg', 'node', 'context', 'flow', 'global', 'env', 'RED'];
+for (const n of nodes.filter((x) => x.type === 'function')) {
+  for (const key of ['func', 'initialize', 'finalize']) {
+    if (n[key]) {
+      try {
+        new Function(...SANDBOX, `return (async () => {\n${n[key]}\n})`);
+      } catch (error) {
+        console.error(`Syntaxfehler in Node "${n.name}" (${key}): ${error.message}`);
+        process.exit(1);
+      }
+    }
+  }
+}
 
 writeFileSync(out, `${JSON.stringify(nodes, null, 2)}\n`);
 console.log(`${nodes.length} Nodes nach ${out} geschrieben`);

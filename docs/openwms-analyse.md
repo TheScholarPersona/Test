@@ -665,6 +665,8 @@ Ein schlanker Vitest-Runner steuert die Szenarien. So erscheinen Node-RED-Tests 
 
 ### 5.3 Priorisierter Implementierungsplan
 
+**Umsetzungsstand:** Schritt 0 ✅ (Grundgerüst) · Schritt 1 ✅ (Lagerstruktur) – Details in [entwicklung.md](entwicklung.md).
+
 Reihenfolge wie gewünscht. Eine fachliche Abhängigkeit ist zu beachten: Der Wareneingang (4) bucht Bestand. Deshalb wird in Schritt 4 ein **minimales Produkt- und Bestandsmodell** angelegt, das in Schritt 6 zur vollständigen Bestandsführung ausgebaut wird.
 
 | Prio | Schritt | Umfang | Fachliche Regeln (aus Katalog) | Abnahmekriterien |

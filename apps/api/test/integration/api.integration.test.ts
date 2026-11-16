@@ -4,6 +4,7 @@ import { SystemPingEvent } from '@wms/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../../src/app.factory.js';
 import { type AppConfig, loadConfig } from '../../src/config.js';
+import { databaseOptions } from '../../src/database.js';
 import { runMigrations } from '../../src/infrastructure/database/migrate.js';
 import type { EventPublisher } from '../../src/infrastructure/messaging/event-publisher.js';
 import { OutboxMessage } from '../../src/infrastructure/outbox/outbox-message.entity.js';
@@ -45,8 +46,8 @@ const json = (body: unknown): RequestInit => ({
 describe('Migrationen', () => {
   it('legen das Schema an und sind wiederholbar', async () => {
     const config = configFor({});
-    expect(await runMigrations(config)).toEqual(['Migration20261116000000_outbox']);
-    expect(await runMigrations(config)).toEqual([]);
+    expect(await runMigrations(databaseOptions(config))).toEqual(expect.arrayContaining(['Migration20261116000000_outbox']));
+    expect(await runMigrations(databaseOptions(config))).toEqual([]);
   });
 });
 
