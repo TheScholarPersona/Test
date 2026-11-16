@@ -583,15 +583,15 @@
   {
     "id": "f504000000000000",
     "type": "tab",
-    "label": "Szenario: tu-placement",
+    "label": "Szenario: receiving-flow",
     "disabled": false,
-    "info": "Schrittliste aus flows/scenarios/tu-placement.js; ausgeführt vom Tab „Schritt-Engine“."
+    "info": "Schrittliste aus flows/scenarios/receiving-flow.js; ausgeführt vom Tab „Schritt-Engine“."
   },
   {
     "id": "f504000000000001",
     "type": "comment",
     "z": "f504000000000000",
-    "name": "Definition: flows/scenarios/tu-placement.js (im Repository bearbeiten, dann Flows neu erzeugen)",
+    "name": "Definition: flows/scenarios/receiving-flow.js (im Repository bearbeiten, dann Flows neu erzeugen)",
     "info": "",
     "x": 380,
     "y": 40,
@@ -601,6 +601,39 @@
     "id": "f504000000000002",
     "type": "function",
     "z": "f504000000000000",
+    "name": "Szenario receiving-flow anmelden",
+    "func": "return msg;\n",
+    "outputs": 0,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "const registerScenario = (definition) => {\n  const all = global.get('stepScenarios') || {};\n  all[definition.id] = definition;\n  global.set('stepScenarios', all);\n};\n/**\n * Szenario: Wareneingang mit Avis.\n *\n * Avis mit einer Mengenposition anlegen, Teilmenge auf eine neue TU erfassen,\n * Überlieferung wird abgelehnt (Produkt erlaubt sie nicht), Restmenge als\n * Fehlmenge schließen, Bestand und Journal prüfen. Zum Aufräumen wird der\n * Bestand per Korrektur ausgebucht, danach sind TU und Plätze löschbar.\n * Produkt und Auftrag bleiben als Stammdaten bzw. Historie erhalten\n * (eindeutige Kennungen je Lauf).\n * Schrittformat: siehe flows/scenarios/layout-locks.js.\n */\nregisterScenario({\n  id: 'receiving-flow',\n  description: 'Avis anlegen, Teilmenge erfassen, Überlieferung abgelehnt, Fehlmenge schließen, Bestand prüfen und ausbuchen.',\n  init: (runId) => {\n    const s = runId.replace(/[^a-z0-9]/gi, '').slice(-8).toUpperCase();\n    return {\n      locationType: `SR-${s}`,\n      inbound: `SR-${s}-WE`,\n      unitType: `SR-${s}`,\n      sku: `SR-${s}-ART`,\n      orderId: `SR-${s}-AVIS`,\n      weCoord: `R${s}/0009/0001/0001/0000`,\n      we: null,\n      tu: null,\n      stockItem: null,\n    };\n  },\n  steps: [\n    { name: 'Platztyp anlegen', request: (v) => ({ method: 'POST', path: '/v1/location-types', body: { code: v.locationType } }), expectStatus: 201 },\n    { name: 'Wareneingang anlegen', request: (v) => ({ method: 'POST', path: '/v1/location-groups', body: { name: v.inbound } }), expectStatus: 201 },\n    {\n      name: 'Wareneingangsplatz anlegen',\n      request: (v) => ({ method: 'POST', path: '/v1/locations', body: { locationId: v.weCoord, typeCode: v.locationType, groupName: v.inbound, maxTransportUnits: 10 } }),\n      expectStatus: 201,\n      save: (body, v) => {\n        v.we = body.id;\n      },\n    },\n    { name: 'TU-Typ anlegen', request: (v) => ({ method: 'POST', path: '/v1/transport-unit-types', body: { code: v.unitType } }), expectStatus: 201 },\n    {\n      name: 'Produkt anlegen (ohne Überlieferung)',\n      request: (v) => ({ method: 'POST', path: '/v1/products', body: { sku: v.sku, description: 'Szenario receiving-flow', baseUnit: 'PCS' } }),\n      expectStatus: 201,\n    },\n    {\n      name: 'Avis mit 10 PCS anlegen',\n      request: (v) => ({\n        method: 'POST',\n        path: '/v1/receiving-orders',\n        body: { orderId: v.orderId, supplier: 'Szenario', positions: [{ kind: 'quantity', sku: v.sku, quantity: { amount: '10', unit: 'PCS' } }] },\n      }),\n      expectStatus: 201,\n      check: (body) => (body.state === 'OPEN' && body.positions.length === 1 && body.positions[0].open.amount === '10' ? null : `Unerwartet: ${JSON.stringify(body)}`),\n    },\n    { name: 'Event receiving-order.created empfangen', event: (e, v) => e.type === 'receiving-order.created' && e.payload.orderId === v.orderId },\n    {\n      name: '6 PCS auf neue TU erfassen',\n      request: (v) => ({\n        method: 'POST',\n        path: `/v1/receiving-orders/${v.orderId}/captures`,\n        body: { kind: 'quantity', sku: v.sku, quantity: { amount: '6', unit: 'PCS' }, unit: { typeCode: v.unitType }, location: { id: v.we }, lot: 'L-1' },\n      }),\n      expectStatus: 201,\n      check: (body) =>\n        body.posNo === 1 && body.onHand.amount === '6' && body.order.state === 'IN_PROGRESS' && body.order.positions[0].open.amount === '4'\n          ? null\n          : `Unerwartet: ${JSON.stringify(body)}`,\n      save: (body, v) => {\n        v.tu = body.barcode;\n      },\n    },\n    { name: 'Event receiving.captured empfangen', event: (e, v) => e.type === 'receiving.captured' && e.payload.orderId === v.orderId && e.payload.barcode === v.tu },\n    { name: 'Event stock.received empfangen', event: (e, v) => e.type === 'stock.received' && e.payload.sku === v.sku && e.payload.barcode === v.tu },\n    {\n      name: 'Überlieferung (5 PCS bei Rest 4) wird abgelehnt',\n      request: (v) => ({\n        method: 'POST',\n        path: `/v1/receiving-orders/${v.orderId}/captures`,\n        body: { kind: 'quantity', sku: v.sku, quantity: { amount: '5', unit: 'PCS' }, unit: { barcode: v.tu }, location: { id: v.we }, lot: 'L-1' },\n      }),\n      expectStatus: 409,\n      check: (body) => (body.code === 'OVERDELIVERY_NOT_ALLOWED' ? null : `Erwartet OVERDELIVERY_NOT_ALLOWED, erhalten ${body.code}`),\n    },\n    {\n      name: 'Position mit Fehlmenge schließen',\n      request: (v) => ({ method: 'POST', path: `/v1/receiving-orders/${v.orderId}/positions/1/close`, body: { reason: 'Lieferant liefert nach' } }),\n      expectStatus: 200,\n      check: (body) =>\n        body.positions[0].state === 'SHORT' && body.state === 'PARTIALLY_COMPLETED' ? null : `Unerwartet: ${JSON.stringify({ state: body.state, positions: body.positions })}`,\n    },\n    {\n      name: 'Event receiving-order.state-changed (PARTIALLY_COMPLETED)',\n      event: (e, v) => e.type === 'receiving-order.state-changed' && e.payload.orderId === v.orderId && e.payload.state === 'PARTIALLY_COMPLETED',\n    },\n    {\n      name: 'Weitere Erfassung auf abgeschlossenen Auftrag wird abgelehnt',\n      request: (v) => ({\n        method: 'POST',\n        path: `/v1/receiving-orders/${v.orderId}/captures`,\n        body: { kind: 'quantity', sku: v.sku, quantity: { amount: '1', unit: 'PCS' }, unit: { barcode: v.tu }, location: { id: v.we } },\n      }),\n      expectStatus: 409,\n      check: (body) => (body.code === 'ORDER_CLOSED' ? null : `Erwartet ORDER_CLOSED, erhalten ${body.code}`),\n    },\n    {\n      name: 'Bestand: 6 PCS mit Charge auf der TU am Wareneingangsplatz',\n      request: (v) => ({ method: 'GET', path: `/v1/stock?barcode=${v.tu}` }),\n      expectStatus: 200,\n      check: (body, v) => {\n        const [item] = body.items;\n        return body.total === 1 && item.sku === v.sku && item.quantity.amount === '6' && item.lot === 'L-1' && item.location.id === v.we\n          ? null\n          : `Unerwartet: ${JSON.stringify(body)}`;\n      },\n      save: (body, v) => {\n        v.stockItem = body.items[0].id;\n      },\n    },\n    {\n      name: 'Journal enthält den Zugang mit Bezug auf die Position',\n      request: (v) => ({ method: 'GET', path: `/v1/stock-bookings?barcode=${v.tu}` }),\n      expectStatus: 200,\n      check: (body, v) =>\n        body.total === 1 && body.items[0].type === 'RECEIPT' && body.items[0].reference === `receiving:${v.orderId}/1` ? null : `Unerwartet: ${JSON.stringify(body)}`,\n    },\n    {\n      name: 'TU mit Bestand kann nicht gelöscht werden',\n      request: (v) => ({ method: 'DELETE', path: `/v1/transport-units/${v.tu}` }),\n      expectStatus: 409,\n      check: (body) => (body.code === 'TU_IN_USE' ? null : `Erwartet TU_IN_USE, erhalten ${body.code}`),\n    },\n    {\n      name: 'Ausbuchen von mehr als vorhanden wird abgelehnt',\n      request: (v) => ({ method: 'POST', path: `/v1/stock/${v.stockItem}/corrections`, body: { delta: { amount: '-7', unit: 'PCS' }, reason: 'Szenario' } }),\n      expectStatus: 409,\n      check: (body) => (body.code === 'STOCK_INSUFFICIENT' ? null : `Erwartet STOCK_INSUFFICIENT, erhalten ${body.code}`),\n    },\n    {\n      name: 'Bestand vollständig ausbuchen',\n      request: (v) => ({ method: 'POST', path: `/v1/stock/${v.stockItem}/corrections`, body: { delta: { amount: '-6', unit: 'PCS' }, reason: 'Szenario receiving-flow' } }),\n      expectStatus: 200,\n      check: (body) => (body.removed === true && body.onHand.amount === '0' ? null : `Unerwartet: ${JSON.stringify(body)}`),\n      save: (body, v) => {\n        v.stockItem = null;\n      },\n    },\n    { name: 'Event stock.corrected empfangen', event: (e, v) => e.type === 'stock.corrected' && e.payload.barcode === v.tu && e.payload.onHand.amount === '0' },\n    {\n      name: 'Aufräumen: Restbestand ausbuchen',\n      cleanup: true,\n      request: (v) => (v.stockItem ? { method: 'POST', path: `/v1/stock/${v.stockItem}/corrections`, body: { delta: { amount: '-6', unit: 'PCS' }, reason: 'Aufräumen' } } : null),\n    },\n    { name: 'Aufräumen: TU löschen', cleanup: true, request: (v) => (v.tu ? { method: 'DELETE', path: `/v1/transport-units/${v.tu}` } : null), expectStatus: 204 },\n    { name: 'Aufräumen: Wareneingangsplatz löschen', cleanup: true, request: (v) => (v.we ? { method: 'DELETE', path: `/v1/locations/${v.we}` } : null), expectStatus: 204 },\n    { name: 'Aufräumen: Wareneingang löschen', cleanup: true, request: (v) => ({ method: 'DELETE', path: `/v1/location-groups/${v.inbound}` }), expectStatus: 204 },\n    { name: 'Aufräumen: TU-Typ löschen', cleanup: true, request: (v) => ({ method: 'DELETE', path: `/v1/transport-unit-types/${v.unitType}` }), expectStatus: 204 },\n    { name: 'Aufräumen: Platztyp löschen', cleanup: true, request: (v) => ({ method: 'DELETE', path: `/v1/location-types/${v.locationType}` }), expectStatus: 204 },\n  ],\n});\n",
+    "finalize": "",
+    "libs": [],
+    "x": 200,
+    "y": 100,
+    "wires": []
+  },
+  {
+    "id": "f505000000000000",
+    "type": "tab",
+    "label": "Szenario: tu-placement",
+    "disabled": false,
+    "info": "Schrittliste aus flows/scenarios/tu-placement.js; ausgeführt vom Tab „Schritt-Engine“."
+  },
+  {
+    "id": "f505000000000001",
+    "type": "comment",
+    "z": "f505000000000000",
+    "name": "Definition: flows/scenarios/tu-placement.js (im Repository bearbeiten, dann Flows neu erzeugen)",
+    "info": "",
+    "x": 380,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "f505000000000002",
+    "type": "function",
+    "z": "f505000000000000",
     "name": "Szenario tu-placement anmelden",
     "func": "return msg;\n",
     "outputs": 0,

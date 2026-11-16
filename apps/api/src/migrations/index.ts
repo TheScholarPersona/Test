@@ -4,6 +4,8 @@ import { Migration20261116100000_layout } from './Migration20261116100000_layout
 import { Migration20261116200000_transport } from './Migration20261116200000_transport.js';
 import { Migration20261116300000_strategy } from './Migration20261116300000_strategy.js';
 import { Migration20261116400000_movement } from './Migration20261116400000_movement.js';
+import { Migration20261116500000_inventory } from './Migration20261116500000_inventory.js';
+import { Migration20261116600000_receiving } from './Migration20261116600000_receiving.js';
 
 /**
  * Registrierte Migrationen in Ausführungsreihenfolge.
@@ -16,4 +18,6 @@ export const migrations: MigrationObject[] = [
   { name: Migration20261116200000_transport.name, class: Migration20261116200000_transport },
   { name: Migration20261116300000_strategy.name, class: Migration20261116300000_strategy },
   { name: Migration20261116400000_movement.name, class: Migration20261116400000_movement },
+  { name: Migration20261116500000_inventory.name, class: Migration20261116500000_inventory },
+  { name: Migration20261116600000_receiving.name, class: Migration20261116600000_receiving },
 ];

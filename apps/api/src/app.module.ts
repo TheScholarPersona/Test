@@ -5,8 +5,10 @@ import { HttpModule } from './http/http.module.js';
 import { databaseOptions } from './database.js';
 import { OutboxModule } from './infrastructure/outbox/outbox.module.js';
 import { HealthModule } from './modules/health/index.js';
+import { InventoryModule } from './modules/inventory/index.js';
 import { LayoutModule } from './modules/layout/index.js';
 import { MovementModule } from './modules/movement/index.js';
+import { ReceivingModule } from './modules/receiving/index.js';
 import { StrategyModule } from './modules/strategy/index.js';
 import { TestSupportModule } from './modules/test-support/index.js';
 import { TransportModule } from './modules/transport/index.js';
@@ -43,6 +45,8 @@ export class AppModule {
         TransportModule,
         StrategyModule,
         MovementModule,
+        InventoryModule,
+        ReceivingModule,
         ...testModules,
       ],
     };

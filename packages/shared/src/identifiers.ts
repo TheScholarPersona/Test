@@ -69,6 +69,17 @@ export type TransportUnitTypeCode = z.infer<typeof TransportUnitTypeCodeSchema>;
 export const TransportUnitStateSchema = z.enum(['AVAILABLE', 'BLOCKED', 'QUALITY_CHECK']);
 export type TransportUnitState = z.infer<typeof TransportUnitStateSchema>;
 
+/** Artikelnummer (Stock Keeping Unit). */
+export const SkuSchema = z
+  .string()
+  .trim()
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._\-/]{0,63}$/, 'SKU: 1–64 Zeichen, Buchstaben, Ziffern und . _ - /')
+  .brand<'Sku'>();
+export type Sku = z.infer<typeof SkuSchema>;
+
+/** Charge bzw. Los. */
+export const LotSchema = z.string().trim().min(1).max(64);
+
 export const barcode = (value: string): Barcode => BarcodeSchema.parse(value);
 export const erpCode = (value: string): ErpCode => ErpCodeSchema.parse(value);
 export const locationId = (value: string): LocationId => LocationIdSchema.parse(value);

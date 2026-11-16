@@ -74,83 +74,91 @@ export class MovementService implements OnModuleInit {
    * derselben Transaktion, damit Bewegung und Reservierung zusammen gelingen.
    */
   create(input: CreateMovement): Promise<Movement> {
-    return this.em.transactional(async (tx) => {
-      const unit = await this.units.loadIn(tx, input.barcode);
-      if (unit.parent) {
-        throw new RuleViolationError('TU_STACKED', `TU ${unit.barcode} steht auf einer anderen TU; die Bewegung gilt der Basis des Stapels`, {
-          barcode: unit.barcode,
-          parentBarcode: (unit.parent as TransportUnit).barcode,
-        });
-      }
-      const open = await tx.findOne(Movement, { unit, state: { $in: [...ACTIVE_STATES] } });
-      if (open) {
-        throw new ConflictError('MOVEMENT_EXISTS', `Für TU ${unit.barcode} ist bereits Bewegung ${open.number} offen`, {
-          barcode: unit.barcode,
-          number: open.number,
-        });
-      }
-      const source = await this.lookup.resolve(tx, { id: (unit.location as Location).id });
+    return this.em.transactional((tx) => this.createIn(tx, input));
+  }
 
-      let target: Location;
-      let decisionId: string | null = null;
-      if ('location' in input.target) {
-        target = await this.lookup.resolve(tx, input.target.location, { lock: true });
-        if (target.id === source.id) {
-          throw new RuleViolationError('TARGET_IS_SOURCE', `TU ${unit.barcode} steht bereits auf ${target.locationId}`, { locationId: target.locationId });
-        }
-        const prepared = await this.checker.prepareExisting(tx, unit);
-        const { violations } = (await this.checker.evaluate(tx, prepared, source, [target], { forAllocation: true })).get(target.id)!;
-        if (violations.length > 0) {
-          throw new RuleViolationError('PLACEMENT_REJECTED', violations.map((v) => v.message).join('; '), { violations });
-        }
-        this.units.assignTarget(tx, unit, target);
-      } else {
-        const decision = await this.putaway.decideIn(tx, {
-          barcode: unit.barcode,
-          group: input.target.group,
-          assign: true,
-          movementType: input.type,
-        });
-        if (!decision.assigned || !decision.chosen) {
-          throw new RuleViolationError(
-            'NO_TARGET_LOCATION',
-            `Kein Zielplatz in [${input.target.group}] gefunden: ${decision.note ?? 'Zuweisung gescheitert'}`,
-            { group: input.target.group, summary: decision.summary, rule: decision.rule, strategy: decision.strategy },
-          );
-        }
-        target = await this.lookup.resolve(tx, { id: decision.chosen.key });
-        decisionId = decision.id;
-      }
-
-      const movement = tx.create(Movement, {
-        id: randomUUID(),
-        number: await this.nextNumber(tx),
+  /** Wie `create`, aber innerhalb einer bestehenden Transaktion (z. B. Einlagerung direkt nach dem Wareneingang). */
+  async createIn(tx: EntityManager, input: CreateMovement): Promise<Movement> {
+    const unit = await this.units.loadIn(tx, input.barcode);
+    if (unit.parent) {
+      throw new RuleViolationError('TU_STACKED', `TU ${unit.barcode} steht auf einer anderen TU; die Bewegung gilt der Basis des Stapels`, {
         barcode: unit.barcode,
-        unit,
-        type: input.type,
-        state: 'OPEN',
-        priority: input.priority,
-        priorityRank: priorityRank(input.priority),
-        source,
-        sourceCoordinate: source.locationId,
-        target,
-        targetCoordinate: target.locationId,
-        targetGroup: 'group' in input.target ? input.target.group : null,
-        decisionId,
-        initiator: input.initiator ?? null,
-        assignedTo: null,
-        dueAt: input.dueAt ? new Date(input.dueAt) : null,
-        completedAt: null,
-        completedLocation: null,
-        completedCoordinate: null,
-        deviated: false,
-        startedAt: null,
-        cancelledAt: null,
-        cancelReason: null,
+        parentBarcode: (unit.parent as TransportUnit).barcode,
       });
-      this.outbox.record(tx, MovementCreatedEvent, { ...movementSnapshot(movement), decisionId });
-      return movement;
+    }
+    const open = await tx.findOne(Movement, { unit, state: { $in: [...ACTIVE_STATES] } });
+    if (open) {
+      throw new ConflictError('MOVEMENT_EXISTS', `Für TU ${unit.barcode} ist bereits Bewegung ${open.number} offen`, {
+        barcode: unit.barcode,
+        number: open.number,
+      });
+    }
+    const source = await this.lookup.resolve(tx, { id: (unit.location as Location).id });
+
+    let target: Location;
+    let decisionId: string | null = null;
+    if ('location' in input.target) {
+      target = await this.lookup.resolve(tx, input.target.location, { lock: true });
+      if (target.id === source.id) {
+        throw new RuleViolationError('TARGET_IS_SOURCE', `TU ${unit.barcode} steht bereits auf ${target.locationId}`, { locationId: target.locationId });
+      }
+      const prepared = await this.checker.prepareExisting(tx, unit);
+      const { violations } = (await this.checker.evaluate(tx, prepared, source, [target], { forAllocation: true })).get(target.id)!;
+      if (violations.length > 0) {
+        throw new RuleViolationError('PLACEMENT_REJECTED', violations.map((v) => v.message).join('; '), { violations });
+      }
+      this.units.assignTarget(tx, unit, target);
+    } else {
+      const decision = await this.putaway.decideIn(tx, {
+        barcode: unit.barcode,
+        group: input.target.group,
+        assign: true,
+        movementType: input.type,
+      });
+      if (!decision.assigned || !decision.chosen) {
+        throw new RuleViolationError(
+          'NO_TARGET_LOCATION',
+          `Kein Zielplatz in [${input.target.group}] gefunden: ${decision.note ?? 'Zuweisung gescheitert'}`,
+          { group: input.target.group, summary: decision.summary, rule: decision.rule, strategy: decision.strategy },
+        );
+      }
+      target = await this.lookup.resolve(tx, { id: decision.chosen.key });
+      decisionId = decision.id;
+    }
+
+    const movement = tx.create(Movement, {
+      id: randomUUID(),
+      number: await this.nextNumber(tx),
+      barcode: unit.barcode,
+      unit,
+      type: input.type,
+      state: 'OPEN',
+      priority: input.priority,
+      priorityRank: priorityRank(input.priority),
+      source,
+      sourceCoordinate: source.locationId,
+      target,
+      targetCoordinate: target.locationId,
+      targetGroup: 'group' in input.target ? input.target.group : null,
+      decisionId,
+      initiator: input.initiator ?? null,
+      assignedTo: null,
+      dueAt: input.dueAt ? new Date(input.dueAt) : null,
+      completedAt: null,
+      completedLocation: null,
+      completedCoordinate: null,
+      deviated: false,
+      startedAt: null,
+      cancelledAt: null,
+      cancelReason: null,
     });
+    this.outbox.record(tx, MovementCreatedEvent, { ...movementSnapshot(movement), decisionId });
+    return movement;
+  }
+
+  /** Offene Bewegung einer TU, falls vorhanden. */
+  openFor(em: EntityManager, barcode: string): Promise<Movement | null> {
+    return em.findOne(Movement, { barcode, state: { $in: [...ACTIVE_STATES] } });
   }
 
   start(number: string, input: StartMovement): Promise<Movement> {

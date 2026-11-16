@@ -13,6 +13,7 @@ export {
   type TransportUnitRef,
 } from './application/transport-unit-removal-policy.js';
 export type { PlacementViolation } from './domain/placement.js';
+export type { CreateTransportUnit } from './http/schemas.js';
 export { PlacementChecker, type PreparedUnit, type TargetEvaluation } from './application/placement-checker.js';
 export { effectiveWeight } from './application/mappers.js';
 export { TransportUnit, TransportUnitType };

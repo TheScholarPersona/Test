@@ -5,3 +5,5 @@ export * from './layout-events.js';
 export * from './transport-events.js';
 export * from './strategy-events.js';
 export * from './movement-events.js';
+export * from './inventory-events.js';
+export * from './receiving-events.js';

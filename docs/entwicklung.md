@@ -12,12 +12,15 @@ apps/api/                  WMS-Kern (NestJS)
     messaging/             MQTT-Anbindung (EventPublisher)
     outbox/                Transactional Outbox und Relay
   src/migrations/          versionierte Datenbankmigrationen (explizite Liste in index.ts)
+  scripts/new-migration.sh neue Migration erzeugen, benennen, eintragen und prüfen
   src/modules/<modul>/     Fachmodule; öffentliche Schnittstelle nur über index.ts
     health/                GET /health
     layout/                Lagerstruktur: Platztypen, Gruppen, Lagerplätze, Sperren
     transport/             Transporteinheiten: Typen, Regeln, TUs, Bewegen, Stapeln
     strategy/              Strategie-Kern: Regelsätze, Entscheidungen; Einlagerung (putaway/)
     movement/              Lagerbewegungen mit Zustandsautomat
+    inventory/             Bestand: Produkte, Bestand je TU, Buchungsjournal, Korrekturen
+    receiving/             Wareneingang: Avis, Erfassung, Blind-Erfassung
     test-support/          Test-Endpunkte, nur im Profil "test"
   test/unit/               Unit-Tests (ohne Datenbank)
   test/integration/        Integrationstests mit Testcontainers
@@ -41,6 +44,7 @@ docker/                    Konfiguration für Hilfsdienste (Mosquitto)
 | `pnpm test:e2e` | Node-RED-Szenarien gegen die laufende Umgebung (`NODE_RED_URL`, Standard `http://localhost:1880`) |
 | `pnpm --filter @wms/api db:migrate` | offene Migrationen ausführen (nach `pnpm build`) |
 | `pnpm --filter @wms/api db:migration:create` | neue Migration aus Entity-Änderungen erzeugen |
+| `DATABASE_URL=… apps/api/scripts/new-migration.sh <JJJJMMTTHHMMSS> <name> "<Beschreibung>"` | Migration erzeugen, sprechend benennen, in `index.ts` eintragen und auf Drift prüfen – **leert die Datenbank**, nur mit Wegwerf-DB |
 | `node flows/scripts/build-flows.mjs` | Node-RED-Flows neu erzeugen |
 
 ## Profile der API
@@ -212,6 +216,56 @@ Andere Übergänge werden mit `409 INVALID_STATE_TRANSITION` abgelehnt; jede Ant
 Events: `movement.created|started|released|completed|cancelled` (Schemas in `packages/shared/src/movement-events.ts`).
 
 Noch nicht enthalten: Bewegungsgruppen (Zuteilung an Bediener), automatischer Abschluss, wenn die TU ohne Quittung am Ziel gebucht wird.
+
+## Modul Bestand (`/v1/products`, `/v1/stock`, `/v1/stock-bookings`)
+
+Bestand wird **je Transporteinheit** geführt (keine Mandanten). Ein Bestandsposten ist die Menge eines Produkts auf einer TU, getrennt nach Charge (`lot`) und Mindesthaltbarkeit (`bestBefore`); gleiche Merkmale werden zusammengeführt.
+
+- **Produkte** `POST /v1/products` `{ sku, description?, baseUnit, overdeliveryAllowed? }`; Bestand wird in der Basiseinheit geführt und erfasst (`UNIT_MISMATCH` sonst). Die Basiseinheit ist nur änderbar, solange kein Bestand existiert (`PRODUCT_UNIT_IN_USE`). Produkte werden nicht gelöscht.
+- **Bestand** `GET /v1/stock?barcode=…|sku=…` – Posten mit TU, Platz, Menge, Charge, MHD.
+- **Journal** `GET /v1/stock-bookings?sku=…&barcode=…&reference=…` – jede Änderung, neueste zuerst; SKU und Barcode bleiben als Text erhalten. Typen: `RECEIPT` (Zugang), `CORRECTION`.
+- **Korrektur** `POST /v1/stock/{id}/corrections` `{ "delta": { "amount": "-2", "unit": "PCS" }, "reason": "Bruch" }` – vorzeichenbehaftet, Grund Pflicht; negativer Bestand wird abgelehnt (`STOCK_INSUFFICIENT`), ein Posten auf 0 wird entfernt (`removed: true`).
+- **Löschschutz:** Eine TU mit Bestand kann nicht gelöscht werden (Einwand `stock`).
+
+Zugänge entstehen nur über den Wareneingang. Buchungen sperren die TU-Zeile (`FOR UPDATE`), parallele Zugänge auf dieselbe TU gehen nicht verloren.
+
+Events: `product.created|updated`, `stock.received`, `stock.corrected` (`packages/shared/src/inventory-events.ts`).
+
+## Modul Wareneingang (`/v1/receiving-orders`, `/v1/receiving-blind-captures`)
+
+**Avis** `POST /v1/receiving-orders`:
+
+```json
+{ "orderId": "WE-4711", "supplier": "Lieferant A", "positions": [
+  { "kind": "quantity", "sku": "SKU-A", "quantity": { "amount": "10", "unit": "PCS" } },
+  { "kind": "unit", "barcode": "P1", "typeCode": "EURO" } ] }
+```
+
+Mengenpositionen erwarten eine Menge eines Produkts, TU-Positionen eine ganze TU eines Typs (`typeCode` Pflicht, erwarteter `barcode` z. B. SSCC optional). Positionsnummern werden vergeben, wenn sie fehlen.
+
+**Erfassen** `POST /v1/receiving-orders/{orderId}/captures`:
+
+- Menge: `{ kind: "quantity", sku, quantity, unit: { barcode? | typeCode? }, location, lot?, bestBefore?, putawayGroup? }` – bucht auf eine vorhandene TU oder legt eine neue an (Barcode `TU0000000001`). Die Position wird automatisch gewählt (erste offene mit ausreichender Restmenge). Mehr als avisiert nur, wenn das Produkt es erlaubt (`OVERDELIVERY_NOT_ALLOWED` mit Restmengen, sonst `overdelivered: true`).
+- TU: `{ kind: "unit", barcode, typeCode?, location }` – eine vorhandene TU wird physisch auf den Platz gebucht, sonst angelegt.
+- Mit `putawayGroup` wird direkt eine Einlagerbewegung (`INBOUND`) angelegt bzw. eine offene wiederverwendet (`movementNumber`).
+- Bestand bekommt den Bezug `receiving:<orderId>/<posNo>`.
+
+**Zustände:** Position `OPEN → IN_PROGRESS → COMPLETED`, außerdem `SHORT` (mit Fehlmenge geschlossen) und `CANCELLED`. Der Auftrag folgt aus den Positionen: `OPEN`, `IN_PROGRESS`, `COMPLETED`, `PARTIALLY_COMPLETED` (mindestens eine Fehlmenge oder Storno neben Erfasstem), `CANCELLED`.
+
+| Aktion | Endpunkt | Bedingung |
+|---|---|---|
+| Position stornieren | `POST …/{orderId}/positions/{posNo}/cancel` `{ reason? }` | nur unberührt (`POSITION_NOT_OPEN`) |
+| Position schließen | `POST …/{orderId}/positions/{posNo}/close` `{ reason? }` | nur teilweise erfasst (`POSITION_NOT_IN_PROGRESS`) → `SHORT` |
+| Auftrag stornieren | `POST …/{orderId}/cancel` | nur ohne Erfassungen (`CANCELLATION_DENIED`) |
+| Auftrag abschließen | `POST …/{orderId}/complete` | schließt teilweise erfasste, storniert unberührte Positionen |
+
+Erfassungen auf einen abgeschlossenen Auftrag: `409 ORDER_CLOSED`. Parallele Erfassungen auf denselben Auftrag werden über eine Zeilensperre des Auftrags serialisiert. `GET …/{orderId}/captures` listet die Erfassungen.
+
+**Ohne Avis** `POST /v1/receiving-blind-captures` `{ sku, quantity, unit, location, lot?, bestBefore? }` – Bezug `receiving:blind`.
+
+Events: `receiving-order.created|state-changed`, `receiving-position.state-changed`, `receiving.captured` (`packages/shared/src/receiving-events.ts`).
+
+Noch nicht enthalten: Qualitätsprüfung/Sperrbestand, Etikettendruck, Lieferanten-Stammdaten, Rückmeldung an ein ERP.
 
 ## Events
 

@@ -86,32 +86,35 @@ export class TransportUnitService implements OnModuleInit {
   }
 
   create(input: CreateTransportUnit): Promise<PlacementOutcome> {
-    return this.em.transactional(async (tx) => {
-      const type = await this.types.load(tx, input.typeCode);
-      this.assertPayload(type, input.weight);
-      const target = await this.lookup.resolve(tx, input.location, { lock: true });
-      const barcode = input.barcode ?? (await this.nextBarcode(tx));
-      if ((await tx.count(TransportUnit, { barcode })) > 0) {
-        throw new ConflictError('TU_EXISTS', `Transporteinheit [${barcode}] existiert bereits`, { barcode });
-      }
-      const prepared = await this.placement.prepareNew(tx, type, input.weight?.amount ?? null);
-      const { violations } = (await this.placement.evaluate(tx, prepared, null, [target])).get(target.id)!;
-      if (input.mode === 'checked' && violations.length > 0) {
-        throw placementRejected(violations);
-      }
-      const unit = tx.create(TransportUnit, {
-        id: randomUUID(),
-        barcode,
-        type,
-        state: input.state,
-        location: target,
-        target: null,
-        parent: null,
-        weightKg: input.weight?.amount ?? null,
-      });
-      this.outbox.record(tx, TransportUnitCreatedEvent, { ...transportUnitSnapshot(unit), mode: input.mode, violations });
-      return { unit, violations };
+    return this.em.transactional((tx) => this.createIn(tx, input));
+  }
+
+  /** Wie `create`, aber innerhalb einer bestehenden Transaktion (z. B. im Wareneingang). */
+  async createIn(tx: EntityManager, input: CreateTransportUnit): Promise<PlacementOutcome> {
+    const type = await this.types.load(tx, input.typeCode);
+    this.assertPayload(type, input.weight);
+    const target = await this.lookup.resolve(tx, input.location, { lock: true });
+    const barcode = input.barcode ?? (await this.nextBarcode(tx));
+    if ((await tx.count(TransportUnit, { barcode })) > 0) {
+      throw new ConflictError('TU_EXISTS', `Transporteinheit [${barcode}] existiert bereits`, { barcode });
+    }
+    const prepared = await this.placement.prepareNew(tx, type, input.weight?.amount ?? null);
+    const { violations } = (await this.placement.evaluate(tx, prepared, null, [target])).get(target.id)!;
+    if (input.mode === 'checked' && violations.length > 0) {
+      throw placementRejected(violations);
+    }
+    const unit = tx.create(TransportUnit, {
+      id: randomUUID(),
+      barcode,
+      type,
+      state: input.state,
+      location: target,
+      target: null,
+      parent: null,
+      weightKg: input.weight?.amount ?? null,
     });
+    this.outbox.record(tx, TransportUnitCreatedEvent, { ...transportUnitSnapshot(unit), mode: input.mode, violations });
+    return { unit, violations };
   }
 
   /**
