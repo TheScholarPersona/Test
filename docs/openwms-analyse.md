@@ -418,6 +418,63 @@ Technische Leitplanken:
 5. **Flows versionieren:** Node-RED-Projects-Funktion (Git); produktive Flows im Monorepo unter `flows/`.
 6. **Absicherung:** `adminAuth` aktiv, Node-RED nicht öffentlich erreichbar, Zugangsdaten nur in Node-RED-Credentials, nicht in Flows.
 
+### 5.1b Strategie- und Regelwerk (Einlagerung, Auslagerung, Routing, …)
+
+**Ziel:** Lagerstrategien sind konfigurierbar, ohne den Kern umzuprogrammieren, bleiben aber typsicher, testbar und nachvollziehbar.
+
+**Vorbild in OpenWMS:** nur Ansätze – Putaway extern und privat (`MVL/impl/PutawayAdapter.java:66`), Zielumleitung per Voter-Kette (`TMS/impl/redirection/TargetRedirector.java:49`), feste Startreihenfolge (`TMS/impl/state/TransportStartComparator.java:45`), Typauflösung (`MVL/spi/MovementTypeResolver`), einfache Allokation (`CSL/transport/allocation/spi/SimpleGenericAllocator.java`).
+
+#### Entscheidungspunkte
+
+| Entscheidungspunkt | Frage | Mitgelieferte Strategien (Beispiele) | Ab Schritt |
+|---|---|---|---|
+| **Einlagerung (Putaway)** | Auf welchen Platz kommt diese TU? | erster freier Platz (nach `sortOrder`), nächster Platz zum Einlagerpunkt, ABC-Zonen, Festplatz je Produkt, Zusammenlagern gleicher Produkte/Chargen, gleichmäßige Gassenverteilung | 3 |
+| **Auslagerung / Bestandsauswahl** | Welcher Bestand wird für einen Bedarf genommen? | FIFO, FEFO (Verfallsdatum), LIFO, Anbruch zuerst, ganze TU bevorzugen, kürzester Weg, Mindestrestlaufzeit | 8 |
+| **Routing** | Über welche Stationen/Fördertechnik fährt die TU zum Ziel? | statische Routen je Quelle/Ziel, kürzester Weg im Wegegraph, Umleitung bei gesperrten Abschnitten, Lastverteilung auf parallele Strecken | 5 |
+| **Zielumleitung** | Ziel gesperrt oder voll – was jetzt? | Ersatzplatz in gleicher Gruppe, Rückfall auf Gruppe, Klärplatz | 5 |
+| **Priorisierung** | In welcher Reihenfolge werden Aufträge gestartet? | Priorität + Anlagezeit (wie OpenWMS), Fälligkeit, Wellen | 5 |
+| **Nachschub** | Wann und wie viel wird nachgefüllt? | Min/Max je Festplatz, bedarfsgesteuert | 6 |
+| **Leergutbehandlung** | Wohin mit leeren TUs? | Leergutpuffer, Stapelplatz je TU-Typ | 3 |
+
+#### Aufbau (drei Ebenen)
+
+```mermaid
+flowchart LR
+    REQ[Anfrage<br/>z. B. Einlagerplatz für TU X] --> SEL{Strategie-Zuordnung<br/>Entscheidungstabelle}
+    SEL -->|"Produkt=Gefahrgut"| S1[Strategie A<br/>+ Parameter]
+    SEL -->|"Zone=Tiefkühl"| S2[Strategie B<br/>+ Parameter]
+    SEL -->|sonst| S3[Standard-Strategie]
+    S1 & S2 & S3 --> PIPE
+    subgraph PIPE[Ablauf jeder Strategie]
+        direction TB
+        C[1 · Kandidaten erzeugen] --> F[2 · harte Regeln filtern<br/>Kapazität, Gewicht, Platzierung,<br/>Sperren, Gefahrgut]
+        F --> W[3 · weiche Kriterien bewerten<br/>Gewichte: Weg, ABC, Füllgrad]
+        W --> P[4 · besten Kandidaten wählen]
+    end
+    PIPE --> RES[Ergebnis + Begründung<br/>Decision Trace]
+```
+
+1. **Strategien als Code (TypeScript-Plugins).** Jede Strategie implementiert eine Schnittstelle je Entscheidungspunkt, z. B. `PutawayStrategy.decide(ctx): Decision<Location>`, und deklariert ihre **Parameter als Zod-Schema** (z. B. `{ zone: string, preferLowerLevels: boolean }`). Neue Strategien = neues Modul, ohne Änderung des Kerns.
+2. **Konfiguration in der Datenbank.** Welche Strategie mit welchen Parametern gilt, steht in einer **Entscheidungstabelle**: Bedingungen (Produktklasse, ABC-Klasse, TU-Typ, Zone, Mandant, Auftragsart, Uhrzeit) → Strategie + Parameter, ausgewertet nach Priorität, mit Rückfallzeile. Bedingungen sind ein **eigenes, typisiertes JSON-Modell** (Vergleiche, `in`, `und/oder`) – kein frei ausführbarer Code, damit keine Sicherheitslücke und keine untestbare Logik entsteht.
+3. **Harte Regeln vs. weiche Kriterien.** Harte Regeln (Kapazität, Gewicht, Stapel-/Platzierungsregeln aus Kap. 3.5, Sperren) gelten **immer und für alle Strategien** – eine Strategie kann sie nicht abschalten. Weiche Kriterien sind gewichtete Bewertungen und frei konfigurierbar.
+
+#### Querschnittsanforderungen
+
+| Anforderung | Umsetzung |
+|---|---|
+| **Nachvollziehbarkeit** | Jede Entscheidung liefert einen *Decision Trace*: gewählte Strategie, Regelzeile, Kandidaten, Ausschlussgründe, Punktwerte. Wird gespeichert und ist per API abrufbar („Warum kam die Palette auf 01-03-12?“) |
+| **Simulation** | Endpunkt `POST /v1/strategies/{punkt}/simulate`: Entscheidung berechnen, ohne zu buchen – zum Testen neuer Regeln |
+| **Versionierung** | Regelsätze mit Version, Gültigkeitszeitraum und Audit (wer hat wann was geändert); Aktivierung erst nach Simulation |
+| **Gleichzeitigkeit** | Gewählter Platz wird im selben Commit reserviert (Optimistic Locking), damit zwei TUs nicht denselben Platz bekommen |
+| **Leistung** | Kandidaten per SQL vorfiltern (Zone, Typ, frei), erst danach im Code bewerten |
+| **Tests** | Jede Strategie mit Tabellen-Tests (Lagerzustand → erwarteter Platz) |
+
+#### Rolle von Node-RED bei Strategien
+
+- **Standard:** Strategien laufen im Kern. Node-RED reagiert nur auf Ergebnisse (z. B. Fahrauftrag an die SPS senden).
+- **Optional – externe Strategie:** Für Sonderfälle kann eine Strategie `external-http` einen Node-RED-Flow (oder ein anderes System) per HTTP fragen. Pflicht: kurzes Timeout, **Ergebnis wird gegen die harten Regeln geprüft**, bei Fehler oder Zeitüberschreitung greift die Rückfallstrategie. So kann Node-RED Regeln ergänzen, aber keine verletzen.
+- **Nicht:** Regelkonfiguration in Node-RED pflegen – die gehört versioniert in den Kern.
+
 ### 5.2 Eigenbau oder Wiederverwendung
 
 | Baustein | Entscheidung | Begründung |
@@ -442,13 +499,15 @@ Reihenfolge wie gewünscht. Eine fachliche Abhängigkeit ist zu beachten: Der Wa
 | 0 | **Grundgerüst** | pnpm-Monorepo, TypeScript strict, NestJS, MikroORM + Migrationen, Zod → OpenAPI, Outbox + MQTT-Publisher, Vitest, Testcontainers, CI; `docker compose` mit PostgreSQL, Mosquitto, Node-RED | – | `pnpm test` grün, Modulgrenzen geprüft, Test-Event kommt in Node-RED an |
 | 1 | **Lagerstruktur** | `LocationType`, `LocationGroup` (Hierarchie), `Location` (area/aisle/x/y/z, erpCode, plcCode), Sperren In/Out/Permanent | L-01 … L-05, plus **L-06 aktiv** | Anlegen/Abfragen/Sperren per REST; Sperrvererbung getestet |
 | 2 | **Transporteinheiten** | `TransportUnitType`, `TransportUnit`, Barcode-Generator, Bewegen, Zustände, Fehler, Reservierungen, Eltern/Kind | T-01, T-02, **T-03/T-04 als echte Policies** (Kapazität, Gewicht, Platzierung, Stapelung), T-05 | TU anlegen, bewegen, blockieren; Policy-Verletzungen liefern fachliche Fehler; MOVED-Event enthält korrekten Vorplatz |
-| 3 | **Lagerbewegungen** | `Movement`, `MovementGroup`, Typen, Handler je Typ, einfache Putaway-Strategie | M-01 … M-04 mit explizitem Zustandsautomaten | Movement anlegen, bewegen, abschließen, stornieren; ungültige Übergänge abgelehnt |
+| 2a | **Strategie-Kern** | Strategie-Schnittstellen, Registry, Entscheidungstabelle mit typisiertem Bedingungsmodell, harte Regeln als gemeinsame Filter, Decision Trace, Simulations-Endpunkt, Versionierung (Kap. 5.1b) | T-03/T-04/L-06 als harte Regeln | Beispielstrategie wählt nachvollziehbar; Regeländerung per Simulation prüfbar; harte Regeln nicht abschaltbar |
+| 3 | **Lagerbewegungen** | `Movement`, `MovementGroup`, Typen, Handler je Typ; **erste Einlagerstrategien** (erster freier Platz, nächster Platz, ABC-Zone) und Leergutstrategie | M-01 … M-04 mit explizitem Zustandsautomaten | Movement anlegen, bewegen, abschließen, stornieren; ungültige Übergänge abgelehnt |
 | 4 | **Wareneingang** | `ReceivingOrder`, Mengen- und TU-Positionen, Erfassung (gegen Auftrag, blind), Abschluss; **minimales Produkt + Bestandsbuchung** | R-01 … R-07 | Avis anlegen, Teil-/Vollerfassung, Überbuchung nur bei Freigabe, Auftragsstatus korrekt abgeleitet |
-| 5 | **Transportaufträge** | `TransportOrder`, Zustandsautomat, Initialisierung nach Priorität, Start-Steuerung, Zielumleitung, Löschschutz für TUs | O-01 … O-07, plus definierte Behandlung von `INTERRUPTED` | Auftrag durchläuft CREATED→FINISHED; zweiter Start für dieselbe TU abgelehnt; gesperrtes Ziel verhindert Start |
+| 5 | **Transportaufträge** | `TransportOrder`, Zustandsautomat, Start-Steuerung, Löschschutz für TUs; **Routing-, Umleitungs- und Priorisierungsstrategien** (Wegegraph aus Stationen/Abschnitten) | O-01 … O-07, plus definierte Behandlung von `INTERRUPTED` | Auftrag durchläuft CREATED→FINISHED; zweiter Start für dieselbe TU abgelehnt; gesperrtes Ziel verhindert Start |
 | 6 | **Bestandsführung** | Produkte, Einheiten/Umrechnungen, Packaging Units (Bestand je TU/Platz), Bestandsbuchungen als Journal, Reservierung, Inventur-Grundlage | neu zu definieren (Original privat) | Bestand pro Produkt/Platz/TU abfragbar, jede Änderung als Buchung nachvollziehbar |
+| 8 | **Auslagerung** | Auslageraufträge (Bedarf: Produkt + Menge), Bestandsauswahl per **Auslagerstrategie** (FIFO, FEFO, LIFO, Anbruch zuerst, ganze TU), Reservierung, Erzeugung von Movements/Transportaufträgen | neu (Picking/Shipping im Original privat) | Bedarf wird gemäß Strategie und Begründung bedient; reservierter Bestand nicht doppelt vergeben |
 | 7 | **Node-RED-Nodes und Beispiel-Flows** | npm-Paket mit Config-Node und fachlichen Nodes; Beispiel-Flows: ERP-CSV → Wareneingang, Scan → TU bewegen, Event → Etikett/Meldung | Leitplanken aus 5.1a | Nodes in Node-RED installierbar; Flows laufen gegen die lokale Umgebung; Regelverletzung erscheint als Fehler im Flow |
 
-Je Schritt: Migration, Domänenmodell mit Unit-Tests, Service, REST-Controller mit Zod-Schema/OpenAPI, Domain-Events über Outbox → MQTT, Integrationstest mit Testcontainers. Weil jeder Schritt seine Events veröffentlicht, kann Node-RED schon ab Schritt 1 für Prototypen genutzt werden; Schritt 7 macht daraus wiederverwendbare Nodes.
+Je Schritt: Migration, Domänenmodell mit Unit-Tests, Service, REST-Controller mit Zod-Schema/OpenAPI, Domain-Events über Outbox → MQTT, Integrationstest mit Testcontainers. Weil jeder Schritt seine Events veröffentlicht, kann Node-RED schon ab Schritt 1 für Prototypen genutzt werden; Schritt 7 macht daraus wiederverwendbare Nodes. Schritt 8 (Auslagerung) war im ursprünglichen Umfang nicht enthalten, ist aber Voraussetzung für Auslagerstrategien; Schritt 7 kann auch nach Schritt 8 erfolgen.
 
 ### 5.4 Nicht 1:1 übernehmen – gefundene Schwachstellen
 
