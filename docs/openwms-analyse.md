@@ -18,6 +18,7 @@ Stand der Analyse: 16.11.2026 · Methode: direkte Quellcodeanalyse öffentlicher
 | Viele Lagerregeln (max. TUs pro Platz, Maximalgewicht, Stapel-/Platzierungsregeln) werden **gespeichert, aber im Open-Source-Code nicht durchgesetzt** – nur optionale SPI-Hooks ohne Implementierung. | Diese Regeln sind der wichtigste fachliche Eigenbau-Anteil. |
 | Mehrere Fehler im Originalcode gefunden (Kap. 6.4). | Nicht 1:1 übernehmen. |
 | Schema entsteht per Hibernate `ddl-auto` (keine Flyway/Liquibase-Migrationen). | Im Rebuild eigene, versionierte Migrationen. |
+| Das TMS-Routing ist keine Wegsuche, sondern hierarchische Nachschlagetabellen (Route, nächster Schritt, Action) plus BPMN-Workflows je Anlagen-Telegramm (Kap. 3.7). | Prinzip übernehmen; Workflows durch TypeScript-Handler und **Node-RED-Flows** ersetzen. |
 
 **Empfehlung (aktualisiert):** Eigene Anwendung in **TypeScript** als **modularer Monolith** (Node.js, NestJS, PostgreSQL, MikroORM, Zod) mit denselben fachlichen Modulgrenzen wie OpenWMS. **Node-RED** wird als Integrationsschicht angebunden (MQTT-Events + REST-API), die Geschäftsregeln bleiben im Kern. Code fachlich neu schreiben, OpenWMS als Referenz für Konzepte und Zustandsautomaten nutzen. Grund für TypeScript statt Java: geringe Java-Erfahrung im Team, vorhandene Node-RED-Erfahrung, eine Sprache für Backend, Frontend und Node-RED-Nodes.
 
@@ -38,6 +39,10 @@ Stand der Analyse: 16.11.2026 · Methode: direkte Quellcodeanalyse öffentlicher
 | *zusätzlich:* `org.openwms.wms.receiving.lib` | öffentlich | 2025-03-30 (`1951f35`) | 175 / 14 |
 | *zusätzlich:* `org.openwms.wms.movements.lib` | öffentlich | 2026-02-20 (`f9a87f2`) | 82 / 6 |
 | *zusätzlich:* `org.openwms.parent` | öffentlich | 2026-07-13 (`52a8829`) | Parent-POM |
+| *zusätzlich (Routing):* `org.openwms.tms.routing` | öffentlich | 2026-02-19 (`11251f3`) | 1 / – (+ BPMN-Beispiele) |
+| *zusätzlich (Routing):* `org.openwms.tms.routing.lib` | öffentlich | 2026-02-19 (`2110773`) | 56 / 7 |
+| *zusätzlich (Routing):* `org.openwms.tms.routing.osip` | öffentlich | 2026-02-19 (`d1b19c8`) | 31 / 0 |
+| *zusätzlich (Routing):* `org.openwms.core.process.execution` | öffentlich | 2026-02-19 | Workflow-Ausführung |
 
 Nicht zugänglich (privat, bewusst nicht versucht zu umgehen): `org.openwms.wms.inventory(.lib)`, `org.openwms.wms.shipping`, `org.openwms.common.api` u. a.
 Laut `org.openwms/README.md` sind u. a. privat: Inventory Service, Picking Library (GPLv3), Putaway Library (GPLv3), WMS Tasks, Shipping, Partner, SAP-/Dynamics-Adapter, Printing.
@@ -347,6 +352,82 @@ flowchart LR
 
 Hinweis: Receiving- und Movements-Lib duplizieren einzelne Klassen aus Common (z. B. `org/openwms/common/transport/api/commands/*`, `Barcode`), statt sie als Abhängigkeit zu beziehen.
 
+### 3.7 TMS Routing (Materialflusssteuerung)
+
+Analysiert (alle öffentlich, Apache-2.0, Parent 27.7.1): `org.openwms.tms.routing` (Starter, nur 1 Java-Datei + BPMN-Beispiele), `org.openwms.tms.routing.lib` (Logik, 56 Klassen, 7 Tests, Stand 2026-02-19), `org.openwms.tms.routing.osip` (Telegramm-Handler, 31 Klassen, keine Tests), `org.openwms.core.process.execution` (Workflow-Ausführung). Abkürzungen: `RTL` = `org.openwms.tms.routing.lib/src/main/java/org/openwms/tms/routing`, `OSP` = `org.openwms.tms.routing.osip/src/main/java/org/openwms/common/comm/osip`.
+
+**Zweck:** Steuert TUs in automatischen Anlagen (Fördertechnik, Regalbediengeräte). Eine Anlage (SPS) meldet per Telegramm „TU X steht an Platz Y“, das Routing entscheidet, was zu tun ist, und antwortet mit dem nächsten Ziel. **Wichtig:** Es ist **keine Wegsuche in einem Graphen**, sondern eine Kombination aus hierarchischen Nachschlagetabellen und konfigurierbaren BPMN-Workflows.
+
+#### Datenmodell
+
+| Entität | Tabelle | Felder | Bedeutung |
+|---|---|---|---|
+| `RouteImpl` | `TMS_RSRV_ROUTE` | `routeId`, `sourceLocation`, `targetLocation`, `sourceLocationGroupName`, `targetLocationGroupName`, `enabled` (`RTL/RouteImpl.java:44–58`) | Route von Quelle (Platz oder Gruppe) nach Ziel (Platz oder Gruppe); Sonderrouten `_DEFAULT` und `_NO_ROUTE` |
+| `RouteDetails` | `TMS_RSRV_ROUTE_DETAILS` | `route`, `pos`, `source`, `next` (`RTL/routes/RouteDetails.java:44–57`) | Nächster-Schritt-Tabelle: „steht die TU an `source`, schicke sie zu `next`“ |
+| `Action` | `TMS_RSRV_ACTION` | `route`, `actionType`, `locationKey`, `locationGroupName`, `programKey`, `flexField1–5`, `enabled` (`RTL/Action.java:45–63`) | Zuordnung (Telegrammtyp + Route + Ort) → auszuführender Workflow mit Parametern |
+| `LocationEO` | `TMS_RSRV_LOCATION` | `locationId`, `locationGroupName`, `markForDeletion` | lokales Replikat der Plätze aus Common |
+
+#### Ablauf einer Anfrage
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant SPS as SPS / Anlage
+    participant OSIP as osip-Handler
+    participant RS as Route-Suche
+    participant MX as Action-Matrix
+    participant WF as Workflow (BPMN)
+    participant COM as common / tms
+    SPS->>OSIP: REQ_ (Barcode, aktueller Platz)
+    OSIP->>COM: Platz + Gruppe laden, STARTED-Transportauftrag der TU suchen
+    OSIP->>RS: Route für (Quelle, Ziel, Zielgruppe) des Auftrags
+    RS-->>OSIP: Route oder _NO_ROUTE
+    OSIP->>MX: Action für (Typ REQ_, Route, Platz, Gruppe)
+    MX-->>OSIP: programKey + flexFields
+    OSIP->>WF: Workflow starten (Kontext: Telegramm, Auftrag, Route, Flex-Felder)
+    WF->>COM: z. B. TU buchen, Transportauftrag anlegen
+    WF->>SPS: RES_ (nächstes Ziel aus RouteDetails oder Flex-Feld)
+```
+
+Beleg: `OSP/ItemMessageHandler.java:61–93` – ohne STARTED-Auftrag oder ohne passende Route wird `_NO_ROUTE` verwendet (`:79`, `:86–88`, Ausnahme bewusst ignoriert).
+
+#### Route-Suche (`RTL/routes/impl/RouteSearchAlgorithmImpl.java:71ff.`, Profil `!SIMPLE`)
+
+Vom Spezifischen zum Allgemeinen, nur `enabled`-Routen:
+1. Quellplatz → Zielplatz
+2. Quellplatz → Zielgruppe
+3. Quellplatz → Gruppe des Zielplatzes, dann deren Elterngruppen
+4. Gruppe des Quellplatzes → Zielplatz, dann Elterngruppen der Quelle
+5. Gruppe der Quelle → Zielgruppe, jeweils Eltern auf beiden Seiten
+6. keine Route → `NoRouteException`
+
+Alternative `ExplicitRouteSearch` (Profil `SIMPLE`): nur exakte Treffer Platz→Platz bzw. Platz→Gruppe.
+
+#### Action-Matrix (`RTL/spi/ActivitiMatrix.java:71–118`, `:121`)
+
+Suche nach (Telegrammtyp, Route, Platz, Gruppe), wieder vom Spezifischen zum Allgemeinen: Platz + Route → Platz + `_DEFAULT`-Route → Gruppe des Platzes und deren Elterngruppen → übergebene Gruppe und Eltern → dieselbe Suche mit `_DEFAULT`-Route. Ergebnis ist ein `programKey` (BPMN-Prozess-ID) plus fünf freie Parameter (`flexField1–5`).
+
+#### Nächster Schritt (`RTL/routes/impl/RouteServiceImpl.java:89–115`)
+
+`sendToNextLocation()` sucht in `RouteDetails` der aktuellen Route den Eintrag mit `source = aktueller Platz` und sendet dessen `next`; Rückfall auf die `_DEFAULT`-Route. `changeRoute(routeId)` erlaubt Workflows, die Route zu wechseln.
+
+#### Workflows und Telegramme
+
+- Workflows sind BPMN-Dateien, deren Service-Tasks Spring-Beans per Ausdruck aufrufen, z. B. `#{transportUnitApi.createTU(in.msg.barcode, in.msg.actualLocation, "PALLET", false)}` und `#{responder.sendToLocation(in.msg.flexField1)}` (`org.openwms.tms.routing/src/main/resources/flowable/processes/CP001.bpmn20.xml`). Ziel laut README: Materialfluss ändern **ohne Neukompilierung und ohne Deployment**.
+- Unterstützte Telegramme (OSIP): `REQ_` (Zielanfrage), `RES_` (Antwort), `LOCU` (Platzstatus), `SYSU` (Systemstatus, z. B. Gruppenstatus aus Fehlercode – `CP003`), `UPD_` (Bewegungsmeldung), `ERR_` (Fehler). Eingang per AMQP oder REST (`/req`, `/locu`, `/sysu`, `/upd`).
+- Zusätzlich zeitgesteuerte Workflows (`org.openwms.core.process.execution/.../timing/TimeTriggeredWorkflowExecutor.java`).
+- REST-Verwaltung: `/routes`, `/actions`, `/workflows` (`RTL/ui/*Resource.java`).
+
+#### Schwachstellen
+
+| # | Stelle | Problem |
+|---|---|---|
+| R1 | `RTL/ui/RouteResource.java:70,76,83` und `RTL/ui/ActionResource.java:69,75,82` | `@CacheEvict("routes")`/`("actions")` **ohne `allEntries = true`**: Der Cache-Schlüssel der Suche ist (Quelle, Ziel, Gruppe) bzw. (Typ, Route, Platz, Gruppe), gelöscht wird aber unter `pKey`/VO. Geänderte Routen und Actions wirken erst nach Neustart bzw. Cache-Ablauf. |
+| R2 | `RTL/routes/impl/RouteSearchAlgorithmImpl.java:57,72–73` | Alle LocationGroups werden **einmalig** in ein Feld geladen, die Platz→Gruppe-Zuordnung wird nie geleert. Neue oder umgehängte Gruppen führen bis zum Neustart zu `NotFoundException` bzw. falschen Routen. |
+| R3 | README vs. `org.openwms.core.process.execution` | README nennt Flowable als Standard, die Ausführungsbibliothek enthält aber nur Executoren für Camunda (`!FLOWABLE && !ACTIVITI`) und Activiti; ein Flowable-Executor fehlt im öffentlichen Code. |
+| R4 | `OSP/ItemMessageHandler.java:86–88` | `NoRouteException` wird still verschluckt – fehlende Routenkonfiguration fällt nur über `_NO_ROUTE`-Actions auf. |
+| R5 | `org.openwms.tms.routing.osip` | keine Tests für die Telegramm-Verarbeitung. |
+
 ---
 
 ## 4. Eingesetzte Werkzeuge (REA)
@@ -430,7 +511,8 @@ Technische Leitplanken:
 |---|---|---|---|
 | **Einlagerung (Putaway)** | Auf welchen Platz kommt diese TU? | erster freier Platz (nach `sortOrder`), nächster Platz zum Einlagerpunkt, ABC-Zonen, Festplatz je Produkt, Zusammenlagern gleicher Produkte/Chargen, gleichmäßige Gassenverteilung | 3 |
 | **Auslagerung / Bestandsauswahl** | Welcher Bestand wird für einen Bedarf genommen? | FIFO, FEFO (Verfallsdatum), LIFO, Anbruch zuerst, ganze TU bevorzugen, kürzester Weg, Mindestrestlaufzeit | 8 |
-| **Routing** | Über welche Stationen/Fördertechnik fährt die TU zum Ziel? | statische Routen je Quelle/Ziel, kürzester Weg im Wegegraph, Umleitung bei gesperrten Abschnitten, Lastverteilung auf parallele Strecken | 5 |
+| **Routing** | Über welche Stationen/Fördertechnik fährt die TU zum Ziel? | **tabellenbasiert wie OpenWMS** (Route-Suche über Platz-/Gruppenhierarchie + Nächster-Schritt-Tabelle, Kap. 3.7); später optional kürzester Weg im Wegegraph, Umleitung bei gesperrten Abschnitten, Lastverteilung auf parallele Strecken | 5 |
+| **Anlagenreaktion (Action)** | Was passiert, wenn die Anlage „TU X an Platz Y“ meldet? | Action-Matrix (Telegrammtyp + Route + Platz/Gruppe → Programm + Parameter) | 5 |
 | **Zielumleitung** | Ziel gesperrt oder voll – was jetzt? | Ersatzplatz in gleicher Gruppe, Rückfall auf Gruppe, Klärplatz | 5 |
 | **Priorisierung** | In welcher Reihenfolge werden Aufträge gestartet? | Priorität + Anlagezeit (wie OpenWMS), Fälligkeit, Wellen | 5 |
 | **Nachschub** | Wann und wie viel wird nachgefüllt? | Min/Max je Festplatz, bedarfsgesteuert | 6 |
@@ -475,6 +557,34 @@ flowchart LR
 - **Optional – externe Strategie:** Für Sonderfälle kann eine Strategie `external-http` einen Node-RED-Flow (oder ein anderes System) per HTTP fragen. Pflicht: kurzes Timeout, **Ergebnis wird gegen die harten Regeln geprüft**, bei Fehler oder Zeitüberschreitung greift die Rückfallstrategie. So kann Node-RED Regeln ergänzen, aber keine verletzen.
 - **Nicht:** Regelkonfiguration in Node-RED pflegen – die gehört versioniert in den Kern.
 
+### 5.1c Materialfluss-Modul (Ersatz für TMS-Routing)
+
+Übernommen wird das **Prinzip** aus Kap. 3.7, nicht die Umsetzung:
+
+| OpenWMS | Rebuild |
+|---|---|
+| OSIP-Telegramme über AMQP/REST | **Geräte-Ereignisse** mit eigenem, versioniertem Schema (`request`, `arrived`, `location-status`, `system-status`, `error`), Eingang per MQTT oder REST. Node-RED übersetzt das jeweilige Anlagenprotokoll (OSIP, OPC UA, Modbus, herstellerspezifisch) in diese Ereignisse. |
+| Route-Suche mit Hierarchie-Fallback | gleiche Suchreihenfolge, aber **eine** SQL-Abfrage über die Gruppen-Hierarchie (rekursive CTE) statt vieler Einzelabfragen; kein langlebiger Speicher-Cache (Schwachstelle R2) |
+| `RouteDetails` (source → next) | `route_step` mit gleicher Bedeutung, zusätzlich `enabled` und optionale Bedingung (z. B. nur bei TU-Typ X) |
+| Action-Matrix → BPMN `programKey` + `flexField1–5` | `flow_action`: (Ereignistyp, Route, Platz/Gruppe) → **Programm** + Parameter als typisiertes JSON (Zod-Schema je Programm) statt fünf Freitextfeldern |
+| BPMN-Workflow (Flowable/Camunda/Activiti) | **Programm-Typen:** (a) eingebaute TypeScript-Handler (TU buchen, Transportauftrag anlegen, nächstes Ziel senden, Gruppe sperren); (b) **Node-RED-Flow**: Kern veröffentlicht `wms/flow/program/<programKey>` mit Kontext, Node-RED führt aus und antwortet über die API |
+| Cache-Invalidierung per Schlüssel (fehlerhaft, R1) | Konfigurationsänderungen erhöhen eine Versionsnummer; Caches werden komplett verworfen |
+| `NoRouteException` still ignoriert (R4) | „keine Route“ ist ein eigenes Ergebnis im Decision Trace und löst ein Ereignis aus |
+
+```mermaid
+flowchart LR
+    SPS[SPS / Fördertechnik] <-->|OSIP, OPC UA, …| NR1[Node-RED<br/>Protokoll-Adapter]
+    NR1 -->|"Geräte-Ereignis (MQTT/REST)"| MF[Materialfluss-Modul]
+    MF --> RS[Route-Suche]
+    MF --> AM[Action-Matrix]
+    AM -->|eingebautes Programm| H[TS-Handler<br/>TU buchen, TO anlegen,<br/>nächstes Ziel]
+    AM -->|Node-RED-Programm| NR2[Node-RED-Flow]
+    H & NR2 -->|nächstes Ziel| NR1
+    MF --> DT[(Decision Trace)]
+```
+
+Damit erfüllt Node-RED die Rolle, für die OpenWMS BPMN einsetzt – Materialfluss ändern ohne Neukompilierung –, während Zustände und Regeln im Kern bleiben (Leitplanken aus 5.1a). Eine BPMN-Engine ist im ersten Ausbau nicht nötig.
+
 ### 5.2 Eigenbau oder Wiederverwendung
 
 | Baustein | Entscheidung | Begründung |
@@ -502,8 +612,8 @@ Reihenfolge wie gewünscht. Eine fachliche Abhängigkeit ist zu beachten: Der Wa
 | 2a | **Strategie-Kern** | Strategie-Schnittstellen, Registry, Entscheidungstabelle mit typisiertem Bedingungsmodell, harte Regeln als gemeinsame Filter, Decision Trace, Simulations-Endpunkt, Versionierung (Kap. 5.1b) | T-03/T-04/L-06 als harte Regeln | Beispielstrategie wählt nachvollziehbar; Regeländerung per Simulation prüfbar; harte Regeln nicht abschaltbar |
 | 3 | **Lagerbewegungen** | `Movement`, `MovementGroup`, Typen, Handler je Typ; **erste Einlagerstrategien** (erster freier Platz, nächster Platz, ABC-Zone) und Leergutstrategie | M-01 … M-04 mit explizitem Zustandsautomaten | Movement anlegen, bewegen, abschließen, stornieren; ungültige Übergänge abgelehnt |
 | 4 | **Wareneingang** | `ReceivingOrder`, Mengen- und TU-Positionen, Erfassung (gegen Auftrag, blind), Abschluss; **minimales Produkt + Bestandsbuchung** | R-01 … R-07 | Avis anlegen, Teil-/Vollerfassung, Überbuchung nur bei Freigabe, Auftragsstatus korrekt abgeleitet |
-| 5 | **Transportaufträge** | `TransportOrder`, Zustandsautomat, Start-Steuerung, Löschschutz für TUs; **Routing-, Umleitungs- und Priorisierungsstrategien** (Wegegraph aus Stationen/Abschnitten) | O-01 … O-07, plus definierte Behandlung von `INTERRUPTED` | Auftrag durchläuft CREATED→FINISHED; zweiter Start für dieselbe TU abgelehnt; gesperrtes Ziel verhindert Start |
-| 6 | **Bestandsführung** | Produkte, Einheiten/Umrechnungen, Packaging Units (Bestand je TU/Platz), Bestandsbuchungen als Journal, Reservierung, Inventur-Grundlage | neu zu definieren (Original privat) | Bestand pro Produkt/Platz/TU abfragbar, jede Änderung als Buchung nachvollziehbar |
+| 5 | **Transportaufträge und Materialfluss** | `TransportOrder`, Zustandsautomat, Start-Steuerung, Löschschutz für TUs; Umleitungs- und Priorisierungsstrategien; **Materialfluss-Modul nach Kap. 5.1c**: Routen, Nächster-Schritt-Tabelle, Action-Matrix, Programme als TS-Handler oder Node-RED-Flow, Geräte-Ereignisse (`request`, `arrived`, `location-status`, `error`) | O-01 … O-07, `INTERRUPTED` definiert; Schwachstellen R1–R4 vermieden | Auftrag durchläuft CREATED→FINISHED; zweiter Start für dieselbe TU abgelehnt; gesperrtes Ziel verhindert Start; simulierte Anlagenanfrage liefert nächstes Ziel samt Begründung; Routenänderung wirkt sofort |
+| 6 | **Bestandsführung** | **Bestand je Ladeeinheit (entschieden):** Packaging Unit = Produkt + Menge + Einheit (+ Charge, MHD, Seriennummer optional) **auf genau einer TU**; Platzbestand ergibt sich aus den TUs auf dem Platz. Produkte, Einheiten/Umrechnungen, Buchungsjournal (Zugang, Abgang, Umbuchung zwischen TUs, Korrektur), Reservierung, Inventur-Grundlage | neu zu definieren (Original privat) | Bestand pro Produkt/Platz/TU abfragbar, jede Änderung als Buchung nachvollziehbar |
 | 8 | **Auslagerung** | Auslageraufträge (Bedarf: Produkt + Menge), Bestandsauswahl per **Auslagerstrategie** (FIFO, FEFO, LIFO, Anbruch zuerst, ganze TU), Reservierung, Erzeugung von Movements/Transportaufträgen | neu (Picking/Shipping im Original privat) | Bedarf wird gemäß Strategie und Begründung bedient; reservierter Bestand nicht doppelt vergeben |
 | 7 | **Node-RED-Nodes und Beispiel-Flows** | npm-Paket mit Config-Node und fachlichen Nodes; Beispiel-Flows: ERP-CSV → Wareneingang, Scan → TU bewegen, Event → Etikett/Meldung | Leitplanken aus 5.1a | Nodes in Node-RED installierbar; Flows laufen gegen die lokale Umgebung; Regelverletzung erscheint als Fehler im Flow |
 
@@ -526,8 +636,8 @@ Je Schritt: Migration, Domänenmodell mit Unit-Tests, Service, REST-Controller m
 ### 5.5 Offene Entscheidungen für dich
 
 1. **Monolith vs. Microservices** – Empfehlung modularer Monolith; falls Microservices gewünscht sind, verdoppelt sich der Aufwand für Schritt 0. *(Sprache entschieden: TypeScript; Node-RED als Integrationsschicht.)*
-2. **Bestandsmodell** – Bestand je Packaging Unit (wie OpenWMS-Schnittstellen andeuten) oder je Platz/Produkt-Saldo mit Buchungsjournal? Empfehlung: Packaging Units + Journal.
-3. **Mandantenfähigkeit** (`Account`) von Anfang an oder später?
+2. ~~Bestandsmodell~~ – **entschieden:** Bestand je Ladeeinheit (Packaging Unit auf TU) mit Buchungsjournal.
+3. ~~Mandantenfähigkeit~~ – **entschieden:** nicht im ersten Ausbau. Vorsorge: keine Annahmen im Code, die eine spätere Mandanten-Spalte verhindern (z. B. global eindeutige Barcodes und ERP-Codes nur per eigenem Unique-Index, der sich später um die Mandanten-Spalte erweitern lässt).
 4. **Anlagensteuerung** (`plcCode`, `plcState`, OSIP-Telegramme) – im ersten Ausbau nur als Felder, ohne Treiber?
 5. **Lizenz der eigenen Anwendung** – Apache-2.0 bietet sich an, falls Codeteile übernommen werden.
 
