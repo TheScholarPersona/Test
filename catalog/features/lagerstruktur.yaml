@@ -1,0 +1,220 @@
+# Feature-Katalog – Bereich Lagerstruktur.
+area: lagerstruktur
+
+features:
+  - id: lagerstruktur.platztypen
+    title: Lagerplatztypen pflegen
+    group: lagerstruktur.stammdaten
+    summary: Unterscheidet Platzarten wie Regal, Boden oder Kommissionierplatz – die Grundlage für Platzierungsregeln.
+    description: |
+      Ein Platztyp hat eine eindeutige Kennung und wird jedem Lagerplatz zugeordnet. Platzierungsregeln der
+      Transporteinheiten und Einlagerstrategien beziehen sich auf Platztypen. Typen sind änderbar und lassen sich
+      löschen, solange kein Platz sie nutzt.
+    usage:
+      - channel: api
+        text: "`POST /v1/location-types` (`code`), lesen `GET …/{code}`, ändern `PATCH`, löschen `DELETE`."
+    rules:
+      - Kennung eindeutig; auch bei gleichzeitigem Anlegen kommt genau eine Anfrage durch.
+      - Löschen nur, wenn kein Platz den Typ nutzt (`LOCATION_TYPE_IN_USE`).
+    technical:
+      components:
+        - apps/api/src/modules/layout/application/location-type.service.ts
+        - apps/api/src/modules/layout/http/location-types.controller.ts
+      endpoints:
+        - POST /v1/location-types
+        - GET /v1/location-types/{code}
+        - PATCH /v1/location-types/{code}
+        - DELETE /v1/location-types/{code}
+      events:
+        emits: [location-type.created, location-type.updated, location-type.deleted]
+      notes:
+        - Tabelle `location_type`.
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/layout.integration.test.ts
+        test: legt einen Typ an und lehnt Duplikate ab
+      - kind: integration
+        file: apps/api/test/integration/layout.integration.test.ts
+        test: lässt bei gleichzeitigem Anlegen genau eine Anfrage durch
+      - kind: integration
+        file: apps/api/test/integration/layout.integration.test.ts
+        test: verweigert das Löschen benutzter Typen und nicht leerer Gruppen
+      - kind: scenario
+        id: layout-locks
+
+  - id: lagerstruktur.gruppen
+    title: Lagerbereiche als Gruppenhierarchie
+    group: lagerstruktur.stammdaten
+    summary: Gliedert das Lager in Bereiche und Unterbereiche (z. B. Halle → Gasse), auf die sich Sperren, Suchen und Strategien beziehen.
+    description: |
+      Lagerplatzgruppen bilden einen Baum. Die übergeordnete Gruppe wird beim Anlegen festgelegt und bleibt danach
+      fest, sodass keine Zyklen entstehen. Abfragen, Einlager- und Auslagerstrategien sowie Sperren wirken auf eine
+      Gruppe einschließlich aller Untergruppen. Leere Gruppen lassen sich löschen.
+    usage:
+      - channel: api
+        text: "`POST /v1/location-groups` (`name`, `parent`), lesen `GET /v1/location-groups` bzw. `…/{name}`, löschen `DELETE …/{name}`."
+      - channel: leitstand
+        text: Seite **Lagerplätze** zeigt die Gruppen mit ihren Sperren.
+    rules:
+      - Name eindeutig; übergeordnete Gruppe nach dem Anlegen unveränderlich.
+      - Löschen nur ohne Plätze und Untergruppen (`LOCATION_GROUP_NOT_EMPTY`).
+    technical:
+      components:
+        - apps/api/src/modules/layout/application/location-group.service.ts
+        - apps/api/src/modules/layout/application/group-hierarchy.ts
+        - apps/api/src/modules/layout/http/location-groups.controller.ts
+      endpoints:
+        - POST /v1/location-groups
+        - GET /v1/location-groups
+        - GET /v1/location-groups/{name}
+        - DELETE /v1/location-groups/{name}
+      events:
+        emits: [location-group.created, location-group.deleted]
+      uiRoutes: [/lagerplaetze]
+      notes:
+        - Tabelle `location_group` mit Verweis auf die übergeordnete Gruppe.
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/layout.integration.test.ts
+        test: baut die Hierarchie auf
+      - kind: integration
+        file: apps/api/test/integration/layout.integration.test.ts
+        test: löscht Plätze, dann leere Gruppen und unbenutzte Typen
+      - kind: scenario
+        id: layout-locks
+
+  - id: lagerstruktur.plaetze
+    title: Lagerplätze mit Koordinaten anlegen und ändern
+    group: lagerstruktur.stammdaten
+    summary: Bildet jeden Stellplatz mit Koordinate, ERP- und SPS-Code, Kapazität und Höchstgewicht ab.
+    description: |
+      Ein Lagerplatz hat eine Koordinate der Form `BEREICH/GASSE/X/Y/Z`, optional einen ERP-Code (für das
+      übergeordnete System) und einen SPS-Code (für die Anlage), einen Platztyp, eine Gruppe, eine Sortierfolge sowie
+      Kapazität (Anzahl TUs) und Höchstgewicht. Koordinate und Typ bleiben fest; die Gruppe ist änderbar, geerbte
+      Sperren folgen dann der neuen Gruppe. Beim Löschen dürfen andere Module widersprechen (z. B. TUs auf dem Platz).
+    usage:
+      - channel: api
+        text: "`POST /v1/locations`, lesen `GET /v1/locations/{id}`, ändern `PATCH`, löschen `DELETE`."
+    rules:
+      - Koordinate, ERP- und SPS-Code eindeutig; unbekannte Platztypen werden abgelehnt.
+      - Koordinate und Typ unveränderlich (`LOCATION_ID_IMMUTABLE`, `LOCATION_TYPE_IMMUTABLE`).
+      - Löschen nur ohne Einwände anderer Module (`LOCATION_IN_USE`).
+      - Jede Änderung erhöht die Version (optimistische Sperre).
+    settings:
+      - name: Kapazität und Höchstgewicht
+        description: "`maxTransportUnits` und `maxWeight` (KG) – werden beim Platzieren von TUs durchgesetzt."
+        where: "POST/PATCH /v1/locations"
+      - name: Sortierfolge
+        description: "`sortOrder` bestimmt die Reihenfolge, in der Einlagerstrategien Plätze prüfen."
+        where: "POST/PATCH /v1/locations"
+    dependsOn: [lagerstruktur.platztypen, lagerstruktur.gruppen]
+    technical:
+      components:
+        - apps/api/src/modules/layout/application/location.service.ts
+        - apps/api/src/modules/layout/application/location-removal-policy.ts
+        - apps/api/src/modules/layout/http/locations.controller.ts
+      endpoints:
+        - POST /v1/locations
+        - GET /v1/locations/{id}
+        - PATCH /v1/locations/{id}
+        - DELETE /v1/locations/{id}
+      events:
+        emits: [location.created, location.updated, location.deleted]
+      notes:
+        - Tabelle `location`; Einwände beim Löschen über `LocationRemovalPolicy`.
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/layout.integration.test.ts
+        test: legt Plätze an
+      - kind: integration
+        file: apps/api/test/integration/layout.integration.test.ts
+        test: verhindert doppelte Koordinaten und Codes und unbekannte Typen
+      - kind: integration
+        file: apps/api/test/integration/layout.integration.test.ts
+        test: hält Koordinate und Typ unveränderlich
+      - kind: integration
+        file: apps/api/test/integration/layout.integration.test.ts
+        test: verschiebt einen Platz in eine andere Gruppe; geerbte Sperren folgen der neuen Gruppe
+      - kind: integration
+        file: apps/api/test/integration/layout.integration.test.ts
+        test: berücksichtigt Einwände anderer Module beim Löschen eines Platzes
+
+  - id: lagerstruktur.platzsuche
+    title: Lagerplätze finden
+    group: lagerstruktur.stammdaten
+    summary: Findet Plätze über Koordinate, ERP- oder SPS-Code oder alle Plätze eines Bereichs samt Unterbereichen.
+    description: |
+      Die Suche liefert Plätze mit ihren wirksamen Sperren. Überall, wo ein Platz angegeben wird (Bewegen, Erfassen,
+      Geräte-Ereignisse), kann er wahlweise über id, Koordinate, ERP- oder SPS-Code bezeichnet werden.
+    usage:
+      - channel: api
+        text: "`GET /v1/locations?locationId=…|erpCode=…|plcCode=…|group=…`"
+      - channel: leitstand
+        text: Seite **Lagerplätze** – Plätze je Gruppe; Platzauswahl in anderen Seiten.
+    dependsOn: [lagerstruktur.plaetze]
+    technical:
+      components:
+        - apps/api/src/modules/layout/application/location-lookup.ts
+        - apps/web/src/pages/LocationsPage.tsx
+      endpoints:
+        - GET /v1/locations
+      uiRoutes: [/lagerplaetze]
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/layout.integration.test.ts
+        test: findet Plätze nach Koordinate, ERP-Code und Gruppe einschließlich Untergruppen
+
+  - id: lagerstruktur.sperren
+    title: Plätze und Bereiche sperren
+    group: lagerstruktur.sperren
+    summary: Sperrt einzelne Plätze oder ganze Bereiche für Ein- oder Auslagerung – Sperren vererben sich auf alles darunter.
+    description: |
+      Gruppen und Plätze haben eine Ein- und eine Auslagersperre, Plätze zusätzlich eine Vergabesperre (keine
+      Einlagerstrategie wählt den Platz). Wirksam ist eine Sperre, wenn das Objekt selbst oder eine übergeordnete
+      Gruppe sperrt; jede Antwort nennt das nächstgelegene sperrende Objekt. Sperren tragen einen Grund und werden mit
+      Vorher/Nachher als Ereignis gemeldet. Alle Buchungen, Strategien und Transportaufträge beachten sie.
+    usage:
+      - channel: leitstand
+        text: Seite **Lagerplätze** – Sperren je Platz oder Gruppe setzen und aufheben.
+      - channel: api
+        text: '`PATCH /v1/locations/{id}/locks` bzw. `PATCH /v1/location-groups/{name}/locks` mit z. B. `{ "inbound": true, "reason": "Inventur" }`.'
+    rules:
+      - Entsperren ist abgelehnt, solange eine übergeordnete Gruppe sperrt (`LOCK_INHERITED`).
+      - Wird die übergeordnete Sperre aufgehoben, bleiben eigene Sperren darunter bestehen.
+      - Eine Sperränderung an einer Gruppe erzeugt nur ein Ereignis für diese Gruppe.
+    dependsOn: [lagerstruktur.gruppen, lagerstruktur.plaetze]
+    technical:
+      components:
+        - apps/api/src/modules/layout/domain/lock-state.ts
+        - apps/api/src/modules/layout/domain/lock-changes.ts
+        - apps/web/src/pages/LocationsPage.tsx
+      endpoints:
+        - PATCH /v1/location-groups/{name}/locks
+        - PATCH /v1/locations/{id}/locks
+      events:
+        emits: [location-group.lock-changed, location.lock-changed]
+      uiRoutes: [/lagerplaetze]
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/layout.integration.test.ts
+        test: vererbt die Sperre einer Gruppe auf Untergruppen und Plätze
+      - kind: integration
+        file: apps/api/test/integration/layout.integration.test.ts
+        test: veröffentlicht die Sperränderung mit Vorher/Nachher und Grund
+      - kind: integration
+        file: apps/api/test/integration/layout.integration.test.ts
+        test: verbietet das Entsperren unterhalb einer sperrenden Gruppe
+      - kind: integration
+        file: apps/api/test/integration/layout.integration.test.ts
+        test: behält eigene Sperren, wenn die übergeordnete Sperre aufgehoben wird
+      - kind: integration
+        file: apps/api/test/integration/layout.integration.test.ts
+        test: sperrt einzelne Plätze für Auslagerung und Platzvergabe
+      - kind: unit
+        file: apps/api/test/unit/layout/lock-state.test.ts
+        test: erbt die Sperre einer übergeordneten Gruppe
+      - kind: web-e2e
+        file: apps/web/e2e/leitstand.spec.ts
+        test: Lagerplatz sperren zeigt die Sperre und hebt sie wieder auf
+      - kind: scenario
+        id: layout-locks

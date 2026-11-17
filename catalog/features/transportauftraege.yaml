@@ -1,0 +1,118 @@
+# Feature-Katalog – Bereich Transportaufträge.
+area: transportauftraege
+
+features:
+  - id: transportauftraege.anlegen-starten
+    title: Transportaufträge anlegen und kontrolliert starten
+    group: transportauftraege.steuerung
+    summary: Beauftragt die Anlage, eine Palette zu einem Platz oder Bereich zu fahren – gestartet wird nur, was gerade zulässig ist.
+    description: |
+      Ein Transportauftrag (Nummer `TO00000001` …) bringt eine TU automatisch zu einem Zielplatz oder in eine
+      Zielgruppe. Beim Anlegen sind TU und Ziel Pflicht; mit `autoStart` wird sofort gestartet, sonst wartet der
+      Auftrag mit Grund. Je TU läuft höchstens ein Auftrag; weitere warten und starten nach Priorität und Alter. Ein
+      gesperrtes oder volles Ziel verhindert den Start – mit `redirect` wählt die Einlagerstrategie einen Ersatzplatz
+      in der Gruppe des Ziels.
+    usage:
+      - channel: api
+        text: "`POST /v1/transport-orders` (`barcode`, `target`, `priority`, `redirect`, `autoStart`), `POST …/{number}/start`, `POST /v1/transport-orders/start-pending`."
+      - channel: node-red
+        text: Materialfluss-Programm `create-order` legt Aufträge am I-Punkt an; `start-pending` eignet sich für einen zeitgesteuerten Flow.
+    rules:
+      - Höchstens ein gestarteter oder unterbrochener Auftrag je TU (`TRANSPORT_ORDER_ACTIVE`), per Teilindex abgesichert.
+      - Kein Start auf gesperrte Ziele (`TARGET_LOCKED`) oder volle Plätze (`PLACEMENT_REJECTED`).
+      - Lagerbewegung und Transportauftrag steuern eine TU nie gleichzeitig (`TU_CLAIMED`).
+    settings:
+      - name: Umleitung bei gesperrtem Ziel
+        description: "`redirect: true` erlaubt einen Ersatzplatz in der Gruppe des Ziels (über die Einlagerstrategie)."
+        where: "POST /v1/transport-orders"
+      - name: Priorität
+        description: Reihenfolge wartender Aufträge einer TU.
+        where: "POST /v1/transport-orders"
+    dependsOn: [transporteinheiten.anlegen, lagerstruktur.sperren, strategien.einlagerplatz]
+    technical:
+      components:
+        - apps/api/src/modules/transport-order/application/transport-order.service.ts
+        - apps/api/src/modules/transport-order/http/transport-orders.controller.ts
+        - apps/api/src/modules/transport/application/transport-unit-claims.ts
+      endpoints:
+        - POST /v1/transport-orders
+        - GET /v1/transport-orders
+        - GET /v1/transport-orders/{number}
+        - POST /v1/transport-orders/{number}/start
+        - POST /v1/transport-orders/start-pending
+      events:
+        emits: [transport-order.created, transport-order.started, transport-order.start-blocked]
+      notes:
+        - Tabelle `transport_order`; Regeln O-01 bis O-07 aus der OpenWMS-Analyse.
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/transport-order.integration.test.ts
+        test: legt einen Auftrag an, startet ihn und reserviert das Ziel
+      - kind: integration
+        file: apps/api/test/integration/transport-order.integration.test.ts
+        test: lässt einen zweiten Auftrag derselben TU warten (O-02)
+      - kind: integration
+        file: apps/api/test/integration/transport-order.integration.test.ts
+        test: startet wartende Aufträge nach Priorität, dann Alter
+      - kind: integration
+        file: apps/api/test/integration/transport-order.integration.test.ts
+        test: startet nicht auf einen gesperrten Zielplatz und nennt den Grund
+      - kind: integration
+        file: apps/api/test/integration/transport-order.integration.test.ts
+        test: leitet bei gesperrtem Ziel auf einen Ersatzplatz der Gruppe um, wenn erlaubt
+      - kind: integration
+        file: apps/api/test/integration/transport-order.integration.test.ts
+        test: trennt Lagerbewegung und Transportauftrag derselben TU
+      - kind: integration
+        file: apps/api/test/integration/transport-order.integration.test.ts
+        test: startet bei gleichzeitigen Aufträgen für eine TU genau einen
+      - kind: scenario
+        id: transport-order-flow
+
+  - id: transportauftraege.ablauf
+    title: Transport unterbrechen, abschließen, stornieren oder scheitern lassen
+    group: transportauftraege.steuerung
+    summary: Bildet den Lebenszyklus eines Transports ab – nach dem Abschluss startet automatisch der nächste Auftrag der Palette.
+    description: |
+      Ein gestarteter Auftrag kann unterbrochen und fortgesetzt werden; ein unterbrochener belegt die TU weiter. Der
+      Abschluss bucht die TU (standardmäßig als gemeldete Ist-Position) und vermerkt Abweichungen vom Ziel. Storno und
+      Scheitern beenden den Auftrag; danach startet der nächste wartende Auftrag der TU. Endzustände sind final.
+    usage:
+      - channel: api
+        text: "`POST /v1/transport-orders/{number}/interrupt`, `…/resume`, `…/finish` (`location?`, `mode?`), `…/cancel`, `…/fail`."
+      - channel: node-red
+        text: Materialfluss-Programme `finish-order` und `interrupt-order`.
+    rules:
+      - Endzustände `FINISHED`, `CANCELED`, `ONFAILURE` erlauben keine Aktion mehr.
+      - TUs und Zielplätze offener Aufträge sind vor dem Löschen geschützt.
+    dependsOn: [transportauftraege.anlegen-starten]
+    technical:
+      components:
+        - apps/api/src/modules/transport-order/application/transport-order.service.ts
+        - apps/api/src/modules/transport-order/domain/transport-order-state.ts
+      endpoints:
+        - POST /v1/transport-orders/{number}/interrupt
+        - POST /v1/transport-orders/{number}/resume
+        - POST /v1/transport-orders/{number}/finish
+        - POST /v1/transport-orders/{number}/cancel
+        - POST /v1/transport-orders/{number}/fail
+      events:
+        emits: [transport-order.interrupted, transport-order.resumed, transport-order.finished, transport-order.canceled, transport-order.failed]
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/transport-order.integration.test.ts
+        test: bucht beim Abschluss und startet den nächsten Auftrag der TU (O-06)
+      - kind: integration
+        file: apps/api/test/integration/transport-order.integration.test.ts
+        test: meldet eine Abweichung beim Abschluss auf einem anderen Platz
+      - kind: integration
+        file: apps/api/test/integration/transport-order.integration.test.ts
+        test: unterbricht, setzt fort und lässt scheitern
+      - kind: integration
+        file: apps/api/test/integration/transport-order.integration.test.ts
+        test: schützt TU und Zielplatz offener Aufträge vor dem Löschen
+      - kind: unit
+        file: apps/api/test/unit/transport-order/transport-order-state.test.ts
+        test: Endzustände sind final und erlauben keine Aktion (O-03)
+      - kind: scenario
+        id: transport-order-flow

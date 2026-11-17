@@ -19,7 +19,9 @@
     "demo:data": "node scripts/demo-data.mjs",
     "web:dev": "pnpm --filter @wms/web dev",
     "test:web": "pnpm --filter @wms/web test:e2e",
-    "env:init": "node scripts/init-env.mjs"
+    "env:init": "node scripts/init-env.mjs",
+    "catalog:check": "node packages/feature-catalog/src/cli.ts check",
+    "catalog:build": "node packages/feature-catalog/src/cli.ts build"
   },
   "devDependencies": {
     "dependency-cruiser": "18.7.2",

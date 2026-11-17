@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WMS Feature-Katalog</title>
+<!-- Erzeugt von packages/feature-catalog (pnpm catalog:build) aus catalog/*.yaml – nicht von Hand ändern. -->
+<style>
+:root {
+  --bg: #f6f7f9; --surface: #ffffff; --surface-2: #f0f2f5; --text: #1b1f24; --muted: #5b6573; --border: #dde1e6;
+  --accent: #1f5fbf; --accent-soft: #e5eefb; --ok: #1d7a46; --ok-soft: #e3f4ea; --warn: #9a5b00; --warn-soft: #fdf0dc;
+  --bad: #b3261e; --bad-soft: #fbe6e4; --code: #eef1f5; --shadow: 0 1px 2px rgba(16, 24, 40, .06);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111418; --surface: #181c21; --surface-2: #20252c; --text: #e6e9ed; --muted: #9aa4b1; --border: #2d333b;
+    --accent: #7aa7ec; --accent-soft: #1d2a3d; --ok: #6cc596; --ok-soft: #173326; --warn: #e7b25c; --warn-soft: #3a2c14;
+    --bad: #f08a80; --bad-soft: #3d1d1a; --code: #232a32; --shadow: none; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111418; --surface: #181c21; --surface-2: #20252c; --text: #e6e9ed; --muted: #9aa4b1; --border: #2d333b;
+  --accent: #7aa7ec; --accent-soft: #1d2a3d; --ok: #6cc596; --ok-soft: #173326; --warn: #e7b25c; --warn-soft: #3a2c14;
+  --bad: #f08a80; --bad-soft: #3d1d1a; --code: #232a32; --shadow: none; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code { background: var(--code); border-radius: 4px; padding: 0 .3em; font: .88em ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow-wrap: anywhere; }
+header { position: sticky; top: 0; z-index: 2; background: var(--surface); border-bottom: 1px solid var(--border); padding: 12px 20px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+header h1 { font-size: 18px; margin: 0; white-space: nowrap; }
+header .stats { color: var(--muted); font-size: 13px; }
+header input[type=search] { flex: 1 1 260px; min-width: 0; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); color: var(--text); font: inherit; }
+.layout { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 0; min-height: calc(100vh - 60px); }
+nav { border-right: 1px solid var(--border); background: var(--surface); padding: 12px 8px 40px; position: sticky; top: 61px; align-self: start; max-height: calc(100vh - 61px); overflow: auto; }
+nav .area { margin-bottom: 2px; }
+nav button { all: unset; box-sizing: border-box; display: flex; justify-content: space-between; gap: 8px; width: 100%; padding: 6px 10px; border-radius: 6px; cursor: pointer; color: var(--text); }
+nav button:hover { background: var(--surface-2); }
+nav button.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+nav button:focus-visible, .chip:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+nav .group button { padding-left: 26px; font-size: 14px; }
+nav .count { color: var(--muted); font-size: 12px; font-weight: 400; }
+nav .open-area button { color: var(--muted); }
+main { padding: 16px 24px 60px; min-width: 0; }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 14px; flex-wrap: wrap; }
+.tabs button { all: unset; cursor: pointer; padding: 8px 12px; border-bottom: 2px solid transparent; color: var(--muted); }
+.tabs button.active { color: var(--text); border-color: var(--accent); font-weight: 600; }
+.filters { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; margin-bottom: 16px; font-size: 13px; }
+.filters .label { color: var(--muted); }
+.chip { all: unset; cursor: pointer; padding: 2px 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); }
+.chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.intro { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; box-shadow: var(--shadow); }
+.intro h2 { margin: 0 0 4px; font-size: 20px; }
+.intro p { margin: 0; color: var(--muted); }
+.group-title { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 22px 0 8px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 10px; box-shadow: var(--shadow); }
+.card > .head { padding: 12px 16px; cursor: pointer; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; }
+.card > .head h3 { margin: 0; font-size: 16px; }
+.card > .head .sum { grid-column: 1 / -1; color: var(--muted); margin: 0; }
+.card > .head .tags { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px; }
+.badge { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px; background: var(--surface-2); color: var(--muted); white-space: nowrap; }
+.badge.ok { background: var(--ok-soft); color: var(--ok); }
+.badge.warn { background: var(--warn-soft); color: var(--warn); }
+.badge.bad { background: var(--bad-soft); color: var(--bad); }
+.badge.channel { background: var(--accent-soft); color: var(--accent); }
+.body { border-top: 1px solid var(--border); padding: 4px 16px 14px; }
+.body h4 { margin: 14px 0 4px; font-size: 14px; }
+.body p, .body ul { margin: 4px 0; }
+.body ul { padding-left: 20px; }
+details.tech { margin-top: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); }
+details.tech > summary { cursor: pointer; padding: 8px 12px; font-weight: 600; }
+details.tech > div { padding: 0 12px 12px; }
+.table-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; vertical-align: top; padding: 5px 8px; border-bottom: 1px solid var(--border); }
+th { color: var(--muted); font-weight: 600; }
+.method { font-weight: 700; font-family: ui-monospace, monospace; font-size: 12px; }
+.muted { color: var(--muted); }
+.empty { color: var(--muted); padding: 30px 0; text-align: center; }
+.cov { display: grid; gap: 8px; }
+.cov .row { display: grid; grid-template-columns: minmax(0, 220px) minmax(0, 1fr) auto; gap: 10px; align-items: center; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; }
+.bar { height: 8px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
+.bar > span { display: block; height: 100%; background: var(--ok); }
+.finding { padding: 6px 10px; border-left: 3px solid var(--warn); background: var(--surface); margin-bottom: 6px; font-size: 13px; }
+.finding.fehler { border-color: var(--bad); }
+footer { color: var(--muted); font-size: 12px; margin-top: 30px; }
+.theme { all: unset; cursor: pointer; font-size: 13px; color: var(--muted); flex: none; }
+@media (max-width: 760px) {
+  header { padding: 10px 16px; }
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  nav { position: static; max-height: none; border-right: 0; border-bottom: 1px solid var(--border); padding: 8px; display: flex; overflow-x: auto; gap: 4px; }
+  nav .area { flex: 0 0 auto; }
+  nav .group { display: none; }
+  nav button { white-space: nowrap; }
+  main { padding: 12px 16px 40px; }
+  .cov .row { grid-template-columns: minmax(0, 1fr) auto; }
+  .cov .row .bar { grid-column: 1 / -1; }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>WMS Feature-Katalog</h1>
+  <span class="stats" id="stats"></span>
+  <input type="search" id="search" placeholder="Suchen: Titel, Beschreibung, Endpunkt, Ereignis, Datei …" aria-label="Katalog durchsuchen">
+  <button class="theme" id="theme" type="button">Hell/Dunkel</button>
+</header>
+<div class="layout">
+  <nav id="nav" aria-label="Funktionsbereiche"></nav>
+  <main id="main"></main>
+</div>
+<script id="catalog-data" type="application/json">/*__CATALOG_DATA__*/</script>
+<script>/*__CATALOG_APP__*/</script>
+</body>
+</html>

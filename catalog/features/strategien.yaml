@@ -1,0 +1,263 @@
+# Feature-Katalog – Bereich Strategien und Regeln.
+area: strategien
+
+features:
+  - id: strategien.katalog
+    title: Entscheidungspunkte und Strategien abfragen
+    group: strategien.regelsaetze
+    summary: Zeigt, welche Entscheidungen konfigurierbar sind, welche Felder Bedingungen nutzen können und welche Strategien mit welchen Parametern es gibt.
+    description: |
+      Für jeden Entscheidungspunkt (`putaway` – Einlagerung, `allocation` – Auslagerung) liefert das WMS den
+      Feldkatalog für Bedingungen (mit Typ) und die Strategien mit dem JSON-Schema ihrer Parameter. Damit lassen sich
+      Regelsätze ohne Blick in den Code schreiben und Eingabemasken erzeugen.
+    usage:
+      - channel: api
+        text: "`GET /v1/strategies`"
+    technical:
+      components:
+        - apps/api/src/modules/strategy/application/strategy-registry.ts
+        - apps/api/src/modules/strategy/http/strategies.controller.ts
+      endpoints:
+        - GET /v1/strategies
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/strategy.integration.test.ts
+        test: beschreibt Entscheidungspunkte, Felder und Strategien
+      - kind: integration
+        file: apps/api/test/integration/outbound.integration.test.ts
+        test: listet den Entscheidungspunkt mit allen Auslagerstrategien
+
+  - id: strategien.regelsaetze
+    title: Versionierte Regelsätze mit Entwurf und Aktivierung
+    group: strategien.regelsaetze
+    summary: Konfiguriert Lagerentscheidungen als Regeln statt im Code – mit Entwürfen, Prüfung beim Speichern und kontrolliertem Umschalten.
+    description: |
+      Ein Regelsatz ist eine geordnete Liste von Regeln für einen Entscheidungspunkt; die erste zutreffende Regel
+      bestimmt Strategie und Parameter, die letzte muss immer zutreffen (Rückfall). Neue Regelsätze entstehen als
+      Entwurf mit der nächsten Version, sind änderbar und löschbar. Die Aktivierung archiviert den bisher aktiven
+      Regelsatz; aktive und archivierte Regelsätze sind unveränderlich.
+    usage:
+      - channel: api
+        text: "Entwurf `POST /v1/strategy-rule-sets`, ändern `PUT …/{id}`, löschen `DELETE …/{id}`, aktivieren `POST …/{id}/activate`, Liste `GET /v1/strategy-rule-sets`."
+    rules:
+      - Beim Speichern werden Felder, Operatoren, Werttypen, Strategien und Parameter vollständig geprüft (`RULE_SET_INVALID` mit Pfad).
+      - Höchstens ein aktiver Regelsatz je Entscheidungspunkt, auch per Datenbank abgesichert.
+      - Nur Entwürfe sind änderbar (`RULE_SET_NOT_DRAFT`).
+    settings:
+      - name: Regeln je Entscheidungspunkt
+        description: Bedingung (`when`), Strategie und Parameter je Regel; Reihenfolge entscheidet.
+        where: "PUT /v1/strategy-rule-sets/{id}"
+    technical:
+      components:
+        - apps/api/src/modules/strategy/application/rule-set.service.ts
+        - apps/api/src/modules/strategy/domain/rule-set.ts
+      endpoints:
+        - GET /v1/strategy-rule-sets
+        - POST /v1/strategy-rule-sets
+        - PUT /v1/strategy-rule-sets/{id}
+        - DELETE /v1/strategy-rule-sets/{id}
+        - POST /v1/strategy-rule-sets/{id}/activate
+      events:
+        emits: [strategy-rule-set.activated]
+      notes:
+        - Tabelle `strategy_rule_set`; eindeutiger Teilindex für den aktiven Regelsatz.
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/strategy.integration.test.ts
+        test: prüft Regelsätze vollständig beim Speichern
+      - kind: integration
+        file: apps/api/test/integration/strategy.integration.test.ts
+        test: aktiviert den Entwurf; aktive Regelsätze sind unveränderlich
+      - kind: scenario
+        id: putaway-strategy
+
+  - id: strategien.bedingungen
+    title: Bedingungen für Regeln
+    group: strategien.regelsaetze
+    summary: Wählt die passende Regel anhand von Eigenschaften der TU, des Auftrags oder der Anfrage – z. B. „schwere Paletten auf den Boden“.
+    description: |
+      Bedingungen vergleichen Felder (z. B. `unit.weightKg`, `order.customer`) mit Werten und lassen sich mit
+      `all`, `any` und `not` verknüpfen. Dezimalwerte werden exakt verglichen. Bedingungen sind Daten, kein
+      ausführbarer Code; Code-artige Inhalte werden schon beim Speichern abgelehnt.
+    usage:
+      - channel: api
+        text: 'Im Regelsatz: `{ "field": "unit.weightKg", "op": "gt", "value": "500" }` oder `{ "all": [ … ] }`.'
+    rules:
+      - Operatoren `eq`, `neq`, `in`, `notIn`, `gt`, `gte`, `lt`, `lte`, `exists`; Verknüpfungen `all`, `any`, `not`, `always`.
+      - Fehlende Fakten gelten als nicht erfüllt (außer bei `neq` und `notIn`).
+    dependsOn: [strategien.regelsaetze]
+    technical:
+      components:
+        - apps/api/src/modules/strategy/domain/conditions.ts
+        - apps/api/src/modules/strategy/application/decision-engine.ts
+    evidence:
+      - kind: unit
+        file: apps/api/test/unit/strategy/conditions.test.ts
+        test: vergleicht Dezimalfelder exakt statt mit Gleitkomma
+      - kind: unit
+        file: apps/api/test/unit/strategy/conditions.test.ts
+        test: kombiniert mit all und any
+      - kind: unit
+        file: apps/api/test/unit/strategy/conditions.test.ts
+        test: lehnt unbekannte Schlüssel und Code-artige Inhalte schon im Schema ab
+      - kind: integration
+        file: apps/api/test/integration/strategy.integration.test.ts
+        test: wählt die Regel nach Bedingungen (schwere TU auf den Boden)
+
+  - id: strategien.einlagerplatz
+    title: Einlagerplatz automatisch bestimmen
+    group: strategien.einlagerung
+    summary: Schlägt für eine TU den besten freien Platz vor und reserviert ihn auf Wunsch als Ziel – nach dem aktiven Regelsatz.
+    description: |
+      Die Einlagerentscheidung ermittelt Fakten zur TU, wählt die erste zutreffende Regel und führt deren Strategie
+      aus: `first-free` (erster geeigneter Platz nach Sortierfolge) oder `weighted` (gewichtete Kriterien
+      Sortierung, Leere, Vorrang des Platztyps). Harte Regeln – Platzierungsregeln, Sperren, Vergabesperre und bereits
+      zugewiesene TUs – kann keine Strategie umgehen. Ergebnis und Begründung werden gespeichert.
+    usage:
+      - channel: api
+        text: "`POST /v1/putaway/decisions` mit `barcode`, optional `group` und `assign: true` (Platz als Ziel setzen)."
+      - channel: node-red
+        text: Lagerbewegungen und Wareneingang nutzen die Entscheidung, wenn nur eine Zielgruppe angegeben ist.
+    rules:
+      - Ohne aktiven Regelsatz keine Entscheidung.
+      - Bei parallelen Entscheidungen wird jeder Platz nur einmal vergeben (`FOR UPDATE SKIP LOCKED`, bis zu 5 Versuche).
+      - Wird kein Platz gefunden, erklärt die Begründung warum.
+    settings:
+      - name: Einlagerstrategie und Parameter
+        description: "`first-free` oder `weighted` mit `group`, `includeSubgroups`, `weights` (sortOrder, emptiness, privilege je 0–10)."
+        where: Regelsatz für `putaway`
+    dependsOn: [strategien.regelsaetze, transporteinheiten.platzierungspruefung]
+    technical:
+      components:
+        - apps/api/src/modules/strategy/putaway/putaway.service.ts
+        - apps/api/src/modules/strategy/putaway/putaway-ranking.ts
+        - apps/api/src/modules/strategy/putaway/putaway.point.ts
+      endpoints:
+        - POST /v1/putaway/decisions
+      events:
+        emits: [putaway.decided]
+      notes:
+        - Gespeichert in `strategy_decision` mit vollständiger Begründung (Decision Trace).
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/strategy.integration.test.ts
+        test: entscheidet, weist zu und speichert die Begründung
+      - kind: integration
+        file: apps/api/test/integration/strategy.integration.test.ts
+        test: zählt bereits zugewiesene TUs als belegt
+      - kind: integration
+        file: apps/api/test/integration/strategy.integration.test.ts
+        test: kann harte Regeln nicht umgehen und erklärt, warum nichts gewählt wurde
+      - kind: integration
+        file: apps/api/test/integration/strategy.integration.test.ts
+        test: vergibt bei parallelen Entscheidungen jeden Platz nur einmal
+      - kind: integration
+        file: apps/api/test/integration/strategy.integration.test.ts
+        test: verlangt einen aktiven Regelsatz
+      - kind: unit
+        file: apps/api/test/unit/strategy/putaway-ranking.test.ts
+        test: "Vorrang: bevorzugt den Platztyp mit höherem privilegeLevel"
+      - kind: scenario
+        id: putaway-strategy
+
+  - id: strategien.einlager-simulation
+    title: Einlagerung simulieren
+    group: strategien.einlagerung
+    summary: Probiert einen Regelsatz-Entwurf an einer echten TU aus, bevor er aktiv wird – ohne etwas zu speichern oder zuzuweisen.
+    description: |
+      Die Simulation läuft wie eine echte Entscheidung, auch mit einem Entwurf, speichert aber nichts und weist keinen
+      Platz zu. Sie liefert dieselbe Begründung, sodass Wirkung und Nebenwirkungen eines neuen Regelsatzes vorab
+      sichtbar sind.
+    usage:
+      - channel: api
+        text: "`POST /v1/putaway/simulations` mit `barcode`, optional `group` und `ruleSetId`."
+    dependsOn: [strategien.einlagerplatz]
+    technical:
+      components:
+        - apps/api/src/modules/strategy/putaway/putaway.service.ts
+      endpoints:
+        - POST /v1/putaway/simulations
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/strategy.integration.test.ts
+        test: legt einen Entwurf an und simuliert ihn, ohne etwas zu speichern
+      - kind: integration
+        file: apps/api/test/integration/strategy.integration.test.ts
+        test: prüft einen neuen Entwurf per Simulation, bevor er aktiv wird
+      - kind: scenario
+        id: putaway-strategy
+
+  - id: strategien.auslagerstrategien
+    title: Auslagerstrategien (FIFO, FEFO, LIFO, Anbruch, ganze TU)
+    group: strategien.auslagerung
+    summary: Bestimmt, welcher Bestand für einen Bedarf genommen wird – z. B. frühestes MHD zuerst mit Mindestrestlaufzeit für einen Frischekunden.
+    description: |
+      Für einen Bedarf (Produkt, Menge, optional Charge, Kunde, Priorität) plant die Auslagerentscheidung Posten und
+      Mengen in der Reihenfolge der gewählten Strategie und meldet eine Fehlmenge. Harte Regeln schließen nicht
+      verfügbaren Bestand aus: gesperrte TUs und Plätze, laufende Inventur, zu kurze Restlaufzeit, falsche Charge.
+      Die Simulation zeigt den Plan mit Begründung, ohne zu reservieren; echte Entscheidungen trifft der Auslagerauftrag.
+    usage:
+      - channel: api
+        text: "Simulation `POST /v1/allocation/simulations` mit `sku`, `quantity`, optional `lot`, `customer`, `orderPriority`, `ruleSetId`."
+    rules:
+      - Harte Regeln `NOT_AVAILABLE`, `UNIT_NOT_AVAILABLE`, `SOURCE_OUTBOUND_BLOCKED`, `COUNT_IN_PROGRESS`, `REMAINING_SHELF_LIFE`.
+      - Vor einer echten Entscheidung werden alle TUs des Produkts gesperrt; gleichzeitige Zuteilungen planen nie denselben Bestand.
+    settings:
+      - name: Auslagerstrategie und Parameter
+        description: "`fifo`, `fefo`, `lifo`, `partial-first`, `full-unit` mit `group`, `includeSubgroups`, `minRemainingDays`."
+        where: Regelsatz für `allocation`
+    dependsOn: [strategien.regelsaetze, bestand.bestand-je-tu]
+    technical:
+      components:
+        - apps/api/src/modules/strategy/allocation/allocation.service.ts
+        - apps/api/src/modules/strategy/allocation/allocation-ranking.ts
+        - apps/api/src/modules/strategy/allocation/allocation.point.ts
+      endpoints:
+        - POST /v1/allocation/simulations
+      events:
+        emits: [allocation.decided]
+    evidence:
+      - kind: unit
+        file: apps/api/test/unit/strategy/allocation-ranking.test.ts
+        test: "FEFO: frühestes MHD zuerst, ohne MHD zuletzt"
+      - kind: unit
+        file: apps/api/test/unit/strategy/allocation-ranking.test.ts
+        test: "Ganze TU bevorzugen: möglichst ganze Posten, Rest vom kleinsten deckenden"
+      - kind: unit
+        file: apps/api/test/unit/strategy/allocation-ranking.test.ts
+        test: meldet Fehlmenge und Begründung, ignoriert ungeeignete Posten
+      - kind: integration
+        file: apps/api/test/integration/outbound.integration.test.ts
+        test: simuliert mit Begründung, ohne zu reservieren
+      - kind: integration
+        file: apps/api/test/integration/outbound.integration.test.ts
+        test: teilt per FEFO mit Mindestrestlaufzeit zu und reserviert
+      - kind: scenario
+        id: outbound-flow
+
+  - id: strategien.entscheidungsprotokoll
+    title: Entscheidungen nachvollziehen
+    group: strategien.nachvollziehbarkeit
+    summary: Beantwortet „Warum kam die Palette auf diesen Platz?“ – mit Regel, Strategie, Fakten und bewerteten Kandidaten.
+    description: |
+      Jede echte Einlager- und Auslagerentscheidung wird mit Begründung gespeichert: gewählte Regel, Strategie mit
+      Parametern, Fakten, gewählter Kandidat mit Punktzahl, Zusammenfassung und bis zu 20 Kandidaten mit Verstößen
+      bzw. Bewertungsanteilen. Entscheidungen lassen sich je TU oder Auftrag abrufen.
+    usage:
+      - channel: api
+        text: "`GET /v1/strategy-decisions?subject=<barcode>`, `GET /v1/strategy-decisions/{id}`"
+    dependsOn: [strategien.einlagerplatz]
+    technical:
+      components:
+        - apps/api/src/modules/strategy/application/decision.service.ts
+        - apps/api/src/modules/strategy/entities/decision.entity.ts
+      endpoints:
+        - GET /v1/strategy-decisions
+        - GET /v1/strategy-decisions/{id}
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/strategy.integration.test.ts
+        test: listet gespeicherte Entscheidungen je TU
+      - kind: integration
+        file: apps/api/test/integration/strategy.integration.test.ts
+        test: entscheidet, weist zu und speichert die Begründung

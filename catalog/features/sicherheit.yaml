@@ -1,0 +1,218 @@
+# Feature-Katalog – Bereich Sicherheit und Betrieb.
+area: sicherheit
+
+features:
+  - id: sicherheit.anmeldung
+    title: Anmeldung mit Benutzer und Passwort
+    group: sicherheit.zugang
+    summary: Schützt Oberfläche und API – ohne Anmeldung sind nur Betriebszustand, API-Beschreibung und die Anmeldeseite erreichbar.
+    description: |
+      Benutzer melden sich mit Name und Passwort an und erhalten eine Sitzung als Cookie (HttpOnly, SameSite=Strict,
+      12 Stunden). Abmelden beendet die Sitzung. Falsche Angaben werden einheitlich gemeldet, egal ob der Benutzer
+      existiert; nach fünf Fehlversuchen ist der Benutzer fünf Minuten gesperrt. Der Benutzer `admin` wird beim
+      ersten Start aus der Konfiguration angelegt.
+    usage:
+      - channel: leitstand
+        text: Anmeldeseite beim Öffnen der Oberfläche; „Abmelden“ oben rechts.
+      - channel: api
+        text: "`POST /v1/auth/login`, `POST /v1/auth/logout`, `GET /v1/auth/me`."
+    rules:
+      - Passwörter mit scrypt gespeichert, Sitzungen nur als Hash des Tokens.
+      - Fünf Fehlversuche → fünf Minuten Sperre (`LOGIN_LOCKED`).
+    settings:
+      - name: Sitzungsdauer und Cookie
+        description: "`AUTH_SESSION_HOURS` (Standard 12), `AUTH_COOKIE_SECURE` (auto | true | false)."
+        where: Umgebungsvariablen der API
+      - name: Startpasswort admin
+        description: "`AUTH_ADMIN_PASSWORD` bzw. `WMS_ADMIN_PASSWORD` in der .env."
+        where: .env
+    technical:
+      components:
+        - apps/api/src/modules/auth/application/auth.service.ts
+        - apps/api/src/modules/auth/application/login-throttle.ts
+        - apps/api/src/modules/auth/http/auth.controller.ts
+        - apps/api/src/modules/auth/http/auth.guard.ts
+        - apps/web/src/auth/session.tsx
+      endpoints:
+        - POST /v1/auth/login
+        - POST /v1/auth/logout
+        - GET /v1/auth/me
+      notes:
+        - Tabellen `app_user` und `app_session`.
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/auth.integration.test.ts
+        test: lässt ohne Anmeldung nur Öffentliches zu
+      - kind: integration
+        file: apps/api/test/integration/auth.integration.test.ts
+        test: legt admin aus der Konfiguration an und meldet per Cookie an
+      - kind: integration
+        file: apps/api/test/integration/auth.integration.test.ts
+        test: meldet falsche Anmeldedaten einheitlich und bremst nach fünf Fehlversuchen
+      - kind: web-e2e
+        file: apps/web/e2e/auth.spec.ts
+        test: "Anmeldung: falsches Passwort, Anmelden, Abmelden"
+
+  - id: sicherheit.rollen
+    title: Rollen und Rechte
+    group: sicherheit.zugang
+    summary: Fünf Rollen (admin, leitstand, lager, anlage, lesen) legen fest, wer was darf; jede Änderung nennt ihren Auslöser.
+    description: |
+      Eine zentrale Rechtetabelle ordnet jedem Endpunkt die erlaubten Rollen zu. Lesen darf jede angemeldete Rolle;
+      ändernde Anfragen brauchen eine ausdrücklich passende Regel, sonst nur `admin` (sicherer Standard für neue
+      Endpunkte). Fehlende Rechte werden mit `403` und den nötigen Rollen beantwortet. Ereignisse tragen den
+      Auslöser (`user:<name>` bzw. `service:<name>`).
+    usage:
+      - channel: api
+        text: Wirkt automatisch; `GET /v1/auth/me` zeigt die eigenen Rollen.
+    rules:
+      - "`admin`: alles; `leitstand`: Aufträge steuern, Sperren, Korrekturen, Inventur; `lager`: Arbeit am Scanner; `anlage`: Geräte-Ereignisse und Transporte; `lesen`: nur ansehen."
+    technical:
+      components:
+        - apps/api/src/modules/auth/domain/policy.ts
+        - apps/api/src/modules/auth/http/auth.guard.ts
+        - apps/api/src/common/request-context.ts
+    evidence:
+      - kind: unit
+        file: apps/api/test/unit/auth/policy.test.ts
+        test: lässt die Rolle lesen nichts ändern
+      - kind: integration
+        file: apps/api/test/integration/auth.integration.test.ts
+        test: erlaubt je Rolle nur, was die Rechtetabelle vorsieht, und vermerkt den Akteur
+
+  - id: sicherheit.service-tokens
+    title: Service-Tokens für Anlagen und Node-RED
+    group: sicherheit.zugang
+    summary: Maschinen melden sich mit einem eigenen Token und eigener Rolle an – ohne Benutzerkonto.
+    description: |
+      Service-Tokens werden in der Konfiguration mit Name und Rollen hinterlegt und als `Authorization: Bearer …`
+      gesendet. Node-RED nutzt so ein Token für Szenarien, Simulator und Beispiel-Flows.
+    usage:
+      - channel: api
+        text: "Header `Authorization: Bearer <token>`."
+      - channel: node-red
+        text: Verbindung `wms-config` liest das Token aus `WMS_API_TOKEN`.
+    settings:
+      - name: Tokens und Rollen
+        description: "`AUTH_SERVICE_TOKENS=\"name:rolle+rolle:token;…\"` (Token mindestens 32 Zeichen)."
+        where: Umgebungsvariable der API
+    technical:
+      components:
+        - apps/api/src/modules/auth/application/auth.service.ts
+        - apps/api/src/config.ts
+        - packages/node-red-nodes/nodes/wms-config.js
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/auth.integration.test.ts
+        test: erlaubt je Rolle nur, was die Rechtetabelle vorsieht, und vermerkt den Akteur
+      - kind: unit
+        file: packages/node-red-nodes/test/nodes.test.mjs
+        test: meldet sich mit dem Service-Token aus der Umgebung an
+
+  - id: sicherheit.benutzerverwaltung
+    title: Benutzer verwalten
+    group: sicherheit.benutzer
+    summary: Admins legen Benutzer an, vergeben Rollen, sperren sie oder setzen Passwörter – betroffene Sitzungen enden sofort.
+    description: |
+      Benutzer haben Namen, Anzeigename, Rollen und einen Aktiv-Status. Rollenwechsel, Sperren und neues Passwort
+      beenden alle Sitzungen des Benutzers. Ein Admin kann sich nicht selbst aussperren.
+    usage:
+      - channel: api
+        text: "`GET /v1/users`, `POST /v1/users`, `PATCH /v1/users/{username}`."
+    rules:
+      - Benutzername eindeutig; nur bekannte Rollen; Passwort mindestens 10 Zeichen.
+      - Keine Selbstaussperrung (`SELF_LOCKOUT`).
+    technical:
+      components:
+        - apps/api/src/modules/auth/application/auth.service.ts
+        - apps/api/src/modules/auth/http/users.controller.ts
+      endpoints:
+        - GET /v1/users
+        - POST /v1/users
+        - PATCH /v1/users/{username}
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/auth.integration.test.ts
+        test: beendet Sitzungen beim Abmelden, beim Sperren und beim Rollenwechsel
+      - kind: integration
+        file: apps/api/test/integration/auth.integration.test.ts
+        test: ändert das eigene Passwort und schützt vor Selbstaussperrung
+
+  - id: sicherheit.eigenes-passwort
+    title: Eigenes Passwort ändern
+    group: sicherheit.benutzer
+    summary: Jeder Benutzer ändert sein Passwort selbst; andere Sitzungen werden dabei beendet.
+    description: Die Änderung verlangt das aktuelle Passwort und beendet alle anderen Sitzungen des Benutzers.
+    usage:
+      - channel: api
+        text: "`POST /v1/auth/password` mit `currentPassword` und `newPassword`."
+    rules:
+      - Mindestens 10 Zeichen (`PASSWORD_TOO_SHORT`).
+    technical:
+      components:
+        - apps/api/src/modules/auth/application/auth.service.ts
+        - apps/api/src/modules/auth/domain/password.ts
+      endpoints:
+        - POST /v1/auth/password
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/auth.integration.test.ts
+        test: ändert das eigene Passwort und schützt vor Selbstaussperrung
+
+  - id: sicherheit.node-red-schutz
+    title: Geschützter Node-RED-Editor und Endpunkte
+    group: sicherheit.infrastruktur
+    summary: Der Node-RED-Editor und die Test- und Simulator-Endpunkte verlangen eine Anmeldung.
+    description: |
+      Der Editor und die Admin-API von Node-RED verlangen den Benutzer `admin`, die HTTP-Endpunkte der Flows
+      (`/test`, `/sim`, `/examples`) den Benutzer `wms` (Basic Auth). Passwörter kommen aus der .env.
+    usage:
+      - channel: node-red
+        text: "Editor-Anmeldung `admin` / `WMS_NODE_RED_ADMIN_PASSWORD`."
+    settings:
+      - name: Passwörter
+        description: "`WMS_NODE_RED_ADMIN_PASSWORD`, `WMS_NODE_RED_HTTP_PASSWORD` – erzeugt von `pnpm env:init`."
+        where: .env
+    technical:
+      components:
+        - docker/node-red/settings.js
+        - scripts/init-env.mjs
+    evidence:
+      - kind: integration
+        file: packages/scenario-runner/test/scenarios.test.ts
+        test: lehnt Aufrufe ohne Anmeldung ab
+
+  - id: sicherheit.betriebszustand
+    title: Betriebszustand abfragen
+    group: sicherheit.betrieb
+    summary: Meldet, ob Datenbank und MQTT erreichbar sind – für Monitoring und Healthchecks.
+    description: Der Endpunkt ist ohne Anmeldung erreichbar und liefert den Zustand der Datenbank- und der MQTT-Verbindung.
+    usage:
+      - channel: api
+        text: "`GET /health`"
+    technical:
+      components:
+        - apps/api/src/modules/health/health.controller.ts
+      endpoints:
+        - GET /health
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/api.integration.test.ts
+        test: meldet Datenbank und MQTT als erreichbar
+
+  - id: sicherheit.migrationen
+    title: Datenbankschema automatisch aktuell halten
+    group: sicherheit.betrieb
+    summary: Bringt die Datenbank beim Start auf den neuesten Stand – wiederholbar und ohne Handarbeit.
+    description: Versionierte Migrationen legen das Schema an und aktualisieren es; ein erneuter Lauf ändert nichts.
+    usage:
+      - channel: api
+        text: "`DB_MIGRATE_ON_START=true` oder `pnpm --filter @wms/api db:migrate`."
+    technical:
+      components:
+        - apps/api/src/infrastructure/database/migrate.ts
+        - apps/api/src/migrations
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/api.integration.test.ts
+        test: legen das Schema an und sind wiederholbar

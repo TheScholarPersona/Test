@@ -1,0 +1,26 @@
+{
+  "name": "@wms/feature-catalog",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Feature-Katalog: Datenmodell, automatische Prüfungen und interaktive Ansicht (Daten in /catalog)",
+  "license": "UNLICENSED",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "check": "node src/cli.ts check",
+    "build:view": "node src/cli.ts build"
+  },
+  "dependencies": {
+    "yaml": "2.9.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "typescript": "6.0.3",
+    "vitest": "5.1.0"
+  }
+}

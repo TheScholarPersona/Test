@@ -1,0 +1,230 @@
+# Feature-Katalog – Bereich Materialfluss und Anlagen.
+area: materialfluss
+
+features:
+  - id: materialfluss.routen
+    title: Routen und Fahrschritte konfigurieren
+    group: materialfluss.konfiguration
+    summary: Beschreibt, wie Paletten über die Fördertechnik von einer Quelle zu einem Ziel kommen – Änderungen wirken sofort.
+    description: |
+      Eine Route verbindet Quelle und Ziel (je Platz oder Gruppe) und enthält eine Nächster-Schritt-Tabelle: Steht die
+      TU auf `from`, fährt sie nach `next`; Schritte können für einen TU-Typ gelten und haben dann Vorrang.
+      Gefunden wird die spezifischste Route (Platz vor Gruppe vor Elterngruppen). Routen lassen sich abschalten,
+      ändern und löschen; es gibt keinen Zwischenspeicher.
+    usage:
+      - channel: api
+        text: "`POST /v1/flow/routes`, `GET …/{routeId}`, `PATCH`, `DELETE`, Schritte ersetzen `PUT …/{routeId}/steps`."
+    rules:
+      - Routen mit Actions und Plätze in Routen, Schritten oder Actions sind vor dem Löschen geschützt (`ROUTE_IN_USE`).
+    dependsOn: [lagerstruktur.plaetze]
+    technical:
+      components:
+        - apps/api/src/modules/flow/application/flow-config.service.ts
+        - apps/api/src/modules/flow/domain/matching.ts
+        - apps/api/src/modules/flow/http/flow.controller.ts
+      endpoints:
+        - POST /v1/flow/routes
+        - GET /v1/flow/routes/{routeId}
+        - PATCH /v1/flow/routes/{routeId}
+        - DELETE /v1/flow/routes/{routeId}
+        - PUT /v1/flow/routes/{routeId}/steps
+      events:
+        emits: [flow.config-changed]
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/flow.integration.test.ts
+        test: listet Programme mit Parameter-Schema und die Route mit Schritten
+      - kind: integration
+        file: apps/api/test/integration/flow.integration.test.ts
+        test: nimmt für den TU-Typ den speziellen Schritt
+      - kind: integration
+        file: apps/api/test/integration/flow.integration.test.ts
+        test: wendet geänderte Schritte sofort an
+      - kind: integration
+        file: apps/api/test/integration/flow.integration.test.ts
+        test: findet keine Route, wenn sie abgeschaltet ist
+      - kind: integration
+        file: apps/api/test/integration/flow.integration.test.ts
+        test: schützt verwendete Plätze und Routen vor dem Löschen
+      - kind: unit
+        file: apps/api/test/unit/flow/matching.test.ts
+        test: ordnet Platz vor Gruppe vor Elterngruppen
+      - kind: scenario
+        id: material-flow
+
+  - id: materialfluss.action-matrix
+    title: Action-Matrix und Programme
+    group: materialfluss.konfiguration
+    summary: Legt fest, was bei einem Geräte-Ereignis an einem Platz passiert – von „nächster Schritt“ bis „an Node-RED übergeben“.
+    description: |
+      Eine Action ordnet einem Ereignistyp – optional je Route und Platz oder Gruppe – ein Programm mit Parametern zu.
+      Eingebaute Programme: `route-next`, `create-order`, `send-to`, `book`, `finish-order`, `lock-location`,
+      `interrupt-order`, `node-red`. Parameter werden gegen das Schema des Programms geprüft. Gesucht wird vom
+      Spezifischen zum Allgemeinen (Platz vor Gruppe vor überall, Route vor routenunabhängig).
+    usage:
+      - channel: api
+        text: "`POST /v1/flow/actions` (`eventType`, `routeId?`, `place?`, `program`, `params`), `DELETE …/{name}`, Programme `GET /v1/flow/programs`."
+    settings:
+      - name: Programm und Parameter je Ereignis und Ort
+        description: z. B. `create-order` am I-Punkt mit `typeCode` und `target`.
+        where: "POST /v1/flow/actions"
+    dependsOn: [materialfluss.routen]
+    technical:
+      components:
+        - apps/api/src/modules/flow/application/flow-config.service.ts
+        - apps/api/src/modules/flow/domain/programs.ts
+        - apps/api/src/modules/flow/domain/matching.ts
+      endpoints:
+        - POST /v1/flow/actions
+        - DELETE /v1/flow/actions/{name}
+        - GET /v1/flow/programs
+      events:
+        emits: [flow.config-changed]
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/flow.integration.test.ts
+        test: prüft Programmparameter, Ereignistyp und Verweise
+      - kind: integration
+        file: apps/api/test/integration/flow.integration.test.ts
+        test: listet Programme mit Parameter-Schema und die Route mit Schritten
+      - kind: unit
+        file: apps/api/test/unit/flow/matching.test.ts
+        test: "Ort vor Route: Platz+Route, Platz, Gruppe+Route, Gruppe, Eltern …, überall+Route, überall"
+      - kind: scenario
+        id: material-flow
+
+  - id: materialfluss.geraete-ereignisse
+    title: Geräte-Ereignisse verarbeiten und Fahrbefehle senden
+    group: materialfluss.betrieb
+    summary: Die Anlage meldet „Palette steht an Platz X“, das WMS entscheidet und antwortet mit dem nächsten Fahrbefehl.
+    description: |
+      Geräte-Ereignisse (`request`, `arrived`, `location-status`, `error`) adressieren Plätze über ihren
+      SPS-Code. Das WMS sucht Route und Action, führt das Programm aus, bucht die TU, schließt Aufträge am Ziel ab und
+      sendet den Fahrbefehl als Antwort und als Ereignis. Platzmeldungen werden zu Sperren, Störungen unterbrechen den
+      laufenden Auftrag. Am I-Punkt entstehen unbekannte TUs und ihr Auftrag automatisch. Ein Probelauf entscheidet
+      und begründet, ohne zu buchen oder zu senden.
+    usage:
+      - channel: api
+        text: '`POST /v1/flow/events` mit z. B. `{ "type": "request", "location": { "plcCode": "CV01" }, "barcode": "P1" }`, optional `dryRun: true`.'
+      - channel: node-red
+        text: Node `wms-device-event`; der Anlagensimulator in Node-RED fährt TUs auf jeden Fahrbefehl.
+      - channel: mqtt
+        text: Fahrbefehle als Ereignis `flow.command`.
+    rules:
+      - Nichts wird still ignoriert – keine Route erzeugt `flow.no-route`, keine Action `flow.unhandled` (R4).
+      - Fachfehler eines Programms brechen ab und kommen als HTTP-Fehler zurück.
+    dependsOn: [materialfluss.action-matrix, transportauftraege.anlegen-starten]
+    technical:
+      components:
+        - apps/api/src/modules/flow/application/flow.service.ts
+        - apps/api/src/modules/flow/domain/programs.ts
+        - packages/node-red-nodes/nodes/wms-device-event.js
+        - flows/simulator/config.json
+      endpoints:
+        - POST /v1/flow/events
+      events:
+        emits: [flow.command, flow.no-route, flow.unhandled]
+      nodeRedNodes: [wms-device-event]
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/flow.integration.test.ts
+        test: legt am I-Punkt TU und Auftrag an und schickt die TU zum ersten Schritt
+      - kind: integration
+        file: apps/api/test/integration/flow.integration.test.ts
+        test: fährt Schritt für Schritt und schließt bei Ankunft in der Zielgruppe ab
+      - kind: integration
+        file: apps/api/test/integration/flow.integration.test.ts
+        test: bucht und sendet im Probelauf nichts, begründet aber
+      - kind: integration
+        file: apps/api/test/integration/flow.integration.test.ts
+        test: meldet „keine Route“ für einen Auftrag ohne passende Route (R4)
+      - kind: integration
+        file: apps/api/test/integration/flow.integration.test.ts
+        test: meldet „keine Action“, wenn nichts konfiguriert ist
+      - kind: integration
+        file: apps/api/test/integration/flow.integration.test.ts
+        test: übernimmt Platzmeldungen der Anlage als Sperren
+      - kind: integration
+        file: apps/api/test/integration/flow.integration.test.ts
+        test: unterbricht bei einer Störung den laufenden Auftrag
+      - kind: unit
+        file: packages/node-red-nodes/test/nodes.test.mjs
+        test: wms-device-event meldet ein Geräte-Ereignis über den plcCode
+      - kind: scenario
+        id: material-flow
+
+  - id: materialfluss.node-red-programme
+    title: Materialfluss-Programme in Node-RED
+    group: materialfluss.betrieb
+    summary: Überlässt besondere Entscheidungen einem Node-RED-Flow, der mit einem Fahrbefehl antwortet – ohne WMS-Code zu ändern.
+    description: |
+      Das Programm `node-red` sendet das Ereignis `flow.program-requested` mit dem Namen des Flows. Der Node-RED-Flow
+      entscheidet und antwortet mit einem Fahrbefehl über die API. Ein Beispiel-Flow (`send-to-plc`) liegt bei.
+    usage:
+      - channel: node-red
+        text: Flow hört auf `wms/flow/program-requested` und antwortet mit `POST /v1/flow/commands`.
+      - channel: api
+        text: "`POST /v1/flow/commands` mit `barcode`, `to`, optional `deviceId` und `reason`."
+    dependsOn: [materialfluss.geraete-ereignisse]
+    technical:
+      components:
+        - apps/api/src/modules/flow/application/flow.service.ts
+        - flows/scripts/build-flows.mjs
+      endpoints:
+        - POST /v1/flow/commands
+      events:
+        emits: [flow.program-requested, flow.command]
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/flow.integration.test.ts
+        test: übergibt an Node-RED, das per Fahrbefehl antwortet
+      - kind: scenario
+        id: material-flow
+        note: Programm-Tab send-to-plc
+
+  - id: materialfluss.entscheidungsprotokoll
+    title: Materialfluss-Entscheidungen nachvollziehen
+    group: materialfluss.betrieb
+    summary: Zeigt zu jedem Geräte-Ereignis, welche Route und Action gefunden wurden und warum.
+    description: Jede Verarbeitung wird mit Ergebnis (`COMMAND`, `FINISHED`, `HANDLED`, `DELEGATED`, `NO_ACTION`, `NO_NEXT_STEP`) und Begründung protokolliert, neueste zuerst.
+    usage:
+      - channel: api
+        text: "`GET /v1/flow/decisions`"
+    technical:
+      components:
+        - apps/api/src/modules/flow/entities/flow.entities.ts
+      endpoints:
+        - GET /v1/flow/decisions
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/flow.integration.test.ts
+        test: fährt Schritt für Schritt und schließt bei Ankunft in der Zielgruppe ab
+      - kind: scenario
+        id: material-flow
+
+  - id: materialfluss.simulator
+    title: Anlagensimulator
+    group: materialfluss.betrieb
+    summary: Simuliert die Fördertechnik in Node-RED mit Fahrzeiten und Störungen – zum Testen und Vorführen ohne echte Anlage.
+    description: |
+      Der Simulator fährt auf jeden Fahrbefehl die TU mit konfigurierter Fahrzeit zum Ziel und meldet dort `request`
+      oder `arrived`. Störungen lassen sich für die nächste Fahrt zu einem Platz einspeisen. Der Zustand mit den
+      letzten Fahrten ist abrufbar.
+    usage:
+      - channel: node-red
+        text: "Tab „Anlagensimulator“; `GET /sim/state`, `POST /sim/faults`, `DELETE /sim/faults` (Basic Auth `wms`)."
+    settings:
+      - name: Fahrzeiten und Ankunftsplätze
+        description: "`defaultTravelMs`, `travelMs` je SPS-Code, `arrivedPatterns`."
+        where: flows/simulator/config.json
+      - name: Simulator an/aus
+        description: "`SIMULATOR_ENABLED`"
+        where: Umgebungsvariable (Compose)
+    dependsOn: [materialfluss.geraete-ereignisse]
+    technical:
+      components:
+        - flows/simulator/config.json
+        - flows/scripts/build-flows.mjs
+    evidence:
+      - kind: scenario
+        id: material-flow

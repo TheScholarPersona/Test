@@ -56,6 +56,7 @@ docker/                    Konfiguration für Hilfsdienste (Mosquitto)
 | `pnpm --filter @wms/api db:migration:create` | neue Migration aus Entity-Änderungen erzeugen |
 | `DATABASE_URL=… apps/api/scripts/new-migration.sh <JJJJMMTTHHMMSS> <name> "<Beschreibung>"` | Migration erzeugen, sprechend benennen, in `index.ts` eintragen und auf Drift prüfen – **leert die Datenbank**, nur mit Wegwerf-DB |
 | `node flows/scripts/build-flows.mjs` | Node-RED-Flows neu erzeugen |
+| `pnpm catalog:check` / `pnpm catalog:build` | Feature-Katalog prüfen bzw. Ansicht erzeugen (`catalog/dist/index.html`), siehe [feature-katalog.md](feature-katalog.md) |
 
 ## Profile der API
 
