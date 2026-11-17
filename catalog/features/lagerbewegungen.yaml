@@ -62,15 +62,22 @@ features:
     usage:
       - channel: api
         text: "`GET /v1/movements?state=OPEN,IN_PROGRESS&type=INBOUND&assignedTo=…`"
+      - channel: leitstand
+        text: Seite **Transport** – offene Bewegungen, dringendste zuerst.
     technical:
       components:
         - apps/api/src/modules/movement/application/movement.service.ts
       endpoints:
         - GET /v1/movements
+      uiRoutes:
+        - /transport
     evidence:
       - kind: integration
         file: apps/api/test/integration/movement.integration.test.ts
         test: sortiert nach Priorität, dann nach Alter, und filtert nach Zustand und Typ
+      - kind: web-e2e
+        file: apps/web/e2e/seiten.spec.ts
+        test: "Transport: Lagerbewegung und Transportauftrag bedienen"
 
   - id: lagerbewegungen.ausfuehren
     title: Lagerbewegung ausführen, abschließen oder stornieren
@@ -84,6 +91,8 @@ features:
     usage:
       - channel: api
         text: "`POST /v1/movements/{number}/start`, `…/release`, `…/complete` (`location?`, `mode?`), `…/cancel`."
+      - channel: leitstand
+        text: Seite **Transport** – Beginnen, Abschließen, Stornieren je Bewegung.
     rules:
       - Zustände `OPEN` → `IN_PROGRESS` → `DONE`, Storno nach `CANCELLED`; sonst `INVALID_STATE_TRANSITION`.
       - TUs mit offener Bewegung und Plätze, die Ziel einer offenen Bewegung sind, können nicht gelöscht werden.
@@ -92,6 +101,7 @@ features:
       components:
         - apps/api/src/modules/movement/application/movement.service.ts
         - apps/api/src/modules/movement/domain/movement-state.ts
+        - apps/web/src/pages/TransportPage.tsx
       endpoints:
         - POST /v1/movements/{number}/start
         - POST /v1/movements/{number}/release
@@ -99,6 +109,8 @@ features:
         - POST /v1/movements/{number}/cancel
       events:
         emits: [movement.started, movement.released, movement.completed, movement.cancelled]
+      uiRoutes:
+        - /transport
     evidence:
       - kind: integration
         file: apps/api/test/integration/movement.integration.test.ts
@@ -120,3 +132,6 @@ features:
         test: kennt Endzustände und erlaubte Aktionen
       - kind: scenario
         id: movement-flow
+      - kind: web-e2e
+        file: apps/web/e2e/seiten.spec.ts
+        test: "Transport: Lagerbewegung und Transportauftrag bedienen"

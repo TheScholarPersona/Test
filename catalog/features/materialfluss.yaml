@@ -13,7 +13,9 @@ features:
       ändern und löschen; es gibt keinen Zwischenspeicher.
     usage:
       - channel: api
-        text: "`POST /v1/flow/routes`, `GET …/{routeId}`, `PATCH`, `DELETE`, Schritte ersetzen `PUT …/{routeId}/steps`."
+        text: "`POST /v1/flow/routes`, Liste `GET /v1/flow/routes`, `GET …/{routeId}`, `PATCH`, `DELETE`, Schritte ersetzen `PUT …/{routeId}/steps`."
+      - channel: leitstand
+        text: Seite **Materialfluss** – Routen mit Schritten ansehen.
     rules:
       - Routen mit Actions und Plätze in Routen, Schritten oder Actions sind vor dem Löschen geschützt (`ROUTE_IN_USE`).
     dependsOn: [lagerstruktur.plaetze]
@@ -28,8 +30,11 @@ features:
         - PATCH /v1/flow/routes/{routeId}
         - DELETE /v1/flow/routes/{routeId}
         - PUT /v1/flow/routes/{routeId}/steps
+        - GET /v1/flow/routes
       events:
         emits: [flow.config-changed]
+      uiRoutes:
+        - /materialfluss
     evidence:
       - kind: integration
         file: apps/api/test/integration/flow.integration.test.ts
@@ -51,6 +56,12 @@ features:
         test: ordnet Platz vor Gruppe vor Elterngruppen
       - kind: scenario
         id: material-flow
+      - kind: integration
+        file: apps/api/test/integration/flow.integration.test.ts
+        test: listet Routen und Actions und ändert eine Action
+      - kind: web-e2e
+        file: apps/web/e2e/seiten.spec.ts
+        test: "Materialfluss: Konfiguration ansehen und Geräte-Ereignis im Probelauf senden"
 
   - id: materialfluss.action-matrix
     title: Action-Matrix und Programme
@@ -63,7 +74,9 @@ features:
       Spezifischen zum Allgemeinen (Platz vor Gruppe vor überall, Route vor routenunabhängig).
     usage:
       - channel: api
-        text: "`POST /v1/flow/actions` (`eventType`, `routeId?`, `place?`, `program`, `params`), `DELETE …/{name}`, Programme `GET /v1/flow/programs`."
+        text: "`POST /v1/flow/actions` (`eventType`, `routeId?`, `place?`, `program`, `params`), Liste `GET /v1/flow/actions`, ändern `PATCH …/{name}` (`description`, `params`, `enabled`), `DELETE …/{name}`, Programme `GET /v1/flow/programs`."
+      - channel: leitstand
+        text: Seite **Materialfluss** – Action-Matrix ansehen.
     settings:
       - name: Programm und Parameter je Ereignis und Ort
         description: z. B. `create-order` am I-Punkt mit `typeCode` und `target`.
@@ -78,8 +91,12 @@ features:
         - POST /v1/flow/actions
         - DELETE /v1/flow/actions/{name}
         - GET /v1/flow/programs
+        - GET /v1/flow/actions
+        - PATCH /v1/flow/actions/{name}
       events:
         emits: [flow.config-changed]
+      uiRoutes:
+        - /materialfluss
     evidence:
       - kind: integration
         file: apps/api/test/integration/flow.integration.test.ts
@@ -92,6 +109,12 @@ features:
         test: "Ort vor Route: Platz+Route, Platz, Gruppe+Route, Gruppe, Eltern …, überall+Route, überall"
       - kind: scenario
         id: material-flow
+      - kind: integration
+        file: apps/api/test/integration/flow.integration.test.ts
+        test: listet Routen und Actions und ändert eine Action
+      - kind: web-e2e
+        file: apps/web/e2e/seiten.spec.ts
+        test: "Materialfluss: Konfiguration ansehen und Geräte-Ereignis im Probelauf senden"
 
   - id: materialfluss.geraete-ereignisse
     title: Geräte-Ereignisse verarbeiten und Fahrbefehle senden
@@ -110,6 +133,8 @@ features:
         text: Node `wms-device-event`; der Anlagensimulator in Node-RED fährt TUs auf jeden Fahrbefehl.
       - channel: mqtt
         text: Fahrbefehle als Ereignis `flow.command`.
+      - channel: leitstand
+        text: Seite **Materialfluss** – Geräte-Ereignis von Hand senden, standardmäßig als Probelauf mit Begründung.
     rules:
       - Nichts wird still ignoriert – keine Route erzeugt `flow.no-route`, keine Action `flow.unhandled` (R4).
       - Fachfehler eines Programms brechen ab und kommen als HTTP-Fehler zurück.
@@ -120,11 +145,14 @@ features:
         - apps/api/src/modules/flow/domain/programs.ts
         - packages/node-red-nodes/nodes/wms-device-event.js
         - flows/simulator/config.json
+        - apps/web/src/pages/FlowPage.tsx
       endpoints:
         - POST /v1/flow/events
       events:
         emits: [flow.command, flow.no-route, flow.unhandled]
       nodeRedNodes: [wms-device-event]
+      uiRoutes:
+        - /materialfluss
     evidence:
       - kind: integration
         file: apps/api/test/integration/flow.integration.test.ts
@@ -152,6 +180,9 @@ features:
         test: wms-device-event meldet ein Geräte-Ereignis über den plcCode
       - kind: scenario
         id: material-flow
+      - kind: web-e2e
+        file: apps/web/e2e/seiten.spec.ts
+        test: "Materialfluss: Konfiguration ansehen und Geräte-Ereignis im Probelauf senden"
 
   - id: materialfluss.node-red-programme
     title: Materialfluss-Programme in Node-RED
@@ -190,11 +221,15 @@ features:
     usage:
       - channel: api
         text: "`GET /v1/flow/decisions`"
+      - channel: leitstand
+        text: Seite **Materialfluss** – Entscheidungen, neueste zuerst.
     technical:
       components:
         - apps/api/src/modules/flow/entities/flow.entities.ts
       endpoints:
         - GET /v1/flow/decisions
+      uiRoutes:
+        - /materialfluss
     evidence:
       - kind: integration
         file: apps/api/test/integration/flow.integration.test.ts

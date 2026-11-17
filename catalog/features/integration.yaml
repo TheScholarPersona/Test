@@ -184,3 +184,22 @@ features:
         id: system-ping
       - kind: scenario
         id: nodes-selftest
+
+  - id: integration.ereignis-monitor
+    title: Ereignis-Monitor im Leitstand
+    group: integration.ereignisse
+    summary: Zeigt alle Live-Ereignisse im Browser und filtert nach Typ – zum Beobachten und zur Fehlersuche.
+    description: Die Seite **Ereignisse** zeigt die Ereignisse seit dem Öffnen (bis zu 200) mit kurzer Zusammenfassung und dem Verbindungszustand; ein Filter grenzt nach Typ ein.
+    usage:
+      - channel: leitstand
+        text: Menü **Ereignisse**, Feld „Typ enthält“ (z. B. `stock` oder `flow.command`).
+    dependsOn: [integration.live-stream]
+    technical:
+      components:
+        - apps/web/src/pages/EventsPage.tsx
+        - apps/web/src/components/LiveFeed.tsx
+      uiRoutes: [/ereignisse]
+    evidence:
+      - kind: web-e2e
+        file: apps/web/e2e/seiten.spec.ts
+        test: "Ereignisse: zeigt Live-Ereignisse und filtert nach Typ"

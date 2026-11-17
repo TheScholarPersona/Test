@@ -17,6 +17,8 @@ features:
         text: "`POST /v1/products` mit `sku`, `baseUnit` und optional `units`; Einheiten ersetzen mit `PUT /v1/products/{sku}/units`."
       - channel: node-red
         text: Szenarien und eigene Flows legen Produkte über den Node `wms-api` oder HTTP-Requests an.
+      - channel: api
+        text: "Lesen: `GET /v1/products?limit=…&offset=…`, `GET /v1/products/{sku}`."
     rules:
       - Die SKU ist eindeutig; ein zweites Anlegen wird mit `PRODUCT_EXISTS` abgelehnt.
       - Eine alternative Einheit darf nicht wie die Basiseinheit heißen (`UNIT_CONFLICT`); der Faktor muss größer als 0 sein.
@@ -37,6 +39,8 @@ features:
         - POST /v1/products
         - PATCH /v1/products/{sku}
         - PUT /v1/products/{sku}/units
+        - GET /v1/products
+        - GET /v1/products/{sku}
       events:
         emits: [product.created, product.updated]
       notes:
@@ -51,6 +55,9 @@ features:
         note: Basiseinheit bei vorhandenem Bestand nicht änderbar
       - kind: scenario
         id: stock-flow
+      - kind: integration
+        file: apps/api/test/integration/stock.integration.test.ts
+        test: liest Produkte einzeln und als Liste
 
   - id: bestand.bestand-je-tu
     title: Bestand je Transporteinheit führen und abfragen
@@ -414,6 +421,7 @@ features:
         - POST /v1/stock-counts/{number}/result
         - POST /v1/stock-counts/{number}/close
         - POST /v1/stock-counts/{number}/cancel
+        - GET /v1/stock-counts/{number}
       events:
         emits: [stock-count.changed, stock.corrected]
       notes:
@@ -433,3 +441,6 @@ features:
         test: bricht eine Inventur ohne Buchung ab
       - kind: scenario
         id: stock-flow
+      - kind: integration
+        file: apps/api/test/integration/stock.integration.test.ts
+        test: liest eine abgeschlossene Inventur mit Soll, Ist und Differenz

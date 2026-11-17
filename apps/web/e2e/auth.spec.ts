@@ -51,3 +51,35 @@ test('Rolle lager: keine Benutzerverwaltung, kein Anlegen von Auslageraufträgen
     await admin.close();
   }
 });
+
+test('Konto: eigenes Passwort ändern und mit dem neuen anmelden', async ({ page, browser, fx }) => {
+  const username = `pw-${fx.s.toLowerCase()}-k`;
+  const first = `erstes-${fx.s}-pw`;
+  const second = `zweites-${fx.s}-pw`;
+  const admin = await browser.newContext({ storageState: ADMIN_STATE });
+  expect((await admin.request.post(fx.url('/v1/users'), { data: { username, password: first, roles: ['lesen'] } })).status()).toBe(201);
+  const login = async (password: string) => {
+    const form = page.getByRole('form', { name: 'Anmeldung' });
+    await form.getByLabel('Benutzername').fill(username);
+    await form.getByLabel('Passwort').fill(password);
+    await form.getByRole('button', { name: 'Anmelden' }).click();
+  };
+  try {
+    await page.goto('./konto');
+    await login(first);
+    await expect(page.getByRole('heading', { name: 'Konto' })).toBeVisible();
+    await page.getByLabel('Bisheriges Passwort').fill(first);
+    await page.getByLabel('Neues Passwort (mind. 10 Zeichen)').fill(second);
+    await page.getByRole('button', { name: 'Ändern' }).click();
+    await expect(page.getByRole('status')).toContainText('Passwort geändert');
+
+    await page.getByRole('button', { name: 'Abmelden' }).click();
+    await login(first);
+    await expect(page.getByRole('alert')).toBeVisible();
+    await login(second);
+    await expect(page.getByLabel('Angemeldet')).toContainText('lesen');
+  } finally {
+    await admin.request.patch(fx.url(`/v1/users/${username}`), { data: { active: false } });
+    await admin.close();
+  }
+});

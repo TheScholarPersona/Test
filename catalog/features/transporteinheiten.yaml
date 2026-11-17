@@ -8,11 +8,11 @@ features:
     summary: Beschreibt Ladungsträger wie Europalette oder Behälter mit Maßen, Leergewicht und zulässiger Zuladung.
     description: |
       Ein TU-Typ legt Maße, Leergewicht und zulässige Zuladung fest. Jede Transporteinheit gehört zu genau einem Typ;
-      ohne eigenes Gewicht rechnet das WMS mit dem Leergewicht des Typs. Typen lassen sich löschen, solange keine TU
+      ohne eigenes Gewicht rechnet das WMS mit dem Leergewicht des Typs. Maße, Gewichte und Beschreibung sind änderbar; Typen lassen sich löschen, solange keine TU
       und keine Stapelregel eines anderen Typs sie nutzt.
     usage:
       - channel: api
-        text: "`POST /v1/transport-unit-types` (`code`, `tareWeight`, `maxPayload`, Maße), lesen `GET …/{code}`, löschen `DELETE …/{code}`."
+        text: "`POST /v1/transport-unit-types` (`code`, `tareWeight`, `maxPayload`, Maße), Liste mit Regeln `GET /v1/transport-unit-types`, lesen `GET …/{code}`, ändern `PATCH …/{code}`, löschen `DELETE …/{code}`."
     rules:
       - Kennung eindeutig; löschen nur ohne Verwendung (`TU_TYPE_IN_USE`).
     technical:
@@ -23,6 +23,8 @@ features:
         - POST /v1/transport-unit-types
         - GET /v1/transport-unit-types/{code}
         - DELETE /v1/transport-unit-types/{code}
+        - GET /v1/transport-unit-types
+        - PATCH /v1/transport-unit-types/{code}
       events:
         emits: [transport-unit-type.created, transport-unit-type.deleted]
       notes:
@@ -36,6 +38,9 @@ features:
         test: schützt Lagerplätze mit TUs und benutzte Typen vor dem Löschen
       - kind: scenario
         id: tu-placement
+      - kind: integration
+        file: apps/api/test/integration/transport.integration.test.ts
+        test: listet Typen mit Regeln und ändert Maße und Beschreibung
 
   - id: transporteinheiten.regeln
     title: Platzierungs- und Stapelregeln je TU-Typ

@@ -88,6 +88,13 @@ describe('Wareneingang und Bestand', () => {
       expect(created.body.positions[0]).toMatchObject({ sku: 'SKU-A', expected: { amount: '10', unit: 'PCS' }, received: { amount: '0' }, open: { amount: '10' } });
     });
 
+    it('listet Aufträge, gefiltert nach Lieferant und Zustand', async () => {
+      const list = (await api.get('/v1/receiving-orders?supplier=Lieferant%20GmbH')).body;
+      expect(list.items.map((o: { orderId: string }) => o.orderId)).toContain('WE-1');
+      expect(list.items.every((o: { supplier: string }) => o.supplier === 'Lieferant GmbH')).toBe(true);
+      expect((await api.get('/v1/receiving-orders?state=COMPLETED')).body.items.map((o: { orderId: string }) => o.orderId)).not.toContain('WE-1');
+    });
+
     it('prüft Auftragsnummer, Produkte und Einheiten', async () => {
       const position = { kind: 'quantity', sku: 'SKU-A', quantity: { amount: '1', unit: 'PCS' } };
       expect(await api.post('/v1/receiving-orders', { orderId: 'WE-1', positions: [position] })).toMatchObject({ status: 409, body: { code: 'RECEIVING_ORDER_EXISTS' } });

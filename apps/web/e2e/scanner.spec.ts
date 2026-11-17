@@ -44,3 +44,26 @@ test('Scanner: Wareneingang ohne Avis', async ({ page, fx }) => {
   await page.getByRole('button', { name: 'Erfassen' }).click();
   await expect(page.getByRole('status')).toContainText(`auf ${barcode} (Bestand 18)`);
 });
+
+test('Scanner: Pick quittieren mit TU-Kontrolle', async ({ page, fx }) => {
+  const w = await fx.warehouse();
+  const barcode = `PW-${fx.s}-PK`;
+  await fx.stockedUnit(barcode, w.sku, w.unitType, w.a, '30');
+  const active = (await fx.api('GET', '/v1/strategy-rule-sets?decisionPoint=allocation')).items.some((r: { status: string }) => r.status === 'ACTIVE');
+  test.skip(!active, 'Kein aktiver Auslager-Regelsatz (pnpm demo:data oder das Szenario outbound-flow legen einen an)');
+  const orderId = `PW-${fx.s}-SCAN`;
+  await fx.api('POST', '/v1/outbound-orders', { orderId, target: { erpCode: w.ship }, lines: [{ sku: w.sku, quantity: { amount: '1', unit: 'KAR' } }] });
+  fx.onCleanup(() => fx.api('POST', `/v1/outbound-orders/${orderId}/cancel`, {}).catch(() => undefined));
+  await fx.api('POST', `/v1/outbound-orders/${orderId}/allocate`, { transport: 'none' });
+
+  await page.goto('./scanner/picken');
+  await page.getByRole('button', { name: new RegExp(orderId) }).click();
+  await page.getByLabel('TU scannen (Kontrolle)').fill('FALSCHE-TU');
+  await page.getByRole('button', { name: 'Quittieren' }).click();
+  await expect(page.getByRole('alert')).toContainText(`erwartet ${barcode}`);
+  await page.getByLabel('TU scannen (Kontrolle)').fill(barcode);
+  await page.getByRole('button', { name: 'Quittieren' }).click();
+  await expect(page.getByRole('status')).toContainText(`von ${barcode} quittiert`);
+  expect((await fx.api('GET', `/v1/stock?barcode=${barcode}`)).items[0].quantity.amount).toBe('24');
+  expect((await fx.api('GET', `/v1/outbound-orders/${orderId}`)).state).toBe('COMPLETED');
+});

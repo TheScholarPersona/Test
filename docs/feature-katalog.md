@@ -117,23 +117,23 @@ Die Prüfung **legt nie Features an**. Sie meldet, was zugeordnet werden muss; o
 
 ## 6. Stand der Bestandsaufnahme
 
-Alle 12 Bereiche sind katalogisiert (`status: katalogisiert`); jeder erkannte Bestandteil ist einem Feature oder Prüfbestand-Eintrag zugeordnet. Mit den Testberichten aller Testarten (Unit, Integration, Node-RED-Szenarien, Browser) sind alle Katalog-Features im Testlauf nachgewiesen.
+Alle 12 Bereiche sind katalogisiert (`status: katalogisiert`); jeder erkannte Bestandteil ist einem Feature zugeordnet. Mit den Testberichten aller Testarten (Unit, Integration, Node-RED-Szenarien, MQTT-Sicherheit, Browser) sind **alle 72 Features im Testlauf nachgewiesen; der Prüfbestand ist leer**.
 
-| Bereich | Features | Prüfbestand | Erkannte Bestandteile |
-|---|---|---|---|
-| Lagerstruktur | 5 | 2 | 29 |
-| Transporteinheiten | 8 | 1 | 27 |
-| Strategien und Regeln | 7 | 1 | 15 |
-| Bestand | 12 | 2 | 30 |
-| Wareneingang | 4 | 1 | 16 |
-| Lagerbewegungen | 3 | 0 | 12 |
-| Transportaufträge | 2 | 1 | 19 |
-| Materialfluss und Anlagen | 6 | 1 | 21 |
-| Auslagerung | 4 | 2 | 13 |
-| Integration und Automatisierung | 6 | 1 | 11 |
-| Bedienoberfläche | 5 | 0 | 2 |
-| Sicherheit und Betrieb | 8 | 2 | 11 |
-| **Summe** | **70** | **14** | **206** |
+| Bereich | Features | Erkannte Bestandteile |
+|---|---|---|
+| Lagerstruktur | 5 | 29 |
+| Transporteinheiten | 8 | 27 |
+| Strategien und Regeln | 7 | 15 |
+| Bestand | 12 | 30 |
+| Wareneingang | 4 | 16 |
+| Lagerbewegungen | 3 | 12 |
+| Transportaufträge | 2 | 19 |
+| Materialfluss und Anlagen | 6 | 21 |
+| Auslagerung | 4 | 13 |
+| Integration und Automatisierung | 7 | 11 |
+| Bedienoberfläche | 5 | 2 |
+| Sicherheit und Betrieb | 9 | 11 |
+| **Summe** | **72** | **206** |
 
 **Festlegungen** (Produktentscheidung nach dem Pilot):
 
@@ -141,14 +141,6 @@ Alle 12 Bereiche sind katalogisiert (`status: katalogisiert`); jeder erkannte Be
 - Ein Feature ist eine nutzbare Fähigkeit, kein einzelner Endpunkt.
 - Eine Seite der Oberfläche oder ein Endpunkt ohne eigenen Test steht im Prüfbestand, auch wenn die Fachfunktion dahinter nachgewiesen ist.
 
-**Prüfbestand – was fehlt:**
-
-| Art | Einträge |
-|---|---|
-| Lese- oder Änderungsendpunkte ohne Test | Produkte abfragen, einzelne Inventur lesen, Platztypen auflisten, Gruppe ändern, TU-Typen auflisten/ändern, einzelnen Regelsatz lesen, Liste der Auslageraufträge |
-| Seiten ohne Browser-Test | Wareneingang, Transport, Materialfluss (dazu Routen-/Action-Listen und Action ändern), Ereignisse, Konto und Benutzer (dazu Rollenliste), Picks am Scanner |
-| Infrastruktur nur von Hand geprüft | MQTT nur mit TLS und Benutzern |
-
-Jeder Eintrag wird mit einem passenden Test zum Katalog-Feature; das ist der kürzeste Weg, den Prüfbestand abzubauen.
+**Abbau des Prüfbestands:** Die 14 Einträge nach der ersten Bestandsaufnahme wurden mit Tests nachgewiesen und sind jetzt Teil der Features: Lese- und Änderungsendpunkte (Integrationstests), die Seiten Wareneingang, Transport, Materialfluss, Ereignisse, Konto und Benutzer sowie Picks am Scanner (Browser-Tests in `apps/web/e2e/seiten.spec.ts`, `auth.spec.ts`, `scanner.spec.ts`) und die MQTT-Absicherung (`packages/scenario-runner/test/security.test.ts`, läuft mit `pnpm test:e2e` gegen die Umgebung).
 
 **Grenze der Erkennung:** „Aufgerufen in“ erkennt Aufrufe mit Methode und Pfad im Quelltext (auch Template-Ausdrücke und `fetch` ohne Methode). Aufrufe über Hilfsfunktionen wie `post(id, 'issues')` bleiben unsichtbar; deshalb ist das nur eine Warnung. Verbindlich sind die ausdrücklichen Nachweise und ihre Testergebnisse.

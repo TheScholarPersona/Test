@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api, unwrap } from '../api/client';
-import { Feedback } from '../components/Feedback';
+import { Feedback, latest } from '../components/Feedback';
 import { Empty, ErrorMessage, Panel } from '../components/ui';
 import { useAction } from '../components/useAction';
 import { useCan } from '../auth/session';
@@ -45,7 +45,7 @@ export function LocationsPage() {
     <>
       <h1>Lagerplätze</h1>
       <ErrorMessage error={groups.error ?? locations.error} />
-      <Feedback message={lock.message ?? lockGroup.message} />
+      <Feedback message={latest(lock.message, lockGroup.message)} />
       <Panel title="Gruppen">
         {groups.data?.items.length ? (
           <div className="table-wrap">

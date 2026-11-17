@@ -12,7 +12,7 @@ features:
       löschen, solange kein Platz sie nutzt.
     usage:
       - channel: api
-        text: "`POST /v1/location-types` (`code`), lesen `GET …/{code}`, ändern `PATCH`, löschen `DELETE`."
+        text: "`POST /v1/location-types` (`code`), Liste `GET /v1/location-types`, lesen `GET …/{code}`, ändern `PATCH`, löschen `DELETE`."
     rules:
       - Kennung eindeutig; auch bei gleichzeitigem Anlegen kommt genau eine Anfrage durch.
       - Löschen nur, wenn kein Platz den Typ nutzt (`LOCATION_TYPE_IN_USE`).
@@ -25,6 +25,7 @@ features:
         - GET /v1/location-types/{code}
         - PATCH /v1/location-types/{code}
         - DELETE /v1/location-types/{code}
+        - GET /v1/location-types
       events:
         emits: [location-type.created, location-type.updated, location-type.deleted]
       notes:
@@ -41,6 +42,9 @@ features:
         test: verweigert das Löschen benutzter Typen und nicht leerer Gruppen
       - kind: scenario
         id: layout-locks
+      - kind: integration
+        file: apps/api/test/integration/layout.integration.test.ts
+        test: listet alle Platztypen
 
   - id: lagerstruktur.gruppen
     title: Lagerbereiche als Gruppenhierarchie
@@ -49,10 +53,10 @@ features:
     description: |
       Lagerplatzgruppen bilden einen Baum. Die übergeordnete Gruppe wird beim Anlegen festgelegt und bleibt danach
       fest, sodass keine Zyklen entstehen. Abfragen, Einlager- und Auslagerstrategien sowie Sperren wirken auf eine
-      Gruppe einschließlich aller Untergruppen. Leere Gruppen lassen sich löschen.
+      Gruppe einschließlich aller Untergruppen. Beschreibung und Gruppentyp sind änderbar; leere Gruppen lassen sich löschen.
     usage:
       - channel: api
-        text: "`POST /v1/location-groups` (`name`, `parent`), lesen `GET /v1/location-groups` bzw. `…/{name}`, löschen `DELETE …/{name}`."
+        text: "`POST /v1/location-groups` (`name`, `parent`), lesen `GET /v1/location-groups` bzw. `…/{name}`, ändern `PATCH …/{name}` (`description`, `groupType`), löschen `DELETE …/{name}`."
       - channel: leitstand
         text: Seite **Lagerplätze** zeigt die Gruppen mit ihren Sperren.
     rules:
@@ -68,8 +72,9 @@ features:
         - GET /v1/location-groups
         - GET /v1/location-groups/{name}
         - DELETE /v1/location-groups/{name}
+        - PATCH /v1/location-groups/{name}
       events:
-        emits: [location-group.created, location-group.deleted]
+        emits: [location-group.created, location-group.deleted, location-group.updated]
       uiRoutes: [/lagerplaetze]
       notes:
         - Tabelle `location_group` mit Verweis auf die übergeordnete Gruppe.
@@ -82,6 +87,9 @@ features:
         test: löscht Plätze, dann leere Gruppen und unbenutzte Typen
       - kind: scenario
         id: layout-locks
+      - kind: integration
+        file: apps/api/test/integration/layout.integration.test.ts
+        test: ändert Beschreibung und Gruppentyp und meldet die Änderung
 
   - id: lagerstruktur.plaetze
     title: Lagerplätze mit Koordinaten anlegen und ändern

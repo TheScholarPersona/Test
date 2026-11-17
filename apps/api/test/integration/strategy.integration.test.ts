@@ -154,6 +154,14 @@ describe('Strategien: Einlagerung', () => {
     expect(await api.delete(`/v1/strategy-rule-sets/${v1}`)).toMatchObject({ status: 409 });
   });
 
+  it('liest einen Regelsatz einzeln mit allen Regeln', async () => {
+    const r = await api.get(`/v1/strategy-rule-sets/${v1}`);
+    expect(r).toMatchObject({ status: 200, body: { id: v1, decisionPoint: 'putaway', status: 'ACTIVE' } });
+    expect(r.body.rules.length).toBeGreaterThan(0);
+    expect(r.body.rules.at(-1).when).toEqual({ always: true });
+    expect(await api.get('/v1/strategy-rule-sets/00000000-0000-4000-8000-000000000000')).toMatchObject({ status: 404 });
+  });
+
   it('entscheidet, weist zu und speichert die Begründung', async () => {
     const decision = await api.post('/v1/putaway/decisions', { barcode: 'P1', assign: true });
     expect(decision.status).toBe(201);

@@ -102,6 +102,15 @@ describe('Materialfluss', () => {
       expect(route).toMatchObject({ source: { location: { plcCode: 'IP01' } }, target: { group: 'HRL' } });
       expect(route.steps.map((s: { pos: number; from: { plcCode: string } }) => `${s.pos}:${s.from.plcCode}`)).toEqual(['1:IP01', '2:CV01', '3:CV01', '4:CV02', '5:CV03']);
     });
+
+    it('listet Routen und Actions und ändert eine Action', async () => {
+      expect((await api.get('/v1/flow/routes')).body.items.map((r: { routeId: string }) => r.routeId)).toContain('IP-HRL');
+      const actions = (await api.get('/v1/flow/actions')).body.items;
+      expect(actions.find((a: { name: string }) => a.name === 'ip-anfrage')).toMatchObject({ eventType: 'request', program: 'create-order' });
+      const changed = await api.patch('/v1/flow/actions/ip-anfrage', { description: 'I-Punkt: TU und Auftrag anlegen' });
+      expect(changed).toMatchObject({ status: 200, body: { name: 'ip-anfrage', description: 'I-Punkt: TU und Auftrag anlegen', program: 'create-order' } });
+      expect(await api.patch('/v1/flow/actions/gibt-es-nicht', { description: 'x' })).toMatchObject({ status: 404 });
+    });
   });
 
   describe('Fahrt über die Route', () => {

@@ -93,6 +93,17 @@ describe('Transporteinheiten', () => {
     });
   });
 
+  describe('TU-Typen lesen und ändern', () => {
+    it('listet Typen mit Regeln und ändert Maße und Beschreibung', async () => {
+      const list = (await api.get('/v1/transport-unit-types')).body;
+      expect(list.items.find((t: { code: string }) => t.code === 'EURO')).toMatchObject({ placementRules: [{ locationTypeCode: 'REGAL' }] });
+      const changed = await api.patch('/v1/transport-unit-types/BOX', { description: 'Kleinladungsträger', heightMm: 300 });
+      expect(changed).toMatchObject({ status: 200, body: { code: 'BOX', description: 'Kleinladungsträger', heightMm: 300, tareWeight: { amount: '2', unit: 'KG' } } });
+      await collector.waitFor((m) => m.topic === 'wms/transport-unit-type/updated' && (m.body['payload'] as { code?: string }).code === 'BOX');
+      expect(await api.patch('/v1/transport-unit-types/GIBT-ES-NICHT', { description: 'x' })).toMatchObject({ status: 404 });
+    });
+  });
+
   describe('Anlegen und Platzierungsregeln', () => {
     let generated = '';
 
