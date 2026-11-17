@@ -38,7 +38,7 @@ features:
       Regelsatz; aktive und archivierte Regelsätze sind unveränderlich.
     usage:
       - channel: api
-        text: "Entwurf `POST /v1/strategy-rule-sets`, ändern `PUT …/{id}`, löschen `DELETE …/{id}`, aktivieren `POST …/{id}/activate`, Liste `GET /v1/strategy-rule-sets`."
+        text: "Entwurf `POST /v1/strategy-rule-sets`, ändern `PUT …/{id}`, löschen `DELETE …/{id}`, aktivieren `POST …/{id}/activate`, Liste `GET /v1/strategy-rule-sets`, einzeln `GET …/{id}`."
     rules:
       - Beim Speichern werden Felder, Operatoren, Werttypen, Strategien und Parameter vollständig geprüft (`RULE_SET_INVALID` mit Pfad).
       - Höchstens ein aktiver Regelsatz je Entscheidungspunkt, auch per Datenbank abgesichert.
@@ -57,6 +57,7 @@ features:
         - PUT /v1/strategy-rule-sets/{id}
         - DELETE /v1/strategy-rule-sets/{id}
         - POST /v1/strategy-rule-sets/{id}/activate
+        - GET /v1/strategy-rule-sets/{id}
       events:
         emits: [strategy-rule-set.activated]
       notes:
@@ -70,6 +71,9 @@ features:
         test: aktiviert den Entwurf; aktive Regelsätze sind unveränderlich
       - kind: scenario
         id: putaway-strategy
+      - kind: integration
+        file: apps/api/test/integration/strategy.integration.test.ts
+        test: liest einen Regelsatz einzeln mit allen Regeln
 
   - id: strategien.bedingungen
     title: Bedingungen für Regeln

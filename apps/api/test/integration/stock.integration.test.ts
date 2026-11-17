@@ -65,6 +65,15 @@ describe('Bestandsführung', () => {
       expect((await api.post('/v1/products', { sku: 'MEHL', baseUnit: 'KG' })).status).toBe(201);
       expect((await api.put('/v1/products/MEHL/units', { units: [{ unit: 'SACK', factor: '25' }] })).body.units).toEqual([{ unit: 'SACK', factor: '25' }]);
     });
+
+    it('liest Produkte einzeln und als Liste', async () => {
+      expect((await api.get('/v1/products/SCHRAUBE')).body).toMatchObject({ sku: 'SCHRAUBE', baseUnit: 'PCS', units: [{ unit: 'KAR', factor: '12' }, { unit: 'PAL', factor: '480' }] });
+      expect(await api.get('/v1/products/GIBT-ES-NICHT')).toMatchObject({ status: 404 });
+      const list = (await api.get('/v1/products?limit=1')).body;
+      expect(list.items).toHaveLength(1);
+      expect(list.total).toBeGreaterThanOrEqual(2);
+      expect((await api.get('/v1/products?limit=1000')).body.items.map((p: { sku: string }) => p.sku)).toEqual(expect.arrayContaining(['SCHRAUBE', 'MEHL']));
+    });
   });
 
   describe('Abgang und Korrektur', () => {
@@ -235,6 +244,13 @@ describe('Bestandsführung', () => {
       expect(bookings).toEqual(['CORRECTION:-5', 'CORRECTION:3', 'CORRECTION:4']);
       expect((await receive('INV', 'SCHRAUBE', '1', 'PCS', { lot: 'A' })).status).toBe(201);
       expect(await api.post(`/v1/stock-counts/${number}/cancel`)).toMatchObject({ status: 409, body: { code: 'COUNT_CLOSED' } });
+    });
+
+    it('liest eine abgeschlossene Inventur mit Soll, Ist und Differenz', async () => {
+      const r = await api.get(`/v1/stock-counts/${number}`);
+      expect(r.body).toMatchObject({ number, barcode: 'INV', state: 'CLOSED' });
+      expect(r.body.lines.map((l: { sku: string; difference: { amount: string } }) => `${l.sku}:${l.difference.amount}`).sort()).toEqual(['MEHL:3', 'SCHRAUBE:-5', 'SCHRAUBE:4']);
+      expect(await api.get('/v1/stock-counts/IN99999999')).toMatchObject({ status: 404 });
     });
 
     it('bricht eine Inventur ohne Buchung ab', async () => {

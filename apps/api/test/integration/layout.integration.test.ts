@@ -54,6 +54,12 @@ describe('Lagerstruktur', () => {
       expect(response.body.issues.map((i: { path: string }) => i.path)).toEqual(['code', 'lengthMm']);
     });
 
+    it('listet alle Platztypen', async () => {
+      const list = (await api.get('/v1/location-types')).body;
+      expect(list.items.map((t: { code: string }) => t.code)).toContain('PALETTE');
+      expect(list.items.find((t: { code: string }) => t.code === 'PALETTE')).toMatchObject({ lengthMm: 1200, widthMm: 800 });
+    });
+
     it('lässt bei gleichzeitigem Anlegen genau eine Anfrage durch', async () => {
       const results = await Promise.all([1, 2, 3].map(() => api.post('/v1/location-types', { code: 'PARALLEL' })));
       expect(results.filter((r) => r.status === 201)).toHaveLength(1);
@@ -78,6 +84,14 @@ describe('Lagerstruktur', () => {
 
       const orphan = await api.post('/v1/location-groups', { name: 'WAISE', parentName: 'GIBT-ES-NICHT' });
       expect(orphan).toMatchObject({ status: 404, body: { code: 'LOCATION_GROUP_NOT_FOUND' } });
+    });
+
+    it('ändert Beschreibung und Gruppentyp und meldet die Änderung', async () => {
+      const changed = await api.patch('/v1/location-groups/GASSE-2', { description: 'Schmalgang', groupType: 'GASSE' });
+      expect(changed).toMatchObject({ status: 200, body: { name: 'GASSE-2', description: 'Schmalgang', groupType: 'GASSE', parentName: 'HOCHREGAL' } });
+      const event = await collector.waitFor((m) => m.topic === 'wms/location-group/updated' && (m.body['payload'] as { name?: string }).name === 'GASSE-2');
+      expect(event.body['type']).toBe('location-group.updated');
+      expect(await api.patch('/v1/location-groups/GIBT-ES-NICHT', { description: 'x' })).toMatchObject({ status: 404 });
     });
 
     it('legt Plätze an', async () => {

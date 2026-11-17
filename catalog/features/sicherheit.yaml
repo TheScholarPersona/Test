@@ -118,7 +118,9 @@ features:
       beenden alle Sitzungen des Benutzers. Ein Admin kann sich nicht selbst aussperren.
     usage:
       - channel: api
-        text: "`GET /v1/users`, `POST /v1/users`, `PATCH /v1/users/{username}`."
+        text: "`GET /v1/users`, `POST /v1/users`, `PATCH /v1/users/{username}`, Rollen mit Beschreibung `GET /v1/auth/roles`."
+      - channel: leitstand
+        text: Seite **Benutzer** (nur admin) – anlegen, Rollen ankreuzen, sperren, Passwort setzen.
     rules:
       - Benutzername eindeutig; nur bekannte Rollen; Passwort mindestens 10 Zeichen.
       - Keine Selbstaussperrung (`SELF_LOCKOUT`).
@@ -126,10 +128,14 @@ features:
       components:
         - apps/api/src/modules/auth/application/auth.service.ts
         - apps/api/src/modules/auth/http/users.controller.ts
+        - apps/web/src/pages/UsersPage.tsx
       endpoints:
         - GET /v1/users
         - POST /v1/users
         - PATCH /v1/users/{username}
+        - GET /v1/auth/roles
+      uiRoutes:
+        - /benutzer
     evidence:
       - kind: integration
         file: apps/api/test/integration/auth.integration.test.ts
@@ -137,6 +143,12 @@ features:
       - kind: integration
         file: apps/api/test/integration/auth.integration.test.ts
         test: ändert das eigene Passwort und schützt vor Selbstaussperrung
+      - kind: integration
+        file: apps/api/test/integration/auth.integration.test.ts
+        test: liefert die Rollen mit Beschreibung
+      - kind: web-e2e
+        file: apps/web/e2e/seiten.spec.ts
+        test: "Benutzer: anlegen mit Rolle, Rollen ansehen, sperren"
 
   - id: sicherheit.eigenes-passwort
     title: Eigenes Passwort ändern
@@ -146,18 +158,26 @@ features:
     usage:
       - channel: api
         text: "`POST /v1/auth/password` mit `currentPassword` und `newPassword`."
+      - channel: leitstand
+        text: Seite **Konto** (Link beim Anmeldenamen).
     rules:
       - Mindestens 10 Zeichen (`PASSWORD_TOO_SHORT`).
     technical:
       components:
         - apps/api/src/modules/auth/application/auth.service.ts
         - apps/api/src/modules/auth/domain/password.ts
+        - apps/web/src/pages/AccountPage.tsx
       endpoints:
         - POST /v1/auth/password
+      uiRoutes:
+        - /konto
     evidence:
       - kind: integration
         file: apps/api/test/integration/auth.integration.test.ts
         test: ändert das eigene Passwort und schützt vor Selbstaussperrung
+      - kind: web-e2e
+        file: apps/web/e2e/auth.spec.ts
+        test: "Konto: eigenes Passwort ändern und mit dem neuen anmelden"
 
   - id: sicherheit.node-red-schutz
     title: Geschützter Node-RED-Editor und Endpunkte
@@ -216,3 +236,44 @@ features:
       - kind: integration
         file: apps/api/test/integration/api.integration.test.ts
         test: legen das Schema an und sind wiederholbar
+
+  - id: sicherheit.mqtt-tls
+    title: MQTT nur mit TLS, Benutzern und Rechten je Topic
+    group: sicherheit.infrastruktur
+    summary: Der Broker nimmt nur verschlüsselte, angemeldete Verbindungen an – und nur das WMS darf WMS-Ereignisse veröffentlichen.
+    description: |
+      Mosquitto lauscht nur auf Port 8883 (TLS) ohne anonyme Zugriffe. Benutzer `wms-api`, `node-red` und `health`
+      haben Rechte je Topic (ACL): Node-RED liest `wms/#` und schreibt nur unter `plant/#`. Zertifizierungsstelle
+      und Serverzertifikat erzeugt der Dienst `certs` beim ersten Start; Passwörter kommen aus der .env.
+    usage:
+      - channel: mqtt
+        text: "`mqtts://localhost:8883` mit `--cafile ca.crt` und Benutzer (siehe docs/entwicklung.md, Absicherung)."
+    settings:
+      - name: Passwörter
+        description: "`WMS_MQTT_API_PASSWORD`, `WMS_MQTT_NODE_RED_PASSWORD`, `WMS_MQTT_HEALTH_PASSWORD`."
+        where: .env
+      - name: Rechte je Topic
+        description: ACL je Benutzer.
+        where: docker/mosquitto/acl
+    technical:
+      components:
+        - docker/mosquitto/mosquitto.conf
+        - docker/mosquitto/acl
+        - docker/mosquitto/start.sh
+        - docker/certs/generate.sh
+    evidence:
+      - kind: integration
+        file: packages/scenario-runner/test/security.test.ts
+        test: verbindet mit Benutzer, Passwort und gültigem Zertifikat
+      - kind: integration
+        file: packages/scenario-runner/test/security.test.ts
+        test: lehnt Verbindungen ohne TLS ab
+      - kind: integration
+        file: packages/scenario-runner/test/security.test.ts
+        test: lehnt anonyme Zugriffe und falsche Passwörter ab
+      - kind: integration
+        file: packages/scenario-runner/test/security.test.ts
+        test: lehnt einen Server ab, dessen Zertifikat nicht von der eigenen Zertifizierungsstelle stammt
+      - kind: integration
+        file: packages/scenario-runner/test/security.test.ts
+        test: erlaubt Node-RED nicht, Ereignisse des WMS zu veröffentlichen (Rechte je Topic)

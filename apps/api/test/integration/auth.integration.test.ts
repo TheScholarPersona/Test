@@ -126,6 +126,13 @@ describe('Anmeldung und Rollen', () => {
     expect(await admin.post('/v1/users', { username: 'x', password: 'irgendwas-123', roles: ['chef'] })).toMatchObject({ status: 400 });
   });
 
+  it('liefert die Rollen mit Beschreibung', async () => {
+    const roles = (await admin.get('/v1/auth/roles')).body.items;
+    expect(roles.map((r: { role: string }) => r.role)).toEqual(['admin', 'leitstand', 'lager', 'anlage', 'lesen']);
+    expect(roles.every((r: { description: string }) => r.description.length > 0)).toBe(true);
+    expect((await httpClient(baseUrl, {}).get('/v1/auth/roles')).status).toBe(401);
+  });
+
   it('beschreibt Anmeldung und Rechte in OpenAPI', async () => {
     const doc = (await admin.get('/openapi.json')).body as { components: { securitySchemes: Record<string, unknown> }; paths: Record<string, Record<string, { security?: unknown[]; responses: Record<string, unknown> }>> };
     expect(Object.keys(doc.components.securitySchemes)).toEqual(['bearer', 'session']);

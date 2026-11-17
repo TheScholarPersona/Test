@@ -51,7 +51,7 @@ docker/                    Konfiguration für Hilfsdienste (Mosquitto)
 | `pnpm demo:data` | Demo-Daten über die API anlegen (Lager, Bestand, Aufträge, Route; wiederholbar) |
 | `pnpm test:web` | Oberfläche im Browser testen (Playwright) gegen die laufende Umgebung |
 | `pnpm web:dev` | Entwicklungsserver der Oberfläche (Vite) gegen die laufende API |
-| `pnpm test:e2e` | Node-RED-Szenarien gegen die laufende Umgebung (`NODE_RED_URL`, Standard `http://localhost:1880`) |
+| `pnpm test:e2e` | Node-RED-Szenarien und MQTT-Sicherheitsprüfung (nur TLS, keine anonymen Zugriffe, Rechte je Topic) gegen die laufende Umgebung (`NODE_RED_URL`, Standard `http://localhost:1880`) |
 | `pnpm --filter @wms/api db:migrate` | offene Migrationen ausführen (nach `pnpm build`) |
 | `pnpm --filter @wms/api db:migration:create` | neue Migration aus Entity-Änderungen erzeugen |
 | `DATABASE_URL=… apps/api/scripts/new-migration.sh <JJJJMMTTHHMMSS> <name> "<Beschreibung>"` | Migration erzeugen, sprechend benennen, in `index.ts` eintragen und auf Drift prüfen – **leert die Datenbank**, nur mit Wegwerf-DB |

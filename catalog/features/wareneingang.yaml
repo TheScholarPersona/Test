@@ -13,6 +13,8 @@ features:
     usage:
       - channel: api
         text: '`POST /v1/receiving-orders` mit `orderId`, `supplier`, `positions`; lesen `GET /v1/receiving-orders/{orderId}`.'
+      - channel: leitstand
+        text: Seite **Wareneingang** – Avis anlegen (Rolle leitstand), Auftragsliste neueste zuerst.
     rules:
       - Auftragsnummer eindeutig; Produkte und Einheiten müssen existieren und passen.
     dependsOn: [bestand.produktstamm]
@@ -20,13 +22,17 @@ features:
       components:
         - apps/api/src/modules/receiving/application/receiving.service.ts
         - apps/api/src/modules/receiving/http/receiving.controller.ts
+        - apps/web/src/pages/ReceivingPage.tsx
       endpoints:
         - POST /v1/receiving-orders
         - GET /v1/receiving-orders/{orderId}
+        - GET /v1/receiving-orders
       events:
         emits: [receiving-order.created]
       notes:
         - Tabellen `receiving_order` und `receiving_position`.
+      uiRoutes:
+        - /wareneingang
     evidence:
       - kind: integration
         file: apps/api/test/integration/receiving.integration.test.ts
@@ -36,6 +42,12 @@ features:
         test: prüft Auftragsnummer, Produkte und Einheiten
       - kind: scenario
         id: receiving-flow
+      - kind: web-e2e
+        file: apps/web/e2e/seiten.spec.ts
+        test: "Wareneingang: Avis anlegen, Ware erfassen, Auftrag abschließen"
+      - kind: integration
+        file: apps/api/test/integration/receiving.integration.test.ts
+        test: listet Aufträge, gefiltert nach Lieferant und Zustand
 
   - id: wareneingang.erfassung
     title: Ware gegen ein Avis erfassen
@@ -51,6 +63,8 @@ features:
         text: "`POST /v1/receiving-orders/{orderId}/captures` (`kind: quantity` oder `unit`), Liste `GET …/captures`."
       - channel: node-red
         text: Node `wms-receive` erfasst gegen einen Auftrag oder ohne Avis; Beispiel-Flow ERP-CSV → Wareneingang.
+      - channel: leitstand
+        text: Seite **Wareneingang** – Auftrag wählen, Ware erfassen (neue oder vorhandene TU, Platz, Charge).
     rules:
       - Überlieferung nur, wenn das Produkt sie erlaubt (`OVERDELIVERY_NOT_ALLOWED` mit Restmengen).
       - Keine Erfassung auf abgeschlossene Aufträge (`ORDER_CLOSED`).
@@ -76,6 +90,8 @@ features:
       nodeRedNodes: [wms-receive]
       notes:
         - Zeilensperre des Auftrags serialisiert parallele Erfassungen.
+      uiRoutes:
+        - /wareneingang
     evidence:
       - kind: integration
         file: apps/api/test/integration/receiving.integration.test.ts
@@ -106,6 +122,9 @@ features:
         test: wms-receive erfasst blind oder gegen einen Auftrag
       - kind: scenario
         id: receiving-flow
+      - kind: web-e2e
+        file: apps/web/e2e/seiten.spec.ts
+        test: "Wareneingang: Avis anlegen, Ware erfassen, Auftrag abschließen"
 
   - id: wareneingang.abschluss
     title: Positionen und Aufträge abschließen oder stornieren
@@ -119,6 +138,8 @@ features:
     usage:
       - channel: api
         text: "`POST …/positions/{posNo}/cancel`, `…/positions/{posNo}/close`, `POST …/{orderId}/cancel`, `…/complete`."
+      - channel: leitstand
+        text: Seite **Wareneingang** – Auftrag abschließen oder stornieren.
     rules:
       - Position stornieren nur unberührt (`POSITION_NOT_OPEN`), schließen nur teilweise erfasst (`POSITION_NOT_IN_PROGRESS`).
       - Auftrag stornieren nur ohne Erfassungen (`CANCELLATION_DENIED`).
@@ -134,6 +155,8 @@ features:
         - POST /v1/receiving-orders/{orderId}/complete
       events:
         emits: [receiving-position.state-changed, receiving-order.state-changed]
+      uiRoutes:
+        - /wareneingang
     evidence:
       - kind: integration
         file: apps/api/test/integration/receiving.integration.test.ts
@@ -149,6 +172,9 @@ features:
         test: setzt Positionen erst bei voller Menge auf erledigt
       - kind: scenario
         id: receiving-flow
+      - kind: web-e2e
+        file: apps/web/e2e/seiten.spec.ts
+        test: "Wareneingang: Avis anlegen, Ware erfassen, Auftrag abschließen"
 
   - id: wareneingang.ohne-avis
     title: Wareneingang ohne Avis

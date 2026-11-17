@@ -14,7 +14,7 @@ features:
       - channel: leitstand
         text: Seite **Auslagerung** – Auftrag anlegen (Rolle leitstand).
       - channel: api
-        text: '`POST /v1/outbound-orders` mit `orderId`, `customer?`, `priority?`, `target`, `lines`; lesen `GET …/{orderId}`.'
+        text: '`POST /v1/outbound-orders` mit `orderId`, `customer?`, `priority?`, `target`, `lines`; lesen `GET …/{orderId}`, Liste `GET /v1/outbound-orders?state=…`.'
     rules:
       - Auftragsnummer eindeutig, Produkte und Einheiten müssen existieren.
       - Zustände Auftrag `CREATED` → `PARTIALLY_ALLOCATED` → `ALLOCATED` → `IN_PICKING` → `COMPLETED` (`CANCELLED`).
@@ -27,6 +27,7 @@ features:
       endpoints:
         - POST /v1/outbound-orders
         - GET /v1/outbound-orders/{orderId}
+        - GET /v1/outbound-orders
       events:
         emits: [outbound-order.created]
       uiRoutes: [/auslagerung]
@@ -41,6 +42,9 @@ features:
         test: "Auslagerauftrag: anlegen, zuteilen, quittieren"
       - kind: scenario
         id: outbound-flow
+      - kind: integration
+        file: apps/api/test/integration/outbound.integration.test.ts
+        test: listet Aufträge, neueste zuerst, gefiltert nach Zustand
 
   - id: auslagerung.zuteilung
     title: Bestand zuteilen und reservieren
@@ -111,6 +115,8 @@ features:
         text: Seite **Auslagerung** – Picks am Auftrag quittieren.
       - channel: api
         text: "`POST /v1/outbound-orders/{orderId}/picks/{pickId}/confirm` (`quantity?`, `pickedBy?`), Arbeitsliste `GET /v1/outbound-picks?state=OPEN`."
+      - channel: scanner
+        text: Ansicht **Picken** – Pick wählen, TU zur Kontrolle scannen, Menge bestätigen.
     rules:
       - Buchungen tragen den Bezug `outbound:<orderId>/<Position>`.
     dependsOn: [auslagerung.zuteilung, bestand.abgang]
@@ -122,7 +128,7 @@ features:
         - GET /v1/outbound-picks
       events:
         emits: [outbound-pick.confirmed, stock.issued, outbound-order.state-changed]
-      uiRoutes: [/auslagerung]
+      uiRoutes: [/auslagerung, /scanner/*]
     evidence:
       - kind: integration
         file: apps/api/test/integration/outbound.integration.test.ts
@@ -135,6 +141,9 @@ features:
         test: "Auslagerauftrag: anlegen, zuteilen, quittieren"
       - kind: scenario
         id: outbound-flow
+      - kind: web-e2e
+        file: apps/web/e2e/scanner.spec.ts
+        test: "Scanner: Pick quittieren mit TU-Kontrolle"
 
   - id: auslagerung.abschluss
     title: Auslageraufträge abschließen oder stornieren

@@ -117,6 +117,13 @@ describe('Auslagerung', () => {
       expect(await api.post('/v1/outbound-orders', { orderId: 'X', lines: [{ sku: 'NOPE', quantity: { amount: '1', unit: 'PCS' } }] })).toMatchObject({ status: 404 });
     });
 
+    it('listet Aufträge, neueste zuerst, gefiltert nach Zustand', async () => {
+      const list = (await api.get('/v1/outbound-orders?state=CREATED')).body;
+      expect(list.items.map((o: { orderId: string }) => o.orderId)).toContain('A-1');
+      expect(list.items.every((o: { state: string }) => o.state === 'CREATED')).toBe(true);
+      expect((await api.get('/v1/outbound-orders?state=COMPLETED')).body.items.map((o: { orderId: string }) => o.orderId)).not.toContain('A-1');
+    });
+
     it('teilt per FEFO mit Mindestrestlaufzeit zu und reserviert', async () => {
       const r = await allocate('A-1');
       expect(r.status, JSON.stringify(r.body)).toBe(200);

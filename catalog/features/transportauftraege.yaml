@@ -17,6 +17,8 @@ features:
         text: "`POST /v1/transport-orders` (`barcode`, `target`, `priority`, `redirect`, `autoStart`), `POST …/{number}/start`, `POST /v1/transport-orders/start-pending`."
       - channel: node-red
         text: Materialfluss-Programm `create-order` legt Aufträge am I-Punkt an; `start-pending` eignet sich für einen zeitgesteuerten Flow.
+      - channel: leitstand
+        text: Seite **Transport** – offene Aufträge, „Starten“ und „Wartende starten“.
     rules:
       - Höchstens ein gestarteter oder unterbrochener Auftrag je TU (`TRANSPORT_ORDER_ACTIVE`), per Teilindex abgesichert.
       - Kein Start auf gesperrte Ziele (`TARGET_LOCKED`) oder volle Plätze (`PLACEMENT_REJECTED`).
@@ -44,6 +46,8 @@ features:
         emits: [transport-order.created, transport-order.started, transport-order.start-blocked]
       notes:
         - Tabelle `transport_order`; Regeln O-01 bis O-07 aus der OpenWMS-Analyse.
+      uiRoutes:
+        - /transport
     evidence:
       - kind: integration
         file: apps/api/test/integration/transport-order.integration.test.ts
@@ -68,6 +72,9 @@ features:
         test: startet bei gleichzeitigen Aufträgen für eine TU genau einen
       - kind: scenario
         id: transport-order-flow
+      - kind: web-e2e
+        file: apps/web/e2e/seiten.spec.ts
+        test: "Transport: Lagerbewegung und Transportauftrag bedienen"
 
   - id: transportauftraege.ablauf
     title: Transport unterbrechen, abschließen, stornieren oder scheitern lassen
@@ -82,6 +89,8 @@ features:
         text: "`POST /v1/transport-orders/{number}/interrupt`, `…/resume`, `…/finish` (`location?`, `mode?`), `…/cancel`, `…/fail`."
       - channel: node-red
         text: Materialfluss-Programme `finish-order` und `interrupt-order`.
+      - channel: leitstand
+        text: Seite **Transport** – Fortsetzen, Abschließen, Stornieren je Auftrag.
     rules:
       - Endzustände `FINISHED`, `CANCELED`, `ONFAILURE` erlauben keine Aktion mehr.
       - TUs und Zielplätze offener Aufträge sind vor dem Löschen geschützt.
@@ -90,6 +99,7 @@ features:
       components:
         - apps/api/src/modules/transport-order/application/transport-order.service.ts
         - apps/api/src/modules/transport-order/domain/transport-order-state.ts
+        - apps/web/src/pages/TransportPage.tsx
       endpoints:
         - POST /v1/transport-orders/{number}/interrupt
         - POST /v1/transport-orders/{number}/resume
@@ -98,6 +108,8 @@ features:
         - POST /v1/transport-orders/{number}/fail
       events:
         emits: [transport-order.interrupted, transport-order.resumed, transport-order.finished, transport-order.canceled, transport-order.failed]
+      uiRoutes:
+        - /transport
     evidence:
       - kind: integration
         file: apps/api/test/integration/transport-order.integration.test.ts
@@ -116,3 +128,6 @@ features:
         test: Endzustände sind final und erlauben keine Aktion (O-03)
       - kind: scenario
         id: transport-order-flow
+      - kind: web-e2e
+        file: apps/web/e2e/seiten.spec.ts
+        test: "Transport: Lagerbewegung und Transportauftrag bedienen"
