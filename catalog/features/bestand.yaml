@@ -58,6 +58,12 @@ features:
       - kind: integration
         file: apps/api/test/integration/stock.integration.test.ts
         test: liest Produkte einzeln und als Liste
+    comparisons:
+      openwms:
+        status: nicht-einsehbar
+        note: Bestandsführung liegt in OpenWMS im privaten Inventory-Dienst und ist nicht einsehbar.
+        refs:
+          - Analyse 1.1
 
   - id: bestand.bestand-je-tu
     title: Bestand je Transporteinheit führen und abfragen
@@ -103,6 +109,12 @@ features:
       - kind: web-e2e
         file: apps/web/e2e/leitstand.spec.ts
         test: Bestand zeigt Posten und aktualisiert sich live nach einem Abgang
+    comparisons:
+      openwms:
+        status: nicht-einsehbar
+        note: Bestandsführung liegt in OpenWMS im privaten Inventory-Dienst und ist nicht einsehbar.
+        refs:
+          - Analyse 1.1
 
   - id: bestand.einheiten-umrechnung
     title: In alternativen Einheiten buchen
@@ -135,6 +147,12 @@ features:
       - kind: integration
         file: apps/api/test/integration/stock.integration.test.ts
         test: korrigiert in alternativer Einheit, negativ und positiv
+    comparisons:
+      openwms:
+        status: nicht-einsehbar
+        note: Bestandsführung liegt in OpenWMS im privaten Inventory-Dienst und ist nicht einsehbar.
+        refs:
+          - Analyse 1.1
 
   - id: bestand.abgang
     title: Bestand abbuchen (Abgang)
@@ -176,6 +194,12 @@ features:
         test: Bestand zeigt Posten und aktualisiert sich live nach einem Abgang
       - kind: scenario
         id: stock-flow
+    comparisons:
+      openwms:
+        status: nicht-einsehbar
+        note: Bestandsführung liegt in OpenWMS im privaten Inventory-Dienst und ist nicht einsehbar.
+        refs:
+          - Analyse 1.1
 
   - id: bestand.umbuchung
     title: Bestand auf eine andere Transporteinheit umbuchen
@@ -210,6 +234,12 @@ features:
         test: legt auf einer leeren TU einen neuen Posten an und entfernt den leeren
       - kind: scenario
         id: stock-flow
+    comparisons:
+      openwms:
+        status: nicht-einsehbar
+        note: Bestandsführung liegt in OpenWMS im privaten Inventory-Dienst und ist nicht einsehbar.
+        refs:
+          - Analyse 1.1
 
   - id: bestand.korrektur
     title: Bestand korrigieren
@@ -240,6 +270,12 @@ features:
         test: korrigiert in alternativer Einheit, negativ und positiv
       - kind: scenario
         id: stock-flow
+    comparisons:
+      openwms:
+        status: nicht-einsehbar
+        note: Bestandsführung liegt in OpenWMS im privaten Inventory-Dienst und ist nicht einsehbar.
+        refs:
+          - Analyse 1.1
 
   - id: bestand.parallele-buchungen
     title: Sichere Buchungen bei gleichzeitigem Zugriff
@@ -266,6 +302,12 @@ features:
       - kind: integration
         file: apps/api/test/integration/stock.integration.test.ts
         test: verklemmt sich bei gegenläufigen Umbuchungen nicht
+    comparisons:
+      openwms:
+        status: nicht-einsehbar
+        note: Bestandsführung liegt in OpenWMS im privaten Inventory-Dienst und ist nicht einsehbar.
+        refs:
+          - Analyse 1.1
 
   - id: bestand.reservierung
     title: Bestand reservieren und freigeben
@@ -306,6 +348,12 @@ features:
         test: hebt eine Reservierung auf
       - kind: scenario
         id: stock-flow
+    comparisons:
+      openwms:
+        status: nicht-einsehbar
+        note: Bestandsführung liegt in OpenWMS im privaten Inventory-Dienst und ist nicht einsehbar.
+        refs:
+          - Analyse 1.1
 
   - id: bestand.summen
     title: Bestandssummen je Produkt oder Platz
@@ -333,6 +381,12 @@ features:
         test: summiert je Produkt und je Platz
       - kind: scenario
         id: stock-flow
+    comparisons:
+      openwms:
+        status: nicht-einsehbar
+        note: Bestandsführung liegt in OpenWMS im privaten Inventory-Dienst und ist nicht einsehbar.
+        refs:
+          - Analyse 1.1
 
   - id: bestand.buchungsjournal
     title: Buchungsjournal
@@ -369,6 +423,12 @@ features:
         note: zusammengehörige Umbuchungs-Einträge
       - kind: scenario
         id: stock-flow
+    comparisons:
+      openwms:
+        status: nicht-einsehbar
+        note: Bestandsführung liegt in OpenWMS im privaten Inventory-Dienst und ist nicht einsehbar.
+        refs:
+          - Analyse 1.1
 
   - id: bestand.leitstand-ansicht
     title: Bestandsansicht im Leitstand mit Live-Aktualisierung
@@ -394,6 +454,12 @@ features:
       - kind: web-e2e
         file: apps/web/e2e/leitstand.spec.ts
         test: Bestand zeigt Posten und aktualisiert sich live nach einem Abgang
+    comparisons:
+      openwms:
+        status: nicht-einsehbar
+        note: Bestandsführung liegt in OpenWMS im privaten Inventory-Dienst und ist nicht einsehbar.
+        refs:
+          - Analyse 1.1
 
   - id: bestand.inventur
     title: Inventur je Transporteinheit
@@ -444,3 +510,9 @@ features:
       - kind: integration
         file: apps/api/test/integration/stock.integration.test.ts
         test: liest eine abgeschlossene Inventur mit Soll, Ist und Differenz
+    comparisons:
+      openwms:
+        status: nicht-einsehbar
+        note: Bestandsführung liegt in OpenWMS im privaten Inventory-Dienst und ist nicht einsehbar.
+        refs:
+          - Analyse 1.1

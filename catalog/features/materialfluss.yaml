@@ -62,6 +62,12 @@ features:
       - kind: web-e2e
         file: apps/web/e2e/seiten.spec.ts
         test: "Materialfluss: Konfiguration ansehen und Geräte-Ereignis im Probelauf senden"
+    comparisons:
+      openwms:
+        status: erweitert
+        note: Routen mit Nächster-Schritt-Tabelle und Suche vom Spezifischen zum Allgemeinen wie im TMS-Routing; zusätzlich Schritte je TU-Typ. Änderungen wirken sofort – OpenWMS hält Routen und Gruppen in Zwischenspeichern, die nach Änderungen veralten (R1, R2).
+        refs:
+          - Analyse 3.7 Route-Suche, Nächster Schritt, Schwachstellen R1, R2
 
   - id: materialfluss.action-matrix
     title: Action-Matrix und Programme
@@ -115,6 +121,12 @@ features:
       - kind: web-e2e
         file: apps/web/e2e/seiten.spec.ts
         test: "Materialfluss: Konfiguration ansehen und Geräte-Ereignis im Probelauf senden"
+    comparisons:
+      openwms:
+        status: abweichend
+        note: Action-Matrix wie im TMS-Routing, aber mit eingebauten Programmen statt BPMN-Workflows (Activiti/Flowable).
+        refs:
+          - Analyse 3.7 Action-Matrix, Workflows
 
   - id: materialfluss.geraete-ereignisse
     title: Geräte-Ereignisse verarbeiten und Fahrbefehle senden
@@ -183,6 +195,12 @@ features:
       - kind: web-e2e
         file: apps/web/e2e/seiten.spec.ts
         test: "Materialfluss: Konfiguration ansehen und Geräte-Ereignis im Probelauf senden"
+    comparisons:
+      openwms:
+        status: abweichend
+        note: Gleicher Zweck wie die OSIP-Telegramme (REQ_/RES_, LOCU, UPD_, ERR_), die in OpenWMS per AMQP oder REST ankommen; hier ein eigenes JSON-Format über REST. Zusätzlich Probelauf, Begründung und Meldung fehlender Routen statt stillem Verschlucken (R4). Systemstatus (SYSU) fehlt, siehe Lücken.
+        refs:
+          - Analyse 3.7 Workflows und Telegramme, Schwachstelle R4
 
   - id: materialfluss.node-red-programme
     title: Materialfluss-Programme in Node-RED
@@ -212,6 +230,13 @@ features:
       - kind: scenario
         id: material-flow
         note: Programm-Tab send-to-plc
+    comparisons:
+      openwms:
+        status: abweichend
+        note: Ersetzt eigene BPMN-Workflows durch Node-RED-Flows.
+        refs:
+          - Analyse 5.1a
+          - Analyse 5.1c
 
   - id: materialfluss.entscheidungsprotokoll
     title: Materialfluss-Entscheidungen nachvollziehen
@@ -236,6 +261,12 @@ features:
         test: fährt Schritt für Schritt und schließt bei Ankunft in der Zielgruppe ab
       - kind: scenario
         id: material-flow
+    comparisons:
+      openwms:
+        status: neu
+        note: Das TMS-Routing protokolliert keine Begründung je Ereignis.
+        refs:
+          - Analyse 3.7 Schwachstellen
 
   - id: materialfluss.simulator
     title: Anlagensimulator
@@ -263,3 +294,9 @@ features:
     evidence:
       - kind: scenario
         id: material-flow
+    comparisons:
+      openwms:
+        status: neu
+        note: Kein Anlagensimulator im öffentlichen OpenWMS.
+        refs:
+          - Analyse 5.1d

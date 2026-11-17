@@ -75,6 +75,12 @@ features:
       - kind: web-e2e
         file: apps/web/e2e/seiten.spec.ts
         test: "Transport: Lagerbewegung und Transportauftrag bedienen"
+    comparisons:
+      openwms:
+        status: gleichwertig
+        note: Regeln O-01, O-02, O-04 bis O-07 wie in OpenWMS; Umleitung über die Einlagerstrategie statt Voter-Kette.
+        refs:
+          - Analyse 3.5 O-01 bis O-07
 
   - id: transportauftraege.ablauf
     title: Transport unterbrechen, abschließen, stornieren oder scheitern lassen
@@ -131,3 +137,10 @@ features:
       - kind: web-e2e
         file: apps/web/e2e/seiten.spec.ts
         test: "Transport: Lagerbewegung und Transportauftrag bedienen"
+    comparisons:
+      openwms:
+        status: erweitert
+        note: OpenWMS behandelt INTERRUPTED nicht (5.4 Nr. 6); hier unterbrechen und fortsetzen. Problemhistorie fehlt, siehe Lücken.
+        refs:
+          - Analyse 3.5 O-03, O-06
+          - Analyse 5.4 Nr. 6

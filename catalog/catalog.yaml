@@ -228,6 +228,15 @@ areas:
         title: Betrieb
         summary: Betriebszustand und Datenbank.
 
+# Vergleichssysteme. Jedes Feature trägt unter `comparisons.<id>` seine Einstufung; Fähigkeiten des
+# Vergleichssystems, die bei uns fehlen, stehen in catalog/comparisons/<id>.yaml.
+systems:
+  - id: openwms
+    title: OpenWMS.org
+    description: Öffentliche Repositories von OpenWMS.org (Apache 2.0), analysiert in docs/openwms-analyse.md. Inventory, Picking, Putaway, Shipping, Printing, Partner und ERP-Adapter sind privat und nur aus der Projektbeschreibung bekannt.
+    source: docs/openwms-analyse.md
+    complete: true
+
 # Technische Bestandteile, die bewusst kein eigenes Feature sind (mit Begründung).
 exclusions:
   endpoints: []

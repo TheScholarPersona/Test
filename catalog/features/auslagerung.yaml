@@ -45,6 +45,12 @@ features:
       - kind: integration
         file: apps/api/test/integration/outbound.integration.test.ts
         test: listet Aufträge, neueste zuerst, gefiltert nach Zustand
+    comparisons:
+      openwms:
+        status: nicht-einsehbar
+        note: Auslagerung, Kommissionierung und Versand liegen in OpenWMS in privaten Diensten (Picking, Shipping) und sind nicht einsehbar.
+        refs:
+          - Analyse 1.1
 
   - id: auslagerung.zuteilung
     title: Bestand zuteilen und reservieren
@@ -101,6 +107,12 @@ features:
         test: "Auslagerauftrag: anlegen, zuteilen, quittieren"
       - kind: scenario
         id: outbound-flow
+    comparisons:
+      openwms:
+        status: nicht-einsehbar
+        note: Auslagerung, Kommissionierung und Versand liegen in OpenWMS in privaten Diensten (Picking, Shipping) und sind nicht einsehbar.
+        refs:
+          - Analyse 1.1
 
   - id: auslagerung.kommissionierung
     title: Picks quittieren und Fehlmengen behandeln
@@ -144,6 +156,12 @@ features:
       - kind: web-e2e
         file: apps/web/e2e/scanner.spec.ts
         test: "Scanner: Pick quittieren mit TU-Kontrolle"
+    comparisons:
+      openwms:
+        status: nicht-einsehbar
+        note: Auslagerung, Kommissionierung und Versand liegen in OpenWMS in privaten Diensten (Picking, Shipping) und sind nicht einsehbar.
+        refs:
+          - Analyse 1.1
 
   - id: auslagerung.abschluss
     title: Auslageraufträge abschließen oder stornieren
@@ -176,3 +194,9 @@ features:
         test: Storno und Abschluss sind endgültig
       - kind: scenario
         id: outbound-flow
+    comparisons:
+      openwms:
+        status: nicht-einsehbar
+        note: Auslagerung, Kommissionierung und Versand liegen in OpenWMS in privaten Diensten (Picking, Shipping) und sind nicht einsehbar.
+        refs:
+          - Analyse 1.1

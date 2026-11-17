@@ -86,6 +86,7 @@ const catalog = (features: ReturnType<typeof feature>[]): CatalogData => ({
   taxonomy,
   features: features.map((f) => ({ ...f, area: 'lager', file: 'features/lager.yaml' })),
   review: [],
+  gaps: [],
 });
 const codes = (data: CatalogData, d = discovery(), reports?: Parameters<typeof analyze>[2]) => analyze(data, d, reports).findings.map((f) => `${f.level}:${f.code}:${f.subject}`);
 
@@ -134,6 +135,27 @@ describe('Prüfregeln', () => {
   it('warnt, wenn kein Test einen Endpunkt eines Features erkennbar aufruft', () => {
     const found = codes(catalog([feature()]), discovery({ callingFiles: [] }));
     expect(found).toContain('warnung:ENDPOINT_UNTESTED:features/lager.yaml: lager.anlegen');
+  });
+});
+
+describe('Vergleich mit anderen Systemen', () => {
+  const withSystem = (complete: boolean, features: ReturnType<typeof feature>[], gaps: CatalogData['gaps'] = []): CatalogData => ({
+    ...catalog(features),
+    taxonomy: { ...taxonomy, systems: [{ id: 'altsystem', title: 'Altsystem', description: 'x', complete }] },
+    gaps,
+  });
+
+  it('verlangt bei vollständigem Vergleich eine Einstufung für jedes Feature', () => {
+    expect(codes(withSystem(true, [feature()]))).toContain('fehler:COMPARISON_MISSING:features/lager.yaml: lager.anlegen');
+    expect(codes(withSystem(false, [feature()]))).toContain('hinweis:COMPARISON_OPEN:altsystem');
+    expect(codes(withSystem(true, [feature({ comparisons: { altsystem: { status: 'erweitert' } } })])).filter((c) => c.includes('COMPARISON'))).toEqual([]);
+  });
+
+  it('meldet unbekannte Systeme und Lücken mit falschen Verweisen', () => {
+    expect(codes(catalog([feature({ comparisons: { fremd: { status: 'neu' } } })]))).toContain('fehler:UNKNOWN_SYSTEM:features/lager.yaml: lager.anlegen');
+    const gap = { id: 'altsystem.druck', title: 'Druck', area: 'gibt-es-nicht', summary: 'x', status: 'fehlt' as const, source: 'oss' as const, refs: [], related: ['lager.weg'], system: 'altsystem', file: 'comparisons/altsystem.yaml' };
+    const found = codes(withSystem(false, [feature()], [gap])).map((c) => c.split(':')[1]);
+    expect(found).toEqual(expect.arrayContaining(['UNKNOWN_AREA', 'UNKNOWN_DEPENDENCY']));
   });
 });
 

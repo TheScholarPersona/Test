@@ -26,6 +26,12 @@ features:
       - kind: integration
         file: apps/api/test/integration/outbound.integration.test.ts
         test: listet den Entscheidungspunkt mit allen Auslagerstrategien
+    comparisons:
+      openwms:
+        status: neu
+        note: Das öffentliche OpenWMS hat kein konfigurierbares Regelwerk.
+        refs:
+          - Analyse 5.1b
 
   - id: strategien.regelsaetze
     title: Versionierte Regelsätze mit Entwurf und Aktivierung
@@ -74,6 +80,13 @@ features:
       - kind: integration
         file: apps/api/test/integration/strategy.integration.test.ts
         test: liest einen Regelsatz einzeln mit allen Regeln
+    comparisons:
+      openwms:
+        status: neu
+        note: Kein Gegenstück im öffentlichen OpenWMS; Putaway- und Picking-Bibliotheken sind privat.
+        refs:
+          - Analyse 1.1
+          - Analyse 5.1b
 
   - id: strategien.bedingungen
     title: Bedingungen für Regeln
@@ -107,6 +120,12 @@ features:
       - kind: integration
         file: apps/api/test/integration/strategy.integration.test.ts
         test: wählt die Regel nach Bedingungen (schwere TU auf den Boden)
+    comparisons:
+      openwms:
+        status: neu
+        note: Kein Gegenstück im öffentlichen OpenWMS.
+        refs:
+          - Analyse 5.1b
 
   - id: strategien.einlagerplatz
     title: Einlagerplatz automatisch bestimmen
@@ -163,6 +182,12 @@ features:
         test: "Vorrang: bevorzugt den Platztyp mit höherem privilegeLevel"
       - kind: scenario
         id: putaway-strategy
+    comparisons:
+      openwms:
+        status: abweichend
+        note: OpenWMS ruft für die Einlagerung einen privaten Putaway-Dienst auf (M-04); hier eigene, konfigurierbare Strategien mit harten Regeln.
+        refs:
+          - Analyse 3.5 M-04
 
   - id: strategien.einlager-simulation
     title: Einlagerung simulieren
@@ -190,6 +215,12 @@ features:
         test: prüft einen neuen Entwurf per Simulation, bevor er aktiv wird
       - kind: scenario
         id: putaway-strategy
+    comparisons:
+      openwms:
+        status: neu
+        note: Kein Gegenstück im öffentlichen OpenWMS.
+        refs:
+          - Analyse 5.1b
 
   - id: strategien.auslagerstrategien
     title: Auslagerstrategien (FIFO, FEFO, LIFO, Anbruch, ganze TU)
@@ -238,6 +269,12 @@ features:
         test: teilt per FEFO mit Mindestrestlaufzeit zu und reserviert
       - kind: scenario
         id: outbound-flow
+    comparisons:
+      openwms:
+        status: erweitert
+        note: Öffentlich nur eine einfache TU-Allokation (/allocation/generic); Picking-Bibliothek privat. Hier FIFO, FEFO, LIFO, Anbruch, ganze TU mit Restlaufzeit.
+        refs:
+          - Analyse 3.3 /allocation/generic
 
   - id: strategien.entscheidungsprotokoll
     title: Entscheidungen nachvollziehen
@@ -265,3 +302,9 @@ features:
       - kind: integration
         file: apps/api/test/integration/strategy.integration.test.ts
         test: entscheidet, weist zu und speichert die Begründung
+    comparisons:
+      openwms:
+        status: neu
+        note: OpenWMS speichert keine Begründung von Entscheidungen.
+        refs:
+          - Analyse 5.1b

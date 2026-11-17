@@ -1,0 +1,179 @@
+# Feature-Katalog – Lücken gegenüber OpenWMS.org.
+# Fähigkeiten von OpenWMS, die bei uns fehlen, nur teilweise vorhanden oder bewusst weggelassen sind.
+# Quelle `oss`: im öffentlichen Code belegt (docs/openwms-analyse.md); `privat`: nur aus der Projektbeschreibung
+# (org.openwms/README.md) bekannt – Umfang und Verhalten sind nicht einsehbar.
+system: openwms
+
+gaps:
+  # --- fehlt ---------------------------------------------------------------------
+  - id: openwms.tu-fehler
+    title: Fehlermeldungen je Transporteinheit
+    area: transporteinheiten
+    summary: Fehlercodes an einer TU festhalten (z. B. „Kontur zu hoch“ von der Anlage) und abfragen.
+    status: fehlt
+    source: oss
+    refs: [Analyse 2.1 UnitError, "Analyse 3.3 POST /v1/transport-units/error"]
+    related: [transporteinheiten.zustand]
+
+  - id: openwms.tu-reservierung
+    title: Reservierung ganzer Transporteinheiten
+    area: transporteinheiten
+    summary: Eine TU für einen Zweck reservieren, unabhängig vom Bestand darauf.
+    status: teilweise
+    source: oss
+    note: Bestand wird je Posten reserviert, Ziele über Lagerbewegungen und Transportaufträge belegt; eine eigene TU-Reservierung gibt es nicht.
+    refs: [Analyse 2.1 TransportUnitReservation]
+    related: [bestand.reservierung, lagerbewegungen.anlegen]
+
+  - id: openwms.gruppen-betriebsart
+    title: Betriebsart und maximaler Füllgrad je Lagerbereich
+    area: lagerstruktur
+    summary: Gruppen mit Betriebsart (z. B. automatisch/manuell) und Höchstfüllgrad, den Einlagerungen beachten.
+    status: fehlt
+    source: oss
+    refs: ["Analyse 2.1 LocationGroup (operationMode, maxFillLevel)"]
+    related: [lagerstruktur.gruppen]
+
+  - id: openwms.anlagenzustand-platz
+    title: Platzzustand der Anlage (plcState) und Systemstatus (SYSU)
+    area: materialfluss
+    summary: Zustandsmeldungen der Anlage je Platz und als Systemstatus für ganze Bereiche.
+    status: teilweise
+    source: oss
+    note: Platzmeldungen werden über das Programm lock-location zu Sperren; einen eigenen Anlagenzustand je Platz und Systemstatus-Meldungen gibt es nicht.
+    refs: ["Analyse 2.1 Location (plcState)", "Analyse 3.7 SYSU"]
+    related: [materialfluss.geraete-ereignisse, lagerstruktur.sperren]
+
+  - id: openwms.zeitgesteuerte-programme
+    title: Zeitgesteuerte Abläufe
+    area: materialfluss
+    summary: Abläufe, die nach Zeitplan starten (z. B. wartende Transporte regelmäßig anstoßen).
+    status: teilweise
+    source: oss
+    note: Mit Node-RED (Inject-Node) und POST /v1/transport-orders/start-pending umsetzbar, aber nicht als eingebaute Funktion.
+    refs: [Analyse 3.7 TimeTriggeredWorkflowExecutor]
+    related: [materialfluss.node-red-programme, transportauftraege.anlegen-starten]
+
+  - id: openwms.bewegungsgruppen
+    title: Bewegungsgruppen und Zuteilung an Bediener
+    area: lagerbewegungen
+    summary: Mehrere Lagerbewegungen zu einer Gruppe bündeln und einem Bediener zuweisen.
+    status: fehlt
+    source: oss
+    refs: [Analyse 2.1 MovementGroup]
+    related: [lagerbewegungen.arbeitsliste]
+
+  - id: openwms.problemhistorie
+    title: Problemhistorie von Transportaufträgen
+    area: transportauftraege
+    summary: Alle Probleme eines Auftrags über die Zeit nachvollziehen, nicht nur das aktuelle.
+    status: teilweise
+    source: oss
+    note: Der aktuelle Grund (problem) und die Ereignisse sind vorhanden; eine abfragbare Historie je Auftrag nicht.
+    refs: [Analyse 2.1 ProblemHistory]
+    related: [transportauftraege.ablauf]
+
+  - id: openwms.avis-attribute
+    title: Priorität, Detailattribute und Sperre am Wareneingangsauftrag
+    area: wareneingang
+    summary: Avis mit Priorität, frei definierbaren Detailattributen und Sperrkennzeichen.
+    status: fehlt
+    source: oss
+    refs: ["Analyse 2.1 ReceivingOrder (priority, details, locked)"]
+    related: [wareneingang.avis]
+
+  - id: openwms.metriken-tracing
+    title: Metriken und verteiltes Tracing
+    area: sicherheit
+    summary: Kennzahlen für Prometheus und Ablaufverfolgung mit OpenTelemetry.
+    status: fehlt
+    source: oss
+    refs: ["Analyse 1.3 (Micrometer/Prometheus, OpenTelemetry)"]
+    related: [sicherheit.betriebszustand]
+
+  - id: openwms.versand
+    title: Versand (Shipping)
+    area: auslagerung
+    summary: Packen, Versandeinheiten, Versandpapiere.
+    status: fehlt
+    source: privat
+    refs: [Analyse 1.1 private Repositories]
+    related: [auslagerung.kommissionierung]
+
+  - id: openwms.druck
+    title: Druck (Printing)
+    area: integration
+    summary: Etiketten und Belege drucken.
+    status: fehlt
+    source: privat
+    refs: [Analyse 1.1 private Repositories]
+
+  - id: openwms.partner
+    title: Geschäftspartner (Partner)
+    area: wareneingang
+    summary: Stammdaten für Lieferanten und Kunden.
+    status: fehlt
+    source: privat
+    note: Lieferant und Kunde sind heute nur Freitext am Auftrag.
+    refs: [Analyse 1.1 private Repositories]
+    related: [wareneingang.avis, auslagerung.auftrag]
+
+  - id: openwms.erp-adapter
+    title: ERP-Adapter (SAP, Dynamics)
+    area: integration
+    summary: Fertige Anbindung an SAP und Microsoft Dynamics.
+    status: teilweise
+    source: privat
+    note: Anbindung ist über REST, MQTT und Node-RED möglich (Beispiel-Flow ERP-CSV → Wareneingang), fertige Adapter gibt es nicht.
+    refs: [Analyse 1.1 private Repositories]
+    related: [integration.beispiel-flows, integration.ereignisse]
+
+  - id: openwms.aufgaben
+    title: Lageraufgaben (WMS Tasks)
+    area: lagerbewegungen
+    summary: Allgemeine Aufgabenverwaltung für Lagerpersonal.
+    status: teilweise
+    source: privat
+    note: Umfang unbekannt; Lagerbewegungen mit Arbeitsliste und Picks decken einen Teil ab.
+    refs: [Analyse 1.1 private Repositories]
+    related: [lagerbewegungen.arbeitsliste, auslagerung.kommissionierung]
+
+  # --- bewusst weggelassen ------------------------------------------------------
+  - id: openwms.mandanten
+    title: Mandantenfähigkeit (Accounts)
+    area: sicherheit
+    summary: Mehrere Mandanten in einer Installation.
+    status: bewusst-weggelassen
+    source: oss
+    note: Entscheidung zu Projektbeginn – nicht im ersten Ausbau; Eindeutigkeiten so angelegt, dass eine Mandanten-Spalte später möglich ist.
+    refs: [Analyse 2.1 Account, Analyse 5.5 Nr. 3]
+
+  - id: openwms.bpmn-workflows
+    title: BPMN-Workflows für den Materialfluss
+    area: materialfluss
+    summary: Abläufe als BPMN-Prozesse (Activiti/Camunda) mit Ausdrücken in Service-Tasks.
+    status: bewusst-weggelassen
+    source: oss
+    note: Ersetzt durch eingebaute Programme und Node-RED-Flows (Plan 5.1a, 5.1c).
+    refs: ["Analyse 3.7 Workflows", "Analyse 3.7 Schwachstelle R3"]
+    related: [materialfluss.action-matrix, materialfluss.node-red-programme]
+
+  - id: openwms.microservices
+    title: Getrennte Dienste mit Replikaten, Service-Discovery und zentraler Konfiguration
+    area: integration
+    summary: Ein Dienst je Fachbereich mit eigener Datenbank, Eureka, Spring Cloud Config und lokalen Datenkopien.
+    status: bewusst-weggelassen
+    source: oss
+    note: Modularer Monolith mit klaren Modulgrenzen (Architekturregeln per dependency-cruiser) statt verteilter Dienste (Plan 5.1).
+    refs: [Analyse 3.2, Analyse 3.4 Replikate, Analyse 5.1]
+    related: [integration.ereignisse]
+
+  - id: openwms.hateoas
+    title: HATEOAS-Index-Endpunkte und Hersteller-Media-Types
+    area: integration
+    summary: Selbstbeschreibende REST-Ressourcen über Links statt eines API-Schemas.
+    status: bewusst-weggelassen
+    source: oss
+    note: Ersetzt durch OpenAPI 3.1, aus der die Oberfläche ihre Typen erzeugt.
+    refs: [Analyse 3.3 Konventionen]
+    related: [integration.openapi]

@@ -41,6 +41,12 @@ features:
       - kind: integration
         file: apps/api/test/integration/transport.integration.test.ts
         test: listet Typen mit Regeln und ändert Maße und Beschreibung
+    comparisons:
+      openwms:
+        status: erweitert
+        note: OpenWMS bietet TU-Typen per REST nur lesend an; hier vollständig pflegbar.
+        refs:
+          - Analyse 3.3 /v1/transport-unit-types
 
   - id: transporteinheiten.regeln
     title: Platzierungs- und Stapelregeln je TU-Typ
@@ -77,6 +83,13 @@ features:
       - kind: integration
         file: apps/api/test/integration/transport.integration.test.ts
         test: setzt Platzierungsregeln durch
+    comparisons:
+      openwms:
+        status: erweitert
+        note: In OpenWMS gespeichert, aber nicht durchgesetzt (T-04); hier wirksam bei jeder Platzierung und Strategie.
+        refs:
+          - Analyse 3.5 T-04
+          - Analyse 5.4 Nr. 7
 
   - id: transporteinheiten.anlegen
     title: Transporteinheiten anlegen und pflegen
@@ -120,6 +133,13 @@ features:
         test: löscht das geplante Ziel, sobald es erreicht ist
       - kind: scenario
         id: tu-placement
+    comparisons:
+      openwms:
+        status: gleichwertig
+        note: Barcode als fachlicher Schlüssel mit Erzeugung (T-01), Gewicht und geplantes Ziel wie in OpenWMS. Fehlermeldungen je TU (UnitError) fehlen, siehe Lücken.
+        refs:
+          - Analyse 3.5 T-01
+          - Analyse 2.1 TransportUnit
 
   - id: transporteinheiten.platzierungspruefung
     title: Platzierungsprüfung mit allen Verstößen auf einmal
@@ -164,6 +184,12 @@ features:
         test: belegt einen Platz mit Höchstzahl 1 bei gleichzeitigen Anfragen genau einmal
       - kind: scenario
         id: tu-placement
+    comparisons:
+      openwms:
+        status: neu
+        note: OpenWMS speichert Kapazität, Gewicht und Platzierungsregeln, prüft sie aber nicht (L-06, T-04; Freigabe-Hook T-03 ohne Umsetzung).
+        refs:
+          - Analyse 3.5 L-06, T-03, T-04
 
   - id: transporteinheiten.bewegen
     title: Transporteinheiten bewegen
@@ -213,6 +239,13 @@ features:
       - kind: scenario
         id: node-red-examples
         note: Beispiel-Flow Scan → TU bewegen
+    comparisons:
+      openwms:
+        status: erweitert
+        note: Bewegen wie in OpenWMS (Leerlauf auf gleichen Platz, T-02); zusätzlich Modus „physical“ mit gemeldeten Verstößen, Stapel bewegt sich mit, korrekter Vorplatz im Ereignis (OpenWMS-Fehler 5.4 Nr. 1).
+        refs:
+          - Analyse 3.5 T-02
+          - Analyse 5.4 Nr. 1
 
   - id: transporteinheiten.stapeln
     title: Stapeln und Abstapeln
@@ -250,6 +283,13 @@ features:
       - kind: integration
         file: apps/api/test/integration/transport.integration.test.ts
         test: nimmt vom Stapel nur, wenn auf dem Platz Raum ist
+    comparisons:
+      openwms:
+        status: erweitert
+        note: Eltern-Kind-Beziehung wie in OpenWMS; dort ohne Durchsetzung der Stapelregeln und ohne eigene Endpunkte.
+        refs:
+          - Analyse 2.1 TransportUnit parent/children
+          - Analyse 3.5 T-04
 
   - id: transporteinheiten.zustand
     title: TU-Zustand (verfügbar, gesperrt, Qualitätsprüfung)
@@ -275,6 +315,12 @@ features:
       - kind: integration
         file: apps/api/test/integration/outbound.integration.test.ts
         test: nimmt keinen Bestand von gesperrten Plätzen, gesperrten TUs oder aus laufender Inventur
+    comparisons:
+      openwms:
+        status: gleichwertig
+        note: Zustände verfügbar, gesperrt, Qualitätsprüfung wie in OpenWMS.
+        refs:
+          - Analyse 3.3 /v1/transport-units /block|/available|/quality-check
 
   - id: transporteinheiten.suche
     title: Transporteinheiten finden
@@ -293,3 +339,9 @@ features:
       - kind: integration
         file: apps/api/test/integration/transport.integration.test.ts
         test: findet TUs nach Platz, Typ und Zustand
+    comparisons:
+      openwms:
+        status: gleichwertig
+        note: Suche nach Barcode, Platz (und hier zusätzlich Typ und Zustand).
+        refs:
+          - Analyse 3.3 /v1/transport-units

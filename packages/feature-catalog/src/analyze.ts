@@ -252,5 +252,28 @@ export function analyze(data: CatalogData, discovery: Discovery, reports?: Repor
     if (c.area.status === 'offen' && open > 0) add('hinweis', 'AREA_OPEN', c.area.id, `Bereich „${c.area.title}“ ist noch nicht katalogisiert: ${open} von ${c.items.length} Bestandteilen nicht zugeordnet`);
   }
 
+  // --- Vergleich mit anderen Systemen ------------------------------------------------
+  const systems = new Map(taxonomy.systems.map((s) => [s.id, s]));
+  for (const { entry } of all) {
+    for (const system of Object.keys(entry.comparisons)) {
+      if (!systems.has(system)) add('fehler', 'UNKNOWN_SYSTEM', `${entry.file}: ${entry.id}`, `Vergleichssystem „${system}“ fehlt unter systems in catalog.yaml`);
+    }
+  }
+  for (const system of taxonomy.systems) {
+    const missing = data.features.filter((f) => !f.comparisons[system.id]);
+    if (system.complete) for (const f of missing) add('fehler', 'COMPARISON_MISSING', `${f.file}: ${f.id}`, `Einstufung gegenüber ${system.title} fehlt (Vergleich ist als vollständig markiert)`);
+    else if (missing.length > 0) add('hinweis', 'COMPARISON_OPEN', system.id, `${missing.length} Features noch ohne Einstufung gegenüber ${system.title}`);
+  }
+  const gapIds = new Set<string>();
+  for (const gap of data.gaps) {
+    const where = `${gap.file}: ${gap.id}`;
+    if (!systems.has(gap.system)) add('fehler', 'UNKNOWN_SYSTEM', where, `Vergleichssystem „${gap.system}“ fehlt unter systems in catalog.yaml`);
+    if (!gap.id.startsWith(`${gap.system}.`)) add('fehler', 'ID_PREFIX', where, `Kennung muss mit „${gap.system}.“ beginnen`);
+    if (gapIds.has(gap.id) || ids.has(gap.id)) add('fehler', 'DUPLICATE_ID', where, 'Kennung mehrfach vergeben');
+    gapIds.add(gap.id);
+    if (!areas.has(gap.area)) add('fehler', 'UNKNOWN_AREA', where, `Bereich „${gap.area}“ fehlt in catalog.yaml`);
+    for (const r of gap.related) if (!ids.has(r)) add('fehler', 'UNKNOWN_DEPENDENCY', where, `Verwandtes Feature „${r}“ gibt es nicht`);
+  }
+
   return { findings, features, review, coverage: [...coverage.values()], unowned, reportedKinds: [...reportedKinds] };
 }

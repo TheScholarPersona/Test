@@ -13,6 +13,7 @@ pnpm catalog:build --reports reports   # dto., Nachweise gegen die JUnit-Bericht
 | `catalog/catalog.yaml` | Taxonomie: Funktionsbereiche, Feature-Gruppen, Zuständigkeiten (`owns`), technische Ausnahmen |
 | `catalog/features/<bereich>.yaml` | **Katalog** – nur nachweislich verfügbare Features |
 | `catalog/review.yaml` | **Prüfbestand** – vorhanden, aber unvollständig, deaktiviert oder nicht nachgewiesen |
+| `catalog/comparisons/<system>.yaml` | **Lücken** gegenüber einem Vergleichssystem (z. B. OpenWMS) |
 | `packages/feature-catalog` | Datenmodell (Zod), automatische Bestandsaufnahme, Prüfungen, Ansicht |
 | `catalog/dist/` | erzeugte Ansicht und `catalog.json` (nicht im Repository) |
 
@@ -75,7 +76,7 @@ Ein Eintrag (Katalog und Prüfbestand haben denselben Aufbau; Schema: `packages/
 | `technical.uiRoutes[]`, `technical.nodeRedNodes[]` | technisch | Seiten der Oberfläche, Node-RED-Nodes |
 | `technical.notes[]` | technisch | Tabellen, Fehlercodes, Hinweise |
 | `evidence[]` | Nachweis | `scenario` (Szenario-Kennung) oder `unit`/`integration`/`web-e2e` (Datei + Testtitel); im Katalog Pflicht |
-| `comparisons{}` | Vergleich | je System (z. B. `openwms`) `status` (`gleichwertig`, `erweitert`, `eingeschraenkt`, `neu`, `abweichend`), `note`, `refs` – vorbereitet, noch leer |
+| `comparisons{}` | Vergleich | je System (z. B. `openwms`) `status` (`gleichwertig`, `erweitert`, `eingeschraenkt`, `neu`, `abweichend`, `nicht-einsehbar`), `note`, `refs`; siehe Abschnitt 7 |
 | `state`, `reason` | nur Prüfbestand | `unvollstaendig`, `deaktiviert` oder `nicht-nachgewiesen` und warum |
 
 **Abgeleitet, nicht gepflegt:** Rollen (aus den ändernden Endpunkten eines Features, sonst den lesenden), Bedienwege, Nachweisstatus, aufrufende Tests, Zweck der Endpunkte.
@@ -144,3 +145,29 @@ Alle 12 Bereiche sind katalogisiert (`status: katalogisiert`); jeder erkannte Be
 **Abbau des Prüfbestands:** Die 14 Einträge nach der ersten Bestandsaufnahme wurden mit Tests nachgewiesen und sind jetzt Teil der Features: Lese- und Änderungsendpunkte (Integrationstests), die Seiten Wareneingang, Transport, Materialfluss, Ereignisse, Konto und Benutzer sowie Picks am Scanner (Browser-Tests in `apps/web/e2e/seiten.spec.ts`, `auth.spec.ts`, `scanner.spec.ts`) und die MQTT-Absicherung (`packages/scenario-runner/test/security.test.ts`, läuft mit `pnpm test:e2e` gegen die Umgebung).
 
 **Grenze der Erkennung:** „Aufgerufen in“ erkennt Aufrufe mit Methode und Pfad im Quelltext (auch Template-Ausdrücke und `fetch` ohne Methode). Aufrufe über Hilfsfunktionen wie `post(id, 'issues')` bleiben unsichtbar; deshalb ist das nur eine Warnung. Verbindlich sind die ausdrücklichen Nachweise und ihre Testergebnisse.
+
+## 7. Vergleich mit OpenWMS
+
+Grundlage ist die Analyse der öffentlichen OpenWMS-Repositories (`docs/openwms-analyse.md`). Das System ist in `catalog.yaml` unter `systems` eingetragen, mit `complete: true`: Jedes Feature braucht eine Einstufung, sonst schlägt die Prüfung fehl (`COMPARISON_MISSING`). Neue Features werden so automatisch zum Vergleich gezwungen.
+
+| Einstufung | Bedeutung | Features |
+|---|---|---|
+| gleichwertig | kann dasselbe | 10 |
+| erweitert | kann mehr (z. B. durchgesetzte Platzierungsregeln, die OpenWMS nur speichert) | 13 |
+| eingeschränkt | kann weniger | 2 |
+| neu | in OpenWMS nicht vorhanden (Regelwerk, Simulation, Node-RED, Szenario-Tests) | 13 |
+| abweichend | gleicher Zweck, anderer Ansatz (Programme statt BPMN, MQTT-Outbox statt AMQP, OpenAPI statt HATEOAS) | 6 |
+| nicht einsehbar | Gegenstück nur in privaten Teilen (Inventory, Picking, Shipping, Oberflächen, Identitätsdienst) | 28 |
+
+**Lücken** (`catalog/comparisons/openwms.yaml`, 18 Einträge) – Fähigkeiten von OpenWMS, die bei uns fehlen:
+
+| Status | Einträge |
+|---|---|
+| fehlt (8) | Fehlermeldungen je TU, Betriebsart/Füllgrad je Bereich, Bewegungsgruppen, Priorität/Attribute/Sperre am Avis, Metriken und Tracing; aus privaten Teilen: Versand, Druck, Geschäftspartner |
+| teilweise (6) | TU-Reservierung, Platzzustand der Anlage und Systemstatus, zeitgesteuerte Abläufe, Problemhistorie der Transportaufträge; aus privaten Teilen: ERP-Adapter, Lageraufgaben |
+| bewusst weggelassen (4) | Mandanten, BPMN-Workflows, Microservices mit Replikaten, HATEOAS |
+
+Jede Lücke nennt den Bereich, in den sie gehören würde, ob sie im öffentlichen Code belegt oder nur beschrieben ist (`source: oss | privat`), Belege und verwandte Features. Die Ansicht zeigt den Vergleich im Reiter **Vergleich** (Übersicht, Tabelle je Bereich, Lücken) und je Feature als Abzeichen und Abschnitt; im Katalog lässt sich nach Einstufung filtern.
+
+**Pflege:** Neues Feature → Einstufung ergänzen (die Prüfung verlangt sie). Lücke geschlossen → Eintrag aus `comparisons/openwms.yaml` entfernen und die Einstufung des neuen bzw. erweiterten Features anpassen. Ein weiteres Vergleichssystem → Eintrag unter `systems`, Einstufungen unter `comparisons.<id>`, Lücken in `comparisons/<id>.yaml`.
+

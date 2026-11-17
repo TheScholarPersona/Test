@@ -80,6 +80,8 @@ export function viewModel(analysis: Analysis, data: CatalogData) {
       };
     }),
     exclusions: data.taxonomy.exclusions,
+    systems: data.taxonomy.systems,
+    gaps: data.gaps.map(({ file: _file, ...gap }) => gap),
     features: analysis.features.map((e) => entryView(e, usedBy)),
     review: analysis.review.map((e) => entryView(e, usedBy)),
     unowned: analysis.unowned,
