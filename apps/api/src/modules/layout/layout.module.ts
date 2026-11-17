@@ -12,6 +12,6 @@ import { LocationsController } from './http/locations.controller.js';
 @Module({
   providers: [LocationTypeService, LocationGroupService, LocationService, LocationRemovalPolicy, LocationLookup],
   controllers: [LocationTypesController, LocationGroupsController, LocationsController],
-  exports: [LocationService, LocationRemovalPolicy, LocationLookup],
+  exports: [LocationService, LocationGroupService, LocationRemovalPolicy, LocationLookup],
 })
 export class LayoutModule {}

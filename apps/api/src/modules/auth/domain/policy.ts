@@ -51,6 +51,7 @@ export const RULES: readonly Rule[] = [
   { methods: ['GET'], path: /^\/v1\/.*/, access: anyone, note: 'Lesen' },
   // Sperren (vor den Stammdaten-Regeln, die sonst greifen)
   { methods: ['PATCH'], path: new RegExp(`^/v1/(locations|location-groups)/${ID}/locks$`), access: OPERATIONS, note: 'Platz- und Gruppensperren' },
+  { methods: ['PATCH'], path: new RegExp(`^/v1/locations/${ID}/plc-state$`), access: PLANT, note: 'Zustand laut Anlage' },
   // Bestand
   { methods: ['POST'], path: new RegExp(`^/v1/stock/${ID}/(issues|transfers)$`), access: FLOOR, note: 'Abgang, Umbuchung' },
   { methods: ['POST'], path: new RegExp(`^/v1/stock/${ID}/(corrections|reservations)$`), access: OPERATIONS, note: 'Korrektur, Reservierung' },
@@ -62,6 +63,8 @@ export const RULES: readonly Rule[] = [
   { methods: ['POST'], path: /^\/v1\/transport-units$/, access: FLOOR, note: 'TU anlegen' },
   { methods: ['POST'], path: new RegExp(`^/v1/transport-units/${ID}/(move|state|stack|unstack)$`), access: FLOOR, note: 'TU bewegen, Zustand, stapeln' },
   { methods: ['PATCH'], path: new RegExp(`^/v1/transport-units/${ID}$`), access: FLOOR, note: 'TU ändern (Gewicht)' },
+  { methods: ['POST'], path: new RegExp(`^/v1/transport-units/${ID}/errors$`), access: roles('admin', 'leitstand', 'lager', 'anlage'), note: 'Fehlermeldung an einer TU' },
+  { methods: ['POST'], path: new RegExp(`^/v1/transport-units/${ID}/errors/${ID}/resolve$`), access: FLOOR, note: 'Fehlermeldung erledigen' },
   // Wareneingang
   { methods: ['POST'], path: new RegExp(`^/v1/receiving-orders/${ID}/captures$`), access: FLOOR, note: 'Ware erfassen' },
   { methods: ['POST'], path: /^\/v1\/receiving-blind-captures$/, access: FLOOR, note: 'Erfassung ohne Avis' },

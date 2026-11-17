@@ -64,12 +64,14 @@ export const Technical = z
   .strict();
 
 /**
- * Platz für spätere Vergleiche mit anderen Systemen (z. B. OpenWMS), je System ein Eintrag.
- * Bisher nicht befüllt; das Datenmodell muss dafür nicht geändert werden.
+ * Einstufung gegenüber einem anderen System (z. B. OpenWMS), je System ein Eintrag:
+ * gleichwertig, erweitert (kann mehr), eingeschraenkt (kann weniger), neu (dort nicht vorhanden),
+ * abweichend (gleicher Zweck, anderer Ansatz), nicht-einsehbar (Gegenstück nur in nicht öffentlichen Teilen).
  */
+export const COMPARISON_STATES = ['gleichwertig', 'erweitert', 'eingeschraenkt', 'neu', 'abweichend', 'nicht-einsehbar'] as const;
 export const Comparison = z
   .object({
-    status: z.enum(['gleichwertig', 'erweitert', 'eingeschraenkt', 'neu', 'abweichend']),
+    status: z.enum(COMPARISON_STATES),
     note: Text.optional(),
     refs: z.array(Text).default([]),
   })
@@ -128,6 +130,34 @@ export const Owns = z
   })
   .strict();
 
+/** Vergleichssystem; `complete: true` verlangt eine Einstufung für jedes Feature. */
+export const ComparisonSystem = z
+  .object({ id: Id, title: Text, description: Text, source: Text.optional(), complete: z.boolean().default(false) })
+  .strict();
+
+export const GAP_STATES = ['fehlt', 'teilweise', 'bewusst-weggelassen'] as const;
+
+/** Fähigkeit des Vergleichssystems, die bei uns fehlt oder nur teilweise vorhanden ist. */
+export const Gap = z
+  .object({
+    id: Id,
+    title: Text,
+    /** Bereich, in den die Fähigkeit bei uns gehören würde. */
+    area: Id,
+    summary: Text,
+    status: z.enum(GAP_STATES),
+    /** `oss`: im öffentlichen Code belegt; `privat`: nur aus der Beschreibung des Projekts bekannt. */
+    source: z.enum(['oss', 'privat']),
+    note: Text.optional(),
+    refs: z.array(Text).default([]),
+    /** Features, die die Lücke teilweise abdecken oder ersetzen. */
+    related: z.array(Id).default([]),
+  })
+  .strict();
+export type Gap = z.infer<typeof Gap>;
+
+export const GapFile = z.object({ system: Id, gaps: z.array(Gap).default([]) }).strict();
+
 export const Group = z.object({ id: Id, title: Text, summary: Text }).strict();
 
 export const Area = z
@@ -153,6 +183,7 @@ export const Taxonomy = z
   .object({
     schemaVersion: z.literal(1),
     areas: z.array(Area).min(1),
+    systems: z.array(ComparisonSystem).default([]),
     exclusions: z
       .object({
         endpoints: z.array(Exclusion).default([]),

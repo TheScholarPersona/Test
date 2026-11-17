@@ -65,3 +65,15 @@ export const LocationLockChangedEvent = defineEvent(
   1,
   LocationSnapshotSchema.extend({ change: LockChangeSchema }),
 );
+
+/** Zustandsmeldung der Anlage für einen Platz (SPS): 0 = in Ordnung, sonst Störungscode. */
+export const LocationPlcStateChangedEvent = defineEvent(
+  'location.plc-state-changed',
+  1,
+  LocationSnapshotSchema.extend({
+    before: z.number().int(),
+    plcState: z.number().int(),
+    text: z.string().nullable(),
+    source: z.string().nullable(),
+  }),
+);

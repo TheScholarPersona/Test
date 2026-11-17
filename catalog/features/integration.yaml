@@ -44,6 +44,12 @@ features:
         test: wms-event filtert nach Typ und Feld und verwirft Duplikate
       - kind: scenario
         id: system-ping
+    comparisons:
+      openwms:
+        status: abweichend
+        note: OpenWMS sendet Domain-Events nach dem Commit über AMQP (RabbitMQ) mit Dead-Letter-Exchanges; hier transaktionale Outbox über MQTT mit Wiederholung, ohne Verlust bei Absturz.
+        refs:
+          - Analyse 3.4
 
   - id: integration.live-stream
     title: Live-Ereignisse für Browser (Server-Sent Events)
@@ -64,6 +70,10 @@ features:
       - kind: integration
         file: apps/api/test/integration/live.integration.test.ts
         test: liefert Ereignisse als Server-Sent Events, gefiltert nach Typ
+    comparisons:
+      openwms:
+        status: neu
+        note: Kein Gegenstück im öffentlichen OpenWMS.
 
   - id: integration.openapi
     title: Beschriebene und geprüfte REST-API (OpenAPI 3.1)
@@ -91,6 +101,12 @@ features:
       - kind: integration
         file: apps/api/test/integration/live.integration.test.ts
         test: stimmt mit der OpenAPI-Beschreibung der Oberfläche überein
+    comparisons:
+      openwms:
+        status: abweichend
+        note: OpenWMS nutzt HATEOAS-Index-Endpunkte und Hersteller-Media-Types; hier OpenAPI 3.1 mit Schema-Prüfung.
+        refs:
+          - Analyse 3.3 Konventionen
 
   - id: integration.node-red-nodes
     title: WMS-Bausteine für Node-RED
@@ -128,6 +144,12 @@ features:
         test: wms-wait-event wartet auf das passende Ereignis (Bedingung aus der Nachricht)
       - kind: scenario
         id: nodes-selftest
+    comparisons:
+      openwms:
+        status: neu
+        note: Kein Gegenstück im öffentlichen OpenWMS.
+        refs:
+          - Analyse 5.1a
 
   - id: integration.beispiel-flows
     title: Beispiel-Flows für typische Anbindungen
@@ -147,6 +169,12 @@ features:
     evidence:
       - kind: scenario
         id: node-red-examples
+    comparisons:
+      openwms:
+        status: neu
+        note: Kein Gegenstück im öffentlichen OpenWMS.
+        refs:
+          - Analyse 5.1a
 
   - id: integration.szenario-tests
     title: Automatisierte End-to-End-Szenarien in Node-RED
@@ -184,6 +212,13 @@ features:
         id: system-ping
       - kind: scenario
         id: nodes-selftest
+    comparisons:
+      openwms:
+        status: neu
+        note: OpenWMS hat Unit- und Integrationstests je Dienst, aber keine fachlichen End-to-End-Szenarien.
+        refs:
+          - Analyse 1.1 Testdateien
+          - Analyse 5.1d
 
   - id: integration.ereignis-monitor
     title: Ereignis-Monitor im Leitstand
@@ -203,3 +238,9 @@ features:
       - kind: web-e2e
         file: apps/web/e2e/seiten.spec.ts
         test: "Ereignisse: zeigt Live-Ereignisse und filtert nach Typ"
+    comparisons:
+      openwms:
+        status: nicht-einsehbar
+        note: Die OpenWMS-Oberflächen sind eigene, GPL-lizenzierte Projekte und nicht Teil der Analyse.
+        refs:
+          - Analyse 1.2

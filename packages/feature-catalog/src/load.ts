@@ -3,13 +3,15 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse } from 'yaml';
 import type { z } from 'zod';
-import { type Feature, FeatureFile, type ReviewItem, ReviewFile, Taxonomy } from './schema.ts';
+import { type Feature, FeatureFile, type Gap, GapFile, type ReviewItem, ReviewFile, Taxonomy } from './schema.ts';
 
 export interface CatalogData {
   taxonomy: Taxonomy;
   /** Features mit der Datei, aus der sie stammen. */
   features: (Feature & { area: string; file: string })[];
   review: (ReviewItem & { file: string })[];
+  /** Lücken gegenüber Vergleichssystemen (catalog/comparisons/<system>.yaml). */
+  gaps: (Gap & { system: string; file: string })[];
 }
 
 export class CatalogLoadError extends Error {}
@@ -40,5 +42,12 @@ export function loadCatalog(dir: string): CatalogData {
     for (const feature of data.features) features.push({ ...feature, area: data.area, file });
   }
   const review = existsSync(join(dir, 'review.yaml')) ? load(dir, 'review.yaml', ReviewFile).items.map((i) => ({ ...i, file: 'review.yaml' })) : [];
-  return { taxonomy, features, review };
+  const gaps: CatalogData['gaps'] = [];
+  const gapDir = join(dir, 'comparisons');
+  for (const name of existsSync(gapDir) ? readdirSync(gapDir).filter((f) => f.endsWith('.yaml')).sort() : []) {
+    const file = `comparisons/${name}`;
+    const data = load(dir, file, GapFile);
+    for (const gap of data.gaps) gaps.push({ ...gap, system: data.system, file });
+  }
+  return { taxonomy, features, review, gaps };
 }

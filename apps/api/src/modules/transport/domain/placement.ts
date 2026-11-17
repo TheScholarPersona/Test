@@ -14,7 +14,9 @@ export type PlacementRule =
   | 'WEIGHT_EXCEEDED'
   | 'PLACEMENT_NOT_ALLOWED'
   /** Nur bei der Platzvergabe: Platz ist von der automatischen Vergabe ausgenommen. */
-  | 'ALLOCATION_BLOCKED';
+  | 'ALLOCATION_BLOCKED'
+  /** Nur bei der Platzvergabe: die Anlage meldet für den Platz eine Störung. */
+  | 'PLC_FAULT';
 
 export interface PlacementViolation {
   rule: PlacementRule;

@@ -20,6 +20,12 @@ features:
       - kind: integration
         file: apps/api/test/integration/live.integration.test.ts
         test: liefert die Oberfläche unter /ui/ aus, ohne die API zu verdecken
+    comparisons:
+      openwms:
+        status: nicht-einsehbar
+        note: Die OpenWMS-Oberflächen sind eigene, GPL-lizenzierte Projekte und nicht Teil der Analyse.
+        refs:
+          - Analyse 1.2
 
   - id: oberflaeche.uebersicht
     title: Übersicht mit Systemzustand
@@ -37,6 +43,12 @@ features:
       - kind: web-e2e
         file: apps/web/e2e/leitstand.spec.ts
         test: Übersicht zeigt Systemzustand und Live-Verbindung
+    comparisons:
+      openwms:
+        status: nicht-einsehbar
+        note: Die OpenWMS-Oberflächen sind eigene, GPL-lizenzierte Projekte und nicht Teil der Analyse.
+        refs:
+          - Analyse 1.2
 
   - id: oberflaeche.live-aktualisierung
     title: Live-Aktualisierung aller Seiten
@@ -57,6 +69,12 @@ features:
       - kind: web-e2e
         file: apps/web/e2e/leitstand.spec.ts
         test: Übersicht zeigt Systemzustand und Live-Verbindung
+    comparisons:
+      openwms:
+        status: nicht-einsehbar
+        note: Die OpenWMS-Oberflächen sind eigene, GPL-lizenzierte Projekte und nicht Teil der Analyse.
+        refs:
+          - Analyse 1.2
 
   - id: oberflaeche.scanner
     title: Scanner-Ansicht im Handyformat
@@ -77,6 +95,12 @@ features:
       - kind: web-e2e
         file: apps/web/e2e/scanner.spec.ts
         test: "Scanner: Wareneingang ohne Avis"
+    comparisons:
+      openwms:
+        status: nicht-einsehbar
+        note: Die OpenWMS-Oberflächen sind eigene, GPL-lizenzierte Projekte und nicht Teil der Analyse.
+        refs:
+          - Analyse 1.2
 
   - id: oberflaeche.rollenabhaengig
     title: Bedienung je Rolle
@@ -95,3 +119,9 @@ features:
       - kind: web-e2e
         file: apps/web/e2e/auth.spec.ts
         test: "Rolle lager: keine Benutzerverwaltung, kein Anlegen von Auslageraufträgen"
+    comparisons:
+      openwms:
+        status: nicht-einsehbar
+        note: Die OpenWMS-Oberflächen sind eigene, GPL-lizenzierte Projekte und nicht Teil der Analyse.
+        refs:
+          - Analyse 1.2

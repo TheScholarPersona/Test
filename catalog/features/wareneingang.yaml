@@ -48,6 +48,13 @@ features:
       - kind: integration
         file: apps/api/test/integration/receiving.integration.test.ts
         test: listet Aufträge, gefiltert nach Lieferant und Zustand
+    comparisons:
+      openwms:
+        status: eingeschraenkt
+        note: Avis mit Mengen- und TU-Positionen wie in OpenWMS (R-01); Priorität, Detailattribute und Sperrkennzeichen des Auftrags fehlen.
+        refs:
+          - Analyse 2.1 ReceivingOrder
+          - Analyse 3.5 R-01
 
   - id: wareneingang.erfassung
     title: Ware gegen ein Avis erfassen
@@ -125,6 +132,12 @@ features:
       - kind: web-e2e
         file: apps/web/e2e/seiten.spec.ts
         test: "Wareneingang: Avis anlegen, Ware erfassen, Auftrag abschließen"
+    comparisons:
+      openwms:
+        status: erweitert
+        note: Zuordnung zur Position wie in OpenWMS (R-02 bis R-04, hier in der Basiseinheit); zusätzlich direkte Einlagerbewegung und serialisierte parallele Erfassung.
+        refs:
+          - Analyse 3.5 R-02, R-03, R-04
 
   - id: wareneingang.abschluss
     title: Positionen und Aufträge abschließen oder stornieren
@@ -175,6 +188,12 @@ features:
       - kind: web-e2e
         file: apps/web/e2e/seiten.spec.ts
         test: "Wareneingang: Avis anlegen, Ware erfassen, Auftrag abschließen"
+    comparisons:
+      openwms:
+        status: erweitert
+        note: Auftragszustand aus Positionen wie in OpenWMS (R-05, R-06); zusätzlich Position stornieren oder mit Fehlmenge schließen.
+        refs:
+          - Analyse 3.5 R-05, R-06, R-07
 
   - id: wareneingang.ohne-avis
     title: Wareneingang ohne Avis
@@ -210,3 +229,9 @@ features:
         test: "Scanner: Wareneingang ohne Avis"
       - kind: scenario
         id: stock-flow
+    comparisons:
+      openwms:
+        status: gleichwertig
+        note: Blind-Erfassung wie in OpenWMS (POST /v1/capture).
+        refs:
+          - Analyse 3.3 wms-receiving

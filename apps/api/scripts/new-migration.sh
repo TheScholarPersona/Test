@@ -42,4 +42,6 @@ pnpm -s build
 reset_db
 node dist/scripts/migrate.js up
 node dist/scripts/migrate.js create | tee /dev/stderr | grep -q "Keine Schemaänderungen" || { echo "Abweichung nach Migration!" >&2; exit 1; }
+# Der Schema-Snapshot heißt nach der Datenbank; nur der Snapshot der Anwendung (wms) gehört ins Repository.
+find src/migrations -maxdepth 1 -name '.snapshot-*.json' ! -name '.snapshot-wms.json' -delete
 echo "Fertig: $target"

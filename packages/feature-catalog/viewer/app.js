@@ -12,10 +12,29 @@
     'nicht-nachgewiesen': ['bad', 'nicht nachgewiesen', 'Mindestens ein Nachweis fehlt, ist fehlgeschlagen oder lief nicht'],
   };
   const RESULT = { bestanden: ['ok', 'bestanden'], fehlgeschlagen: ['bad', 'fehlgeschlagen'], uebersprungen: ['warn', 'übersprungen'], 'nicht-ausgefuehrt': ['bad', 'nicht ausgeführt'] };
+  const COMPARISON = {
+    gleichwertig: ['', 'gleichwertig'],
+    erweitert: ['ok', 'erweitert'],
+    eingeschraenkt: ['warn', 'eingeschränkt'],
+    neu: ['ok', 'neu'],
+    abweichend: ['', 'abweichend'],
+    'nicht-einsehbar': ['', 'nicht einsehbar'],
+  };
+  const COMPARISON_HELP = {
+    gleichwertig: 'kann dasselbe',
+    erweitert: 'kann mehr',
+    eingeschraenkt: 'kann weniger',
+    neu: 'dort nicht vorhanden',
+    abweichend: 'gleicher Zweck, anderer Ansatz',
+    'nicht-einsehbar': 'Gegenstück nur in nicht öffentlichen Teilen',
+  };
+  const GAP = { fehlt: ['bad', 'fehlt'], teilweise: ['warn', 'teilweise'], 'bewusst-weggelassen': ['', 'bewusst weggelassen'] };
+  const systems = data.systems || [];
+  const gaps = data.gaps || [];
   const REVIEW_STATE = { unvollstaendig: 'unvollständig', deaktiviert: 'deaktiviert', 'nicht-nachgewiesen': 'nicht nachgewiesen' };
   const EVIDENCE_KIND = { scenario: 'Node-RED-Szenario', integration: 'Integrationstest', unit: 'Unit-Test', 'web-e2e': 'Browser-Test' };
 
-  const state = { tab: 'katalog', area: null, group: null, query: '', roles: new Set(), channels: new Set(), proof: '', open: new Set() };
+  const state = { tab: 'katalog', area: null, group: null, query: '', roles: new Set(), channels: new Set(), proof: '', comparison: '', open: new Set() };
 
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
   /** Kleines Markdown: `code`, **fett**, Absätze. */
@@ -37,6 +56,7 @@
     return [
       f.id, f.title, f.summary, f.description, f.reason, ...f.usage.map((u) => u.text), ...f.rules, ...f.settings.map((s) => `${s.name} ${s.description}`),
       ...t.components, ...t.endpoints.map((e) => `${e.ref} ${e.summary}`), ...t.events.emits, ...t.events.consumes, ...t.uiRoutes, ...t.nodeRedNodes, ...t.notes,
+      ...Object.values(f.comparisons || {}).map((c) => `${c.status} ${c.note || ''} ${(c.refs || []).join(' ')}`),
     ].join(' ').toLowerCase();
   }
 
@@ -46,6 +66,7 @@
     if (state.roles.size && ![...state.roles].some((r) => f.roles.includes(r))) return false;
     if (state.channels.size && ![...state.channels].some((c) => f.channels.includes(c))) return false;
     if (state.proof && f.proof !== state.proof) return false;
+    if (state.comparison && systems[0] && f.comparisons?.[systems[0].id]?.status !== state.comparison) return false;
     if (state.query) return state.query.toLowerCase().split(/\s+/).every((w) => haystack(f).includes(w));
     return true;
   }
@@ -110,6 +131,7 @@
     const tags = [
       ...(f.state ? [badge('warn', REVIEW_STATE[f.state])] : [badge(proof[0], proof[1], proof[2])]),
       ...f.channels.map((c) => badge('channel', CHANNELS[c] || c)),
+      ...systems.filter((s) => f.comparisons?.[s.id]).map((s) => badge(COMPARISON[f.comparisons[s.id].status][0], `${s.title}: ${COMPARISON[f.comparisons[s.id].status][1]}`, COMPARISON_HELP[f.comparisons[s.id].status])),
       ...(f.roles.length ? [badge('', `Rollen: ${f.roles.length === ROLES.length ? 'alle' : f.roles.join(', ')}`, 'Wer die Funktion ausführen darf (aus der Rechtetabelle der API)')] : []),
     ].join(' ');
     let body = '';
@@ -123,6 +145,15 @@
         ${f.settings.length ? `<h4>Einstellbar</h4><ul>${f.settings.map((s) => `<li><strong>${esc(s.name)}</strong> – ${inline(s.description)}${s.where ? ` <span class="muted">(${inline(s.where)})</span>` : ''}</li>`).join('')}</ul>` : ''}
         ${f.dependsOn.length ? `<h4>Setzt voraus</h4><ul>${f.dependsOn.map((d) => `<li>${link(d)}</li>`).join('')}</ul>` : ''}
         ${f.usedBy.length ? `<h4>Grundlage für</h4><ul>${f.usedBy.map((d) => `<li>${link(d)}</li>`).join('')}</ul>` : ''}
+        ${systems
+          .filter((s) => f.comparisons?.[s.id])
+          .map((s) => {
+            const c = f.comparisons[s.id];
+            return `<h4>Vergleich mit ${esc(s.title)}</h4><p>${badge(COMPARISON[c.status][0], COMPARISON[c.status][1], COMPARISON_HELP[c.status])} ${c.note ? inline(c.note) : ''}</p>${
+              c.refs?.length ? `<p class="muted">Belege: ${c.refs.map(esc).join(' · ')}</p>` : ''
+            }`;
+          })
+          .join('')}
         <details class="tech"><summary>Technische Details</summary><div>${technical(f)}</div></details>
       </div>`;
     }
@@ -141,7 +172,13 @@
             .map(([k, v]) => `<option value="${k}" ${state.proof === k ? 'selected' : ''}>${v[1]}</option>`)
             .join('')}</select>`
         : '';
-    return `<div class="filters"><span class="label">Rolle</span>${chips('roles', ROLES)}<span class="label">Bedienweg</span>${chips('channels', Object.keys(CHANNELS), CHANNELS)}${proofSelect}</div>`;
+    const comparisonSelect =
+      state.tab === 'katalog' && systems[0]
+        ? `<span class="label">${esc(systems[0].title)}</span><select id="comparison" aria-label="Vergleich filtern"><option value="">alle</option>${Object.entries(COMPARISON)
+            .map(([k, v]) => `<option value="${k}" ${state.comparison === k ? 'selected' : ''}>${v[1]}</option>`)
+            .join('')}</select>`
+        : '';
+    return `<div class="filters"><span class="label">Rolle</span>${chips('roles', ROLES)}<span class="label">Bedienweg</span>${chips('channels', Object.keys(CHANNELS), CHANNELS)}${proofSelect}${comparisonSelect}</div>`;
   }
 
   function listView(list) {
@@ -184,20 +221,67 @@
     return html;
   }
 
+  /** Vergleich je System: Einstufungen der Features, je Bereich, und die Lücken. */
+  function comparisonView() {
+    if (!systems.length) return '<p class="empty">Kein Vergleichssystem konfiguriert.</p>';
+    let html = '';
+    for (const s of systems) {
+      const rated = data.features.filter((f) => f.comparisons?.[s.id]);
+      const count = (status) => rated.filter((f) => f.comparisons[s.id].status === status).length;
+      html += `<div class="intro"><h2>Vergleich mit ${esc(s.title)}</h2><p>${inline(s.description)}</p><p>${rated.length} von ${data.features.length} Features eingestuft${
+        s.source ? ` · Grundlage <code>${esc(s.source)}</code>` : ''
+      }</p></div>`;
+      html += `<div class="table-wrap"><table><thead><tr><th>Einstufung</th><th>Bedeutung</th><th class="num">Features</th></tr></thead><tbody>${Object.keys(COMPARISON)
+        .map((k) => `<tr class="clickable" data-compare="${k}"><td>${badge(...COMPARISON[k])}</td><td>${esc(COMPARISON_HELP[k])}</td><td>${count(k)}</td></tr>`)
+        .join('')}</tbody></table></div>`;
+      html += `<h2 class="group-title">Je Bereich</h2><div class="table-wrap"><table><thead><tr><th>Bereich</th>${Object.keys(COMPARISON)
+        .map((k) => `<th>${esc(COMPARISON[k][1])}</th>`)
+        .join('')}<th>Lücken</th></tr></thead><tbody>${data.areas
+        .map((a) => {
+          const inArea = rated.filter((f) => f.area === a.id);
+          const cells = Object.keys(COMPARISON).map((k) => `<td>${inArea.filter((f) => f.comparisons[s.id].status === k).length || ''}</td>`).join('');
+          const g = gaps.filter((x) => x.system === s.id && x.area === a.id && x.status !== 'bewusst-weggelassen').length;
+          return `<tr><td>${esc(a.title)}</td>${cells}<td>${g || ''}</td></tr>`;
+        })
+        .join('')}</tbody></table></div>`;
+      const mine = gaps.filter((g) => g.system === s.id);
+      for (const status of Object.keys(GAP)) {
+        const list = mine.filter((g) => g.status === status);
+        if (!list.length) continue;
+        html += `<h2 class="group-title">Bei uns ${esc(GAP[status][1])} (${list.length})</h2>`;
+        html += list
+          .map(
+            (g) => `<article class="card"><div class="head"><h3>${esc(g.title)}</h3><span>${badge(...GAP[g.status])}</span>
+              <p class="sum">${esc(g.summary)}</p>
+              <div class="tags">${badge('', areaById[g.area]?.title || g.area)} ${badge(g.source === 'privat' ? 'warn' : '', g.source === 'privat' ? 'privat – nur beschrieben' : 'im öffentlichen Code')}</div></div>
+              <div class="body">${g.note ? `<p>${inline(g.note)}</p>` : ''}${
+                g.related?.length ? `<p>Verwandt: ${g.related.map((r) => `<a href="#${esc(r)}" data-goto="${esc(r)}">${esc(titleOf[r] || r)}</a>`).join(', ')}</p>` : ''
+              }${g.refs?.length ? `<p class="muted">Belege: ${g.refs.map(esc).join(' · ')}</p>` : ''}</div></article>`,
+          )
+          .join('');
+      }
+    }
+    return html;
+  }
+
   function render() {
     renderNav();
     const tabs = [
       ['katalog', `Katalog (${data.features.length})`],
       ['pruefbestand', `Prüfbestand (${data.review.length})`],
       ['zuordnung', 'Zuordnung'],
+      ...(systems.length ? [['vergleich', 'Vergleich']] : []),
     ];
     const tabHtml = `<div class="tabs" role="tablist">${tabs.map(([k, l]) => `<button role="tab" data-tab="${k}" class="${state.tab === k ? 'active' : ''}" aria-selected="${state.tab === k}">${l}</button>`).join('')}</div>`;
-    const content = state.tab === 'katalog' ? listView(data.features) : state.tab === 'pruefbestand' ? listView(data.review) : coverageView();
+    const content =
+      state.tab === 'katalog' ? listView(data.features) : state.tab === 'pruefbestand' ? listView(data.review) : state.tab === 'vergleich' ? comparisonView() : coverageView();
     $('main').innerHTML = `${tabHtml}${content}<footer>Erzeugt ${new Date(data.generatedAt).toLocaleString('de-DE')}${data.commit ? ` aus Commit ${esc(data.commit)}` : ''}. Testberichte: ${
       data.reportedKinds.length ? data.reportedKinds.map((k) => EVIDENCE_KIND[k]).join(', ') : 'keine (nur statische Prüfung)'
     }. Quelle: catalog/*.yaml</footer>`;
     const proof = $('proof');
     if (proof) proof.onchange = () => ((state.proof = proof.value), render());
+    const comparison = $('comparison');
+    if (comparison) comparison.onchange = () => ((state.comparison = comparison.value), render());
   }
 
   const proven = data.features.filter((f) => f.proof === 'nachgewiesen').length;
@@ -215,8 +299,15 @@
   }
 
   document.addEventListener('click', (ev) => {
-    const el = ev.target.closest('[data-area],[data-tab],[data-toggle],[data-filter],[data-goto]');
+    const el = ev.target.closest('[data-area],[data-tab],[data-toggle],[data-filter],[data-goto],[data-compare]');
     if (!el) return;
+    if (el.dataset.compare) {
+      state.tab = 'katalog';
+      state.area = null;
+      state.group = null;
+      state.comparison = el.dataset.compare;
+      return render();
+    }
     if (el.dataset.goto) {
       ev.preventDefault();
       history.replaceState(null, '', `#${el.dataset.goto}`);

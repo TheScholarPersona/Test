@@ -52,6 +52,12 @@ features:
       - kind: web-e2e
         file: apps/web/e2e/auth.spec.ts
         test: "Anmeldung: falsches Passwort, Anmelden, Abmelden"
+    comparisons:
+      openwms:
+        status: nicht-einsehbar
+        note: Common und TMS nutzen Spring Security; Identitätsdienst und Konfiguration liegen nicht in den öffentlichen Repositories.
+        refs:
+          - Analyse 1.3
 
   - id: sicherheit.rollen
     title: Rollen und Rechte
@@ -79,6 +85,12 @@ features:
       - kind: integration
         file: apps/api/test/integration/auth.integration.test.ts
         test: erlaubt je Rolle nur, was die Rechtetabelle vorsieht, und vermerkt den Akteur
+    comparisons:
+      openwms:
+        status: nicht-einsehbar
+        note: Common und TMS nutzen Spring Security; Rollenmodell nicht in den öffentlichen Repositories.
+        refs:
+          - Analyse 1.3
 
   - id: sicherheit.service-tokens
     title: Service-Tokens für Anlagen und Node-RED
@@ -108,6 +120,12 @@ features:
       - kind: unit
         file: packages/node-red-nodes/test/nodes.test.mjs
         test: meldet sich mit dem Service-Token aus der Umgebung an
+    comparisons:
+      openwms:
+        status: nicht-einsehbar
+        note: Absicherung der Dienst-zu-Dienst-Aufrufe nicht in den öffentlichen Repositories.
+        refs:
+          - Analyse 1.3
 
   - id: sicherheit.benutzerverwaltung
     title: Benutzer verwalten
@@ -149,6 +167,12 @@ features:
       - kind: web-e2e
         file: apps/web/e2e/seiten.spec.ts
         test: "Benutzer: anlegen mit Rolle, Rollen ansehen, sperren"
+    comparisons:
+      openwms:
+        status: nicht-einsehbar
+        note: Benutzerverwaltung nicht in den öffentlichen Repositories.
+        refs:
+          - Analyse 1.1
 
   - id: sicherheit.eigenes-passwort
     title: Eigenes Passwort ändern
@@ -178,6 +202,12 @@ features:
       - kind: web-e2e
         file: apps/web/e2e/auth.spec.ts
         test: "Konto: eigenes Passwort ändern und mit dem neuen anmelden"
+    comparisons:
+      openwms:
+        status: nicht-einsehbar
+        note: Benutzerverwaltung nicht in den öffentlichen Repositories.
+        refs:
+          - Analyse 1.1
 
   - id: sicherheit.node-red-schutz
     title: Geschützter Node-RED-Editor und Endpunkte
@@ -201,6 +231,12 @@ features:
       - kind: integration
         file: packages/scenario-runner/test/scenarios.test.ts
         test: lehnt Aufrufe ohne Anmeldung ab
+    comparisons:
+      openwms:
+        status: neu
+        note: OpenWMS nutzt kein Node-RED.
+        refs:
+          - Analyse 5.1a
 
   - id: sicherheit.betriebszustand
     title: Betriebszustand abfragen
@@ -219,6 +255,12 @@ features:
       - kind: integration
         file: apps/api/test/integration/api.integration.test.ts
         test: meldet Datenbank und MQTT als erreichbar
+    comparisons:
+      openwms:
+        status: gleichwertig
+        note: Entspricht dem Healthcheck der Spring-Boot-Dienste (Actuator).
+        refs:
+          - Analyse 1.3
 
   - id: sicherheit.migrationen
     title: Datenbankschema automatisch aktuell halten
@@ -236,6 +278,12 @@ features:
       - kind: integration
         file: apps/api/test/integration/api.integration.test.ts
         test: legen das Schema an und sind wiederholbar
+    comparisons:
+      openwms:
+        status: erweitert
+        note: OpenWMS erzeugt das Schema per Hibernate ddl-auto; hier versionierte, wiederholbare Migrationen.
+        refs:
+          - Analyse 5.4 Nr. 8
 
   - id: sicherheit.mqtt-tls
     title: MQTT nur mit TLS, Benutzern und Rechten je Topic
@@ -277,3 +325,9 @@ features:
       - kind: integration
         file: packages/scenario-runner/test/security.test.ts
         test: erlaubt Node-RED nicht, Ereignisse des WMS zu veröffentlichen (Rechte je Topic)
+    comparisons:
+      openwms:
+        status: nicht-einsehbar
+        note: OpenWMS nutzt RabbitMQ; dessen Absicherung steht in der nicht öffentlichen Konfiguration (Spring Cloud Config).
+        refs:
+          - Analyse 1.3

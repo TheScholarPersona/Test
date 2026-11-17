@@ -13,6 +13,7 @@ pnpm catalog:build --reports reports   # dto., Nachweise gegen die JUnit-Bericht
 | `catalog/catalog.yaml` | Taxonomie: Funktionsbereiche, Feature-Gruppen, Zuständigkeiten (`owns`), technische Ausnahmen |
 | `catalog/features/<bereich>.yaml` | **Katalog** – nur nachweislich verfügbare Features |
 | `catalog/review.yaml` | **Prüfbestand** – vorhanden, aber unvollständig, deaktiviert oder nicht nachgewiesen |
+| `catalog/comparisons/<system>.yaml` | **Lücken** gegenüber einem Vergleichssystem (z. B. OpenWMS) |
 | `packages/feature-catalog` | Datenmodell (Zod), automatische Bestandsaufnahme, Prüfungen, Ansicht |
 | `catalog/dist/` | erzeugte Ansicht und `catalog.json` (nicht im Repository) |
 
@@ -75,7 +76,7 @@ Ein Eintrag (Katalog und Prüfbestand haben denselben Aufbau; Schema: `packages/
 | `technical.uiRoutes[]`, `technical.nodeRedNodes[]` | technisch | Seiten der Oberfläche, Node-RED-Nodes |
 | `technical.notes[]` | technisch | Tabellen, Fehlercodes, Hinweise |
 | `evidence[]` | Nachweis | `scenario` (Szenario-Kennung) oder `unit`/`integration`/`web-e2e` (Datei + Testtitel); im Katalog Pflicht |
-| `comparisons{}` | Vergleich | je System (z. B. `openwms`) `status` (`gleichwertig`, `erweitert`, `eingeschraenkt`, `neu`, `abweichend`), `note`, `refs` – vorbereitet, noch leer |
+| `comparisons{}` | Vergleich | je System (z. B. `openwms`) `status` (`gleichwertig`, `erweitert`, `eingeschraenkt`, `neu`, `abweichend`, `nicht-einsehbar`), `note`, `refs`; siehe Abschnitt 7 |
 | `state`, `reason` | nur Prüfbestand | `unvollstaendig`, `deaktiviert` oder `nicht-nachgewiesen` und warum |
 
 **Abgeleitet, nicht gepflegt:** Rollen (aus den ändernden Endpunkten eines Features, sonst den lesenden), Bedienwege, Nachweisstatus, aufrufende Tests, Zweck der Endpunkte.
@@ -117,23 +118,23 @@ Die Prüfung **legt nie Features an**. Sie meldet, was zugeordnet werden muss; o
 
 ## 6. Stand der Bestandsaufnahme
 
-Alle 12 Bereiche sind katalogisiert (`status: katalogisiert`); jeder erkannte Bestandteil ist einem Feature zugeordnet. Mit den Testberichten aller Testarten (Unit, Integration, Node-RED-Szenarien, MQTT-Sicherheit, Browser) sind **alle 72 Features im Testlauf nachgewiesen; der Prüfbestand ist leer**.
+Alle 12 Bereiche sind katalogisiert (`status: katalogisiert`); jeder erkannte Bestandteil ist einem Feature zugeordnet. Mit den Testberichten aller Testarten (Unit, Integration, Node-RED-Szenarien, MQTT-Sicherheit, Browser) sind **alle 75 Features im Testlauf nachgewiesen; der Prüfbestand ist leer**.
 
 | Bereich | Features | Erkannte Bestandteile |
 |---|---|---|
-| Lagerstruktur | 5 | 29 |
-| Transporteinheiten | 8 | 27 |
+| Lagerstruktur | 6 | 31 |
+| Transporteinheiten | 9 | 33 |
 | Strategien und Regeln | 7 | 15 |
 | Bestand | 12 | 30 |
 | Wareneingang | 4 | 16 |
 | Lagerbewegungen | 3 | 12 |
 | Transportaufträge | 2 | 19 |
-| Materialfluss und Anlagen | 6 | 21 |
+| Materialfluss und Anlagen | 7 | 21 |
 | Auslagerung | 4 | 13 |
 | Integration und Automatisierung | 7 | 11 |
 | Bedienoberfläche | 5 | 2 |
 | Sicherheit und Betrieb | 9 | 11 |
-| **Summe** | **72** | **206** |
+| **Summe** | **75** | **214** |
 
 **Festlegungen** (Produktentscheidung nach dem Pilot):
 
@@ -144,3 +145,31 @@ Alle 12 Bereiche sind katalogisiert (`status: katalogisiert`); jeder erkannte Be
 **Abbau des Prüfbestands:** Die 14 Einträge nach der ersten Bestandsaufnahme wurden mit Tests nachgewiesen und sind jetzt Teil der Features: Lese- und Änderungsendpunkte (Integrationstests), die Seiten Wareneingang, Transport, Materialfluss, Ereignisse, Konto und Benutzer sowie Picks am Scanner (Browser-Tests in `apps/web/e2e/seiten.spec.ts`, `auth.spec.ts`, `scanner.spec.ts`) und die MQTT-Absicherung (`packages/scenario-runner/test/security.test.ts`, läuft mit `pnpm test:e2e` gegen die Umgebung).
 
 **Grenze der Erkennung:** „Aufgerufen in“ erkennt Aufrufe mit Methode und Pfad im Quelltext (auch Template-Ausdrücke und `fetch` ohne Methode). Aufrufe über Hilfsfunktionen wie `post(id, 'issues')` bleiben unsichtbar; deshalb ist das nur eine Warnung. Verbindlich sind die ausdrücklichen Nachweise und ihre Testergebnisse.
+
+## 7. Vergleich mit OpenWMS
+
+Grundlage ist die Analyse der öffentlichen OpenWMS-Repositories (`docs/openwms-analyse.md`). Das System ist in `catalog.yaml` unter `systems` eingetragen, mit `complete: true`: Jedes Feature braucht eine Einstufung, sonst schlägt die Prüfung fehl (`COMPARISON_MISSING`). Neue Features werden so automatisch zum Vergleich gezwungen.
+
+| Einstufung | Bedeutung | Features |
+|---|---|---|
+| gleichwertig | kann dasselbe | 11 |
+| erweitert | kann mehr (z. B. durchgesetzte Platzierungsregeln, die OpenWMS nur speichert) | 15 |
+| eingeschränkt | kann weniger | 2 |
+| neu | in OpenWMS nicht vorhanden (Regelwerk, Simulation, Node-RED, Szenario-Tests) | 13 |
+| abweichend | gleicher Zweck, anderer Ansatz (Programme statt BPMN, MQTT-Outbox statt AMQP, OpenAPI statt HATEOAS) | 6 |
+| nicht einsehbar | Gegenstück nur in privaten Teilen (Inventory, Picking, Shipping, Oberflächen, Identitätsdienst) | 28 |
+
+**Lücken** (`catalog/comparisons/openwms.yaml`, 16 Einträge) – Fähigkeiten von OpenWMS, die bei uns fehlen:
+
+| Status | Einträge |
+|---|---|
+| fehlt (7) | Betriebsart/Füllgrad je Bereich, Bewegungsgruppen, Priorität/Attribute/Sperre am Avis, Metriken und Tracing; aus privaten Teilen: Versand, Druck, Geschäftspartner |
+| teilweise (5) | TU-Reservierung, zeitgesteuerte Abläufe, Problemhistorie der Transportaufträge; aus privaten Teilen: ERP-Adapter, Lageraufgaben |
+| bewusst weggelassen (4) | Mandanten, BPMN-Workflows, Microservices mit Replikaten, HATEOAS |
+
+Geschlossen seit dem ersten Vergleich: Fehlermeldungen je TU (`transporteinheiten.fehlermeldungen`), Anlagenzustand je Platz (`lagerstruktur.anlagenzustand`) und Systemstatus (`materialfluss.systemstatus`).
+
+Jede Lücke nennt den Bereich, in den sie gehören würde, ob sie im öffentlichen Code belegt oder nur beschrieben ist (`source: oss | privat`), Belege und verwandte Features. Die Ansicht zeigt den Vergleich im Reiter **Vergleich** (Übersicht, Tabelle je Bereich, Lücken) und je Feature als Abzeichen und Abschnitt; im Katalog lässt sich nach Einstufung filtern.
+
+**Pflege:** Neues Feature → Einstufung ergänzen (die Prüfung verlangt sie). Lücke geschlossen → Eintrag aus `comparisons/openwms.yaml` entfernen und die Einstufung des neuen bzw. erweiterten Features anpassen. Ein weiteres Vergleichssystem → Eintrag unter `systems`, Einstufungen unter `comparisons.<id>`, Lücken in `comparisons/<id>.yaml`.
+

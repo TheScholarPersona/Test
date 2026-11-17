@@ -9,6 +9,7 @@ module.exports = function (RED) {
       const barcode = resolve(RED, spec(config.barcode, 'msg.payload.barcode'), msg);
       const code = resolve(RED, config.code, msg);
       const message = resolve(RED, config.message, msg);
+      const plcState = resolve(RED, config.plcState, msg);
       const type = String(resolve(RED, config.eventType, msg) || 'request');
       return {
         method: 'POST',
@@ -20,6 +21,7 @@ module.exports = function (RED) {
           ...(config.deviceId ? { deviceId: String(config.deviceId) } : {}),
           ...(code ? { code: String(code) } : {}),
           ...(message ? { message: String(message) } : {}),
+          ...(plcState !== undefined && plcState !== null && plcState !== '' ? { plcState: Number(plcState) } : {}),
           ...(config.dryRun ? { dryRun: true } : {}),
         },
       };

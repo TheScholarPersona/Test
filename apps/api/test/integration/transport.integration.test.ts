@@ -252,6 +252,35 @@ describe('Transporteinheiten', () => {
     });
   });
 
+  describe('Fehlermeldungen', () => {
+    it('erfasst, listet und erledigt Fehlermeldungen an einer TU und behält die Historie', async () => {
+      const reported = await api.post('/v1/transport-units/K1/errors', { code: 'KONTUR', message: 'Überstand links' });
+      expect(reported).toMatchObject({ status: 201, body: { barcode: 'K1', code: 'KONTUR', message: 'Überstand links', reportedBy: 'service:tests', resolvedAt: null } });
+      const event = await collector.waitFor((m) => m.topic === 'wms/transport-unit/error-reported');
+      expect(event.body['payload']).toMatchObject({ barcode: 'K1', code: 'KONTUR', reportedBy: 'service:tests' });
+      await api.post('/v1/transport-units/K1/errors', { code: 'GEWICHT' });
+
+      expect((await api.get('/v1/transport-units/K1/errors')).body.items.map((e: { code: string }) => e.code)).toEqual(['GEWICHT', 'KONTUR']);
+      const open = (await api.get('/v1/transport-unit-errors')).body;
+      expect(open.items.map((e: { code: string }) => e.code)).toEqual(['KONTUR', 'GEWICHT']);
+
+      const resolved = await api.post(`/v1/transport-units/K1/errors/${reported.body.id}/resolve`, { resolution: 'Ware nachgeschoben' });
+      expect(resolved.body).toMatchObject({ resolvedAt: expect.any(String), resolvedBy: 'service:tests', resolution: 'Ware nachgeschoben' });
+      await collector.waitFor((m) => m.topic === 'wms/transport-unit/error-resolved');
+      expect(await api.post(`/v1/transport-units/K1/errors/${reported.body.id}/resolve`, {})).toMatchObject({ status: 409, body: { code: 'UNIT_ERROR_RESOLVED' } });
+      expect((await api.get('/v1/transport-unit-errors')).body.items.map((e: { code: string }) => e.code)).toEqual(['GEWICHT']);
+      expect((await api.get('/v1/transport-units/K1/errors?state=resolved')).body.items.map((e: { code: string }) => e.code)).toEqual(['KONTUR']);
+      // Eine Meldung ändert den Zustand der TU nicht.
+      expect((await api.get('/v1/transport-units/K1')).body.state).toBe('AVAILABLE');
+    });
+
+    it('meldet unbekannte TUs und Meldungen', async () => {
+      expect(await api.post('/v1/transport-units/GIBT-ES-NICHT/errors', { code: 'X' })).toMatchObject({ status: 404 });
+      expect(await api.post('/v1/transport-units/K1/errors/00000000-0000-4000-8000-000000000000/resolve', {})).toMatchObject({ status: 404, body: { code: 'UNIT_ERROR_NOT_FOUND' } });
+      expect(await api.post('/v1/transport-units/K1/errors', { code: '' })).toMatchObject({ status: 400 });
+    });
+  });
+
   describe('Zustand und Löschschutz', () => {
     it('ändert den Zustand und veröffentlicht vorher/nachher', async () => {
       const changed = await api.post('/v1/transport-units/K1/state', { state: 'QUALITY_CHECK', reason: 'Sichtprüfung' });

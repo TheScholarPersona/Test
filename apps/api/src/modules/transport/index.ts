@@ -3,10 +3,12 @@
  * Andere Module verwenden ausschließlich, was hier exportiert ist.
  */
 import { TransportUnitPlacementRule, TransportUnitStackingRule, TransportUnitType } from './entities/transport-unit-type.entity.js';
+import { TransportUnitError } from './entities/transport-unit-error.entity.js';
 import { TransportUnit } from './entities/transport-unit.entity.js';
 
 export { TransportModule } from './transport.module.js';
 export { TransportUnitService } from './application/transport-unit.service.js';
+export { UnitErrorService } from './application/unit-error.service.js';
 export {
   TransportUnitRemovalPolicy,
   type TransportUnitRemovalCheck,
@@ -19,4 +21,4 @@ export { PlacementChecker, type PreparedUnit, type TargetEvaluation } from './ap
 export { effectiveWeight } from './application/mappers.js';
 export { TransportUnit, TransportUnitType };
 
-export const transportEntities = [TransportUnitType, TransportUnitPlacementRule, TransportUnitStackingRule, TransportUnit];
+export const transportEntities = [TransportUnitType, TransportUnitPlacementRule, TransportUnitStackingRule, TransportUnit, TransportUnitError];

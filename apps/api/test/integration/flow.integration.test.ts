@@ -192,12 +192,41 @@ describe('Materialfluss', () => {
       await event({ type: 'location-status', location: { plcCode: 'CV02' }, state: { inbound: false } });
     });
 
+    it('übernimmt den Anlagenzustand eines Platzes und gibt ihn wieder frei', async () => {
+      const r = await event({ type: 'location-status', location: { plcCode: 'CV02' }, plcState: 7, message: 'Antrieb überlastet', deviceId: 'SPS1' });
+      expect(r.body.decision.trace).toEqual(expect.arrayContaining(['Anlagenzustand von ' + coord('C2') + ': Störung 7 (Antrieb überlastet)']));
+      expect((await api.get(`/v1/locations/${loc['C2']}`)).body.plc).toMatchObject({ state: 7, text: 'Antrieb überlastet', changedAt: expect.any(String) });
+      const changed = await collector.waitFor((m) => m.topic === 'wms/location/plc-state-changed' && (m.body as { payload: { plcState: number } }).payload.plcState === 7);
+      expect((changed.body as { payload: unknown }).payload).toMatchObject({ before: 0, source: 'device:SPS1' });
+      await event({ type: 'location-status', location: { plcCode: 'CV02' }, plcState: 0 });
+      expect((await api.get(`/v1/locations/${loc['C2']}`)).body.plc).toMatchObject({ state: 0, text: null });
+    });
+
+    it('sperrt per Systemstatus einen ganzen Bereich (Programm lock-group)', async () => {
+      expect((await api.post('/v1/flow/actions', { name: 'systemstatus-nio', eventType: 'location-status', place: { group: 'NIO' }, program: 'lock-group' })).status).toBe(201);
+      const r = await event({ type: 'location-status', location: { plcCode: 'NIO1' }, state: { inbound: true }, code: 'SYSU', message: 'Bereich in Wartung' });
+      expect(r.body.decision).toMatchObject({ outcome: 'HANDLED', action: 'systemstatus-nio', program: 'lock-group' });
+      const group = (await api.get('/v1/location-groups/NIO')).body;
+      expect(group.locks.inbound).toMatchObject({ own: true, blocked: true });
+      const locked = await collector.waitFor((m) => m.topic === 'wms/location-group/lock-changed' && (m.body as { payload: { name: string } }).payload.name === 'NIO');
+      expect((locked.body as { payload: { change: { reason: string } } }).payload.change.reason).toBe('Anlage: SYSU: Bereich in Wartung');
+      await event({ type: 'location-status', location: { plcCode: 'NIO1' }, state: { inbound: false } });
+      expect((await api.get('/v1/location-groups/NIO')).body.locks.inbound).toMatchObject({ own: false, blocked: false });
+      await api.delete('/v1/flow/actions/systemstatus-nio');
+    });
+
     it('unterbricht bei einer Störung den laufenden Auftrag', async () => {
       const r = await event({ type: 'error', location: { plcCode: 'CV01' }, barcode: 'F2', code: 'LS1', message: 'Lichtschranke' });
       expect(r.body.decision).toMatchObject({ outcome: 'HANDLED', action: 'stoerung' });
       expect((await api.get('/v1/transport-orders?barcode=F2')).body.items[0]).toMatchObject({ state: 'INTERRUPTED', problem: { message: 'LS1: Lichtschranke' } });
       // Unterbrochen fährt nichts weiter.
       expect((await request('CV03', 'F2')).body.decision).toMatchObject({ outcome: 'NO_NEXT_STEP' });
+    });
+
+    it('erfasst eine Störung mit Barcode als Fehlermeldung an der TU', async () => {
+      const errors = (await api.get('/v1/transport-units/F2/errors')).body.items;
+      expect(errors[0]).toMatchObject({ barcode: 'F2', code: 'LS1', message: 'Lichtschranke', locationId: expect.any(String), reportedBy: 'device', resolvedAt: null });
+      expect((await api.get('/v1/transport-unit-errors?barcode=F2')).body.total).toBe(1);
     });
 
     it('übergibt an Node-RED, das per Fahrbefehl antwortet', async () => {

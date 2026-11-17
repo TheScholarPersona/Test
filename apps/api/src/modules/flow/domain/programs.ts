@@ -42,6 +42,11 @@ export const PROGRAMS = {
     events: ['location-status', 'error'],
     params: z.strictObject({ inbound: z.boolean().optional(), outbound: z.boolean().optional() }),
   },
+  'lock-group': {
+    description: 'Systemstatus: Sperren für einen ganzen Bereich übernehmen (Gruppe des meldenden Platzes oder params.group)',
+    events: ['location-status', 'error'],
+    params: z.strictObject({ group: LocationGroupNameSchema.optional(), inbound: z.boolean().optional(), outbound: z.boolean().optional() }),
+  },
   'interrupt-order': {
     description: 'Laufenden Transportauftrag der TU unterbrechen (Störung)',
     events: ['error'],

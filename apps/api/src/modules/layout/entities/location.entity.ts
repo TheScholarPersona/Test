@@ -27,6 +27,10 @@ const LocationSchema = defineEntity({
     outboundBlocked: p.boolean().default(false),
     /** Platz wird bei der automatischen Platzvergabe nicht berücksichtigt. */
     allocationBlocked: p.boolean().default(false),
+    /** Zustand laut Anlage (SPS): 0 = in Ordnung, sonst Störungscode; gestörte Plätze vergibt die Einlagerstrategie nicht. */
+    plcState: p.integer().default(0),
+    plcStateText: p.string().length(200).nullable(),
+    plcStateAt: p.datetime().nullable(),
     createdAt: p.datetime().onCreate(() => new Date()),
     updatedAt: p.datetime().onCreate(() => new Date()).onUpdate(() => new Date()),
     version: p.integer().version(),

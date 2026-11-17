@@ -1,4 +1,5 @@
 import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Query } from '@nestjs/common';
+import { requestContext } from '../../../common/request-context.js';
 import { ApiDocumentation } from '../../../http/openapi/api-documentation.js';
 import { ZodValidationPipe } from '../../../http/zod-validation.pipe.js';
 import { LocationService } from '../application/location.service.js';
@@ -6,6 +7,8 @@ import { toLocationDto } from '../application/mappers.js';
 import {
   type ChangeLocationLocks,
   ChangeLocationLocksSchema,
+  type ChangePlcState,
+  ChangePlcStateSchema,
   type CreateLocation,
   CreateLocationSchema,
   type LocationDto,
@@ -32,6 +35,7 @@ export class LocationsController {
     docs.route({ method: 'get', path: `${PATH}/{id}`, summary: 'Lagerplatz lesen', tags: TAGS, params: LocationIdParam, response: { status: 200, description: 'Gefunden', schema: LocationDtoSchema }, errors: [404] });
     docs.route({ method: 'patch', path: `${PATH}/{id}`, summary: 'Lagerplatz ändern (Koordinate und Typ unveränderlich)', tags: TAGS, params: LocationIdParam, body: UpdateLocationSchema, response: { status: 200, description: 'Geändert', schema: LocationDtoSchema }, errors: [400, 404, 409] });
     docs.route({ method: 'patch', path: `${PATH}/{id}/locks`, summary: 'Ein-, Auslager- oder Vergabesperre setzen/aufheben', tags: TAGS, params: LocationIdParam, body: ChangeLocationLocksSchema, response: { status: 200, description: 'Sperren geändert', schema: LocationDtoSchema }, errors: [400, 404, 409] });
+    docs.route({ method: 'patch', path: `${PATH}/{id}/plc-state`, summary: 'Zustand laut Anlage setzen (0 = in Ordnung, sonst Störungscode)', tags: TAGS, params: LocationIdParam, body: ChangePlcStateSchema, response: { status: 200, description: 'Zustand geändert', schema: LocationDtoSchema }, errors: [400, 404] });
     docs.route({ method: 'delete', path: `${PATH}/{id}`, summary: 'Lagerplatz löschen (nur ohne Einwände anderer Module)', tags: TAGS, params: LocationIdParam, response: { status: 204, description: 'Gelöscht' }, errors: [404, 409] });
   }
 
@@ -65,6 +69,14 @@ export class LocationsController {
     @Body(new ZodValidationPipe(ChangeLocationLocksSchema)) body: ChangeLocationLocks,
   ): Promise<LocationDto> {
     return toLocationDto(await this.locations.changeLocks(id, body));
+  }
+
+  @Patch(':id/plc-state')
+  async changePlcState(
+    @Param(new ZodValidationPipe(LocationIdParam)) { id }: { id: string },
+    @Body(new ZodValidationPipe(ChangePlcStateSchema)) body: ChangePlcState,
+  ): Promise<LocationDto> {
+    return toLocationDto(await this.locations.changePlcState(id, body, requestContext.get()?.actor ?? null));
   }
 
   @Delete(':id')

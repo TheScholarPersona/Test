@@ -1,13 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { EntityManager, type FilterQuery } from '@mikro-orm/postgresql';
 import { Injectable } from '@nestjs/common';
-import { LocationCreatedEvent, LocationDeletedEvent, LocationLockChangedEvent, LocationUpdatedEvent } from '@wms/shared';
+import { LocationCreatedEvent, LocationDeletedEvent, LocationLockChangedEvent, LocationPlcStateChangedEvent, LocationUpdatedEvent } from '@wms/shared';
 import { ConflictError, NotFoundError, RuleViolationError } from '../../../common/domain-error.js';
 import { OutboxService } from '../../../infrastructure/outbox/outbox.service.js';
 import { applyLockChanges, type LockChange } from '../domain/lock-changes.js';
 import { LocationType } from '../entities/location-type.entity.js';
 import { Location } from '../entities/location.entity.js';
-import type { ChangeLocationLocks, CreateLocation, LocationQuery, UpdateLocation } from '../http/schemas.js';
+import type { ChangeLocationLocks, ChangePlcState, CreateLocation, LocationQuery, UpdateLocation } from '../http/schemas.js';
 import { GroupHierarchy } from './group-hierarchy.js';
 import { LocationRemovalPolicy } from './location-removal-policy.js';
 import { locationSnapshot } from './mappers.js';
@@ -129,6 +129,26 @@ export class LocationService {
       }
       return location;
     }
+  }
+
+  /** Zustand laut Anlage setzen (0 = in Ordnung). `source` nennt den Melder, z. B. `device:SPS1`. */
+  changePlcState(id: string, input: ChangePlcState, source: string | null = null): Promise<Location> {
+    return this.em.transactional((tx) => this.changePlcStateIn(tx, id, input, source));
+  }
+
+  /** Wie `changePlcState`, innerhalb einer bestehenden Transaktion (Geräte-Ereignis). Nur echte Änderungen werden gemeldet. */
+  async changePlcStateIn(tx: EntityManager, id: string, input: ChangePlcState, source: string | null = null): Promise<Location> {
+    await GroupHierarchy.load(tx);
+    const location = await this.load(tx, id);
+    const text = input.plcState === 0 ? null : (input.text ?? null);
+    if (location.plcState !== input.plcState || (location.plcStateText ?? null) !== text) {
+      const before = location.plcState;
+      location.plcState = input.plcState;
+      location.plcStateText = text;
+      location.plcStateAt = new Date();
+      this.outbox.record(tx, LocationPlcStateChangedEvent, { ...locationSnapshot(location), before, plcState: input.plcState, text, source });
+    }
+    return location;
   }
 
   /** Löschen nur, wenn kein anderes Modul widerspricht (z. B. Transporteinheit auf dem Platz). */

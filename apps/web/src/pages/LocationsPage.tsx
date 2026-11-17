@@ -92,7 +92,10 @@ export function LocationsPage() {
                     <tr key={l.id}>
                       <td className="mono">{l.locationId}</td>
                       <td>{l.erpCode ?? '–'}</td>
-                      <td>{l.plcCode ?? '–'}</td>
+                      <td>
+                        {l.plcCode ?? '–'}
+                        {l.plc.state !== 0 && <> <span className="badge bad" title={l.plc.text ?? undefined}>Störung {l.plc.state}</span></>}
+                      </td>
                       <td>{l.groupName}</td>
                       <td>{l.typeCode}</td>
                       <td className="num">{unitsAt.get(l.id) ?? 0} / {l.capacity.maxTransportUnits}</td>
