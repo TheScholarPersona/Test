@@ -24,6 +24,8 @@ export const EventEnvelopeSchema = z.object({
   occurredAt: z.iso.datetime({ offset: true }),
   source: z.string().min(1),
   correlationId: z.string().min(1).optional(),
+  /** Wer das Ereignis ausgelöst hat, z. B. `user:anna` oder `service:node-red` (fehlt bei internen Abläufen). */
+  actor: z.string().min(1).max(120).optional(),
   payload: z.unknown(),
 });
 export type EventEnvelope<P = unknown> = Omit<z.infer<typeof EventEnvelopeSchema>, 'payload'> & { payload: P };
@@ -40,6 +42,7 @@ export function topicForEventType(type: string): string {
 export interface EventMeta {
   source: string;
   correlationId?: string | undefined;
+  actor?: string | undefined;
   occurredAt?: Date | undefined;
   id?: string | undefined;
 }
@@ -75,6 +78,9 @@ export function defineEvent<P>(type: string, version: number, payloadSchema: z.Z
       };
       if (meta.correlationId !== undefined) {
         envelope.correlationId = meta.correlationId;
+      }
+      if (meta.actor !== undefined) {
+        envelope.actor = meta.actor;
       }
       return envelope;
     },

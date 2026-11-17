@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger, type OnApplicationShutdown, type OnModuleIn
 import mqtt, { type MqttClient } from 'mqtt';
 import { APP_CONFIG, type AppConfig } from '../../config.js';
 import type { EventPublisher } from './event-publisher.js';
+import { mqttOptions } from './mqtt-options.js';
 
 /**
  * MQTT-Anbindung. Die Verbindung wird im Hintergrund aufgebaut und bei
@@ -16,12 +17,7 @@ export class MqttEventPublisher implements EventPublisher, OnModuleInit, OnAppli
   constructor(@Inject(APP_CONFIG) private readonly config: AppConfig) {}
 
   onModuleInit(): void {
-    this.client = mqtt.connect(this.config.mqttUrl, {
-      clientId: `${this.config.serviceName}-${process.pid}-${Math.random().toString(16).slice(2, 8)}`,
-      reconnectPeriod: 2000,
-      connectTimeout: 10_000,
-      clean: true,
-    });
+    this.client = mqtt.connect(this.config.mqttUrl, mqttOptions(this.config, 'pub'));
     this.client.on('connect', () => this.logger.log(`Verbunden mit MQTT-Broker ${this.config.mqttUrl}`));
     this.client.on('offline', () => this.logger.warn('MQTT-Broker nicht erreichbar, Verbindungsaufbau läuft'));
     this.client.on('error', (error) => this.logger.warn(`MQTT-Fehler: ${error.message}`));

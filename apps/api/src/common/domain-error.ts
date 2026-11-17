@@ -5,7 +5,7 @@
  * `code` ist eine stabile, maschinenlesbare Kennung (z. B. für Node-RED-Flows),
  * `message` ein verständlicher Text.
  */
-export type DomainErrorKind = 'not-found' | 'conflict' | 'rule-violation' | 'invalid';
+export type DomainErrorKind = 'not-found' | 'conflict' | 'rule-violation' | 'invalid' | 'unauthenticated' | 'forbidden' | 'too-many-requests';
 
 export class DomainError extends Error {
   constructor(
@@ -37,5 +37,26 @@ export class ConflictError extends DomainError {
 export class RuleViolationError extends DomainError {
   constructor(code: string, message: string, details?: Record<string, unknown>) {
     super('rule-violation', code, message, details);
+  }
+}
+
+/** Nicht angemeldet oder Anmeldung ungültig → HTTP 401. */
+export class UnauthenticatedError extends DomainError {
+  constructor(code: string, message: string, details?: Record<string, unknown>) {
+    super('unauthenticated', code, message, details);
+  }
+}
+
+/** Angemeldet, aber die Rolle erlaubt die Aktion nicht → HTTP 403. */
+export class ForbiddenError extends DomainError {
+  constructor(code: string, message: string, details?: Record<string, unknown>) {
+    super('forbidden', code, message, details);
+  }
+}
+
+/** Zu viele Versuche (z. B. Anmeldung) → HTTP 429. */
+export class TooManyRequestsError extends DomainError {
+  constructor(code: string, message: string, details?: Record<string, unknown>) {
+    super('too-many-requests', code, message, details);
   }
 }

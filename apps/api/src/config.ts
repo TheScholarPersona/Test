@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { z } from 'zod';
 
 /**
@@ -24,6 +25,17 @@ const EnvSchema = z.object({
   OUTBOX_BATCH_SIZE: z.coerce.number().int().min(1).max(1000).default(50),
   /** Verzeichnis mit der gebauten Oberfläche (apps/web/dist); ohne Angabe liefert die API keine Oberfläche aus. */
   WEB_DIST_DIR: z.string().min(1).optional(),
+  /** Passwort für den Benutzer `admin`, der beim Start angelegt wird, falls es ihn noch nicht gibt. */
+  AUTH_ADMIN_PASSWORD: z.string().min(10, 'AUTH_ADMIN_PASSWORD braucht mindestens 10 Zeichen').optional(),
+  /** Service-Tokens für Maschinen: `name:rolle+rolle:geheimnis;…` (Geheimnis mindestens 32 Zeichen). */
+  AUTH_SERVICE_TOKENS: z.string().optional(),
+  AUTH_SESSION_HOURS: z.coerce.number().min(0.1).max(24 * 30).default(12),
+  /** Cookie nur über HTTPS senden: auto = wenn die Anfrage per HTTPS kam (auch hinter einem Proxy mit X-Forwarded-Proto). */
+  AUTH_COOKIE_SECURE: z.enum(['auto', 'true', 'false']).default('auto'),
+  /** Optionale MQTT-Anmeldung und TLS (mqtts://): Benutzer, Passwort, CA-Datei. */
+  MQTT_USERNAME: z.string().min(1).optional(),
+  MQTT_PASSWORD: z.string().min(1).optional(),
+  MQTT_CA_FILE: z.string().min(1).optional(),
   OUTBOX_PUBLISH_TIMEOUT_MS: z.coerce.number().int().min(100).max(60_000).default(5000),
 });
 
@@ -39,12 +51,48 @@ export interface AppConfig {
   mqttUrl: string;
   /** Gebaute Oberfläche, ausgeliefert unter /ui/. */
   webDistDir: string | null;
+  mqtt: { username: string | null; password: string | null; caFile: string | null };
+  auth: {
+    adminPassword: string | null;
+    serviceTokens: ServiceTokenConfig[];
+    sessionHours: number;
+    cookieSecure: 'auto' | 'true' | 'false';
+  };
   outbox: {
     relayEnabled: boolean;
     pollIntervalMs: number;
     batchSize: number;
     publishTimeoutMs: number;
   };
+}
+
+export interface ServiceTokenConfig {
+  name: string;
+  roles: string[];
+  /** SHA-256 des Geheimnisses; das Geheimnis selbst wird nicht gehalten. */
+  hash: Buffer;
+}
+
+const SERVICE_ROLES = ['admin', 'leitstand', 'lager', 'anlage', 'lesen'];
+
+/** `name:rolle+rolle:geheimnis;…` → Tokens; Fehler mit verständlicher Meldung (ohne das Geheimnis). */
+export function parseServiceTokens(value: string | undefined): ServiceTokenConfig[] {
+  if (!value?.trim()) return [];
+  return value
+    .split(';')
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry, index) => {
+      const [name, roleList, ...secretParts] = entry.split(':');
+      const secret = secretParts.join(':');
+      const roles = (roleList ?? '').split('+').filter(Boolean);
+      if (!name || !/^[a-z0-9-]{1,40}$/.test(name)) throw new ConfigError(`AUTH_SERVICE_TOKENS Eintrag ${index + 1}: Name fehlt oder ist ungültig (a-z, 0-9, -)`);
+      if (roles.length === 0 || roles.some((r) => !SERVICE_ROLES.includes(r))) {
+        throw new ConfigError(`AUTH_SERVICE_TOKENS ${name}: Rollen ungültig (erlaubt: ${SERVICE_ROLES.join(', ')})`);
+      }
+      if (secret.length < 32) throw new ConfigError(`AUTH_SERVICE_TOKENS ${name}: Geheimnis braucht mindestens 32 Zeichen`);
+      return { name, roles, hash: createHash('sha256').update(secret).digest() };
+    });
 }
 
 export class ConfigError extends Error {
@@ -70,6 +118,13 @@ export function loadConfig(env: Record<string, string | undefined>): AppConfig {
     dbMigrateOnStart: e.DB_MIGRATE_ON_START,
     mqttUrl: e.MQTT_URL,
     webDistDir: e.WEB_DIST_DIR ?? null,
+    mqtt: { username: e.MQTT_USERNAME ?? null, password: e.MQTT_PASSWORD ?? null, caFile: e.MQTT_CA_FILE ?? null },
+    auth: {
+      adminPassword: e.AUTH_ADMIN_PASSWORD ?? null,
+      serviceTokens: parseServiceTokens(e.AUTH_SERVICE_TOKENS),
+      sessionHours: e.AUTH_SESSION_HOURS,
+      cookieSecure: e.AUTH_COOKIE_SECURE,
+    },
     outbox: {
       relayEnabled: e.OUTBOX_RELAY_ENABLED,
       pollIntervalMs: e.OUTBOX_POLL_INTERVAL_MS,

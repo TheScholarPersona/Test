@@ -6,7 +6,48 @@
     "description": "Profil: test"
   },
   "components": {
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Service-Token (Maschinen, z. B. Node-RED) oder Sitzungstoken"
+      },
+      "session": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "wms_session",
+        "description": "Sitzungs-Cookie nach POST /v1/auth/login (Oberfläche)"
+      }
+    },
     "schemas": {
+      "ApiError": {
+        "type": "object",
+        "properties": {
+          "statusCode": {
+            "type": "integer"
+          },
+          "error": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string",
+            "description": "Stabile Fehlerkennung, z. B. LOCK_INHERITED"
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object",
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "statusCode",
+          "error",
+          "code",
+          "message"
+        ]
+      },
       "Health": {
         "type": "object",
         "properties": {
@@ -130,34 +171,6 @@
           "version",
           "createdAt",
           "updatedAt"
-        ]
-      },
-      "ApiError": {
-        "type": "object",
-        "properties": {
-          "statusCode": {
-            "type": "integer"
-          },
-          "error": {
-            "type": "string"
-          },
-          "code": {
-            "type": "string",
-            "description": "Stabile Fehlerkennung, z. B. LOCK_INHERITED"
-          },
-          "message": {
-            "type": "string"
-          },
-          "details": {
-            "type": "object",
-            "additionalProperties": {}
-          }
-        },
-        "required": [
-          "statusCode",
-          "error",
-          "code",
-          "message"
         ]
       },
       "CreateLocationType": {
@@ -661,6 +674,241 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 200
+          }
+        },
+        "additionalProperties": false
+      },
+      "Me": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "user",
+              "service"
+            ]
+          },
+          "username": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "admin",
+                "leitstand",
+                "lager",
+                "anlage",
+                "lesen"
+              ]
+            }
+          },
+          "expiresAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "kind",
+          "username",
+          "displayName",
+          "roles",
+          "expiresAt"
+        ]
+      },
+      "Login": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60
+          },
+          "password": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "username",
+          "password"
+        ],
+        "additionalProperties": false
+      },
+      "ChangePassword": {
+        "type": "object",
+        "properties": {
+          "currentPassword": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "newPassword": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "currentPassword",
+          "newPassword"
+        ],
+        "additionalProperties": false
+      },
+      "Roles": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "role": {
+                  "type": "string",
+                  "enum": [
+                    "admin",
+                    "leitstand",
+                    "lager",
+                    "anlage",
+                    "lesen"
+                  ]
+                },
+                "description": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "role",
+                "description"
+              ]
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
+      "User": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "admin",
+                "leitstand",
+                "lager",
+                "anlage",
+                "lesen"
+              ]
+            }
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "lastLoginAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "username",
+          "displayName",
+          "roles",
+          "active",
+          "lastLoginAt",
+          "createdAt"
+        ]
+      },
+      "CreateUser": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": "string",
+            "pattern": "^[a-z0-9._-]{2,60}$"
+          },
+          "displayName": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "password": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "admin",
+                "leitstand",
+                "lager",
+                "anlage",
+                "lesen"
+              ]
+            },
+            "minItems": 1
+          }
+        },
+        "required": [
+          "username",
+          "password",
+          "roles"
+        ],
+        "additionalProperties": false
+      },
+      "UpdateUser": {
+        "type": "object",
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "admin",
+                "leitstand",
+                "lager",
+                "anlage",
+                "lesen"
+              ]
+            },
+            "minItems": 1
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "password": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Neues Passwort setzen (beendet die Sitzungen des Benutzers)"
           }
         },
         "additionalProperties": false
@@ -6152,6 +6400,14 @@
         "tags": [
           "Ereignisse"
         ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
         "parameters": [
           {
             "schema": {
@@ -6197,6 +6453,11 @@
                       "type": "string",
                       "minLength": 1
                     },
+                    "actor": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120
+                    },
                     "payload": {}
                   },
                   "required": [
@@ -6206,6 +6467,26 @@
                     "occurredAt",
                     "source"
                   ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
                 }
               }
             }
@@ -6278,6 +6559,14 @@
         "tags": [
           "Lagerstruktur: Platztypen"
         ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "Liste",
@@ -6299,6 +6588,26 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           }
         }
       },
@@ -6306,6 +6615,14 @@
         "summary": "Lagerplatztyp anlegen",
         "tags": [
           "Lagerstruktur: Platztypen"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "requestBody": {
           "content": {
@@ -6337,6 +6654,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "409": {
             "description": "Konflikt oder verletzte Geschäftsregel",
             "content": {
@@ -6355,6 +6692,14 @@
         "summary": "Lagerplatztyp lesen",
         "tags": [
           "Lagerstruktur: Platztypen"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -6378,6 +6723,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Nicht gefunden",
             "content": {
@@ -6394,6 +6759,14 @@
         "summary": "Lagerplatztyp ändern",
         "tags": [
           "Lagerstruktur: Platztypen"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -6436,6 +6809,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Nicht gefunden",
             "content": {
@@ -6463,6 +6856,14 @@
         "tags": [
           "Lagerstruktur: Platztypen"
         ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
         "parameters": [
           {
             "schema": {
@@ -6477,6 +6878,26 @@
         "responses": {
           "204": {
             "description": "Gelöscht"
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           },
           "404": {
             "description": "Nicht gefunden",
@@ -6507,6 +6928,14 @@
         "tags": [
           "Lagerstruktur: Gruppen"
         ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "Liste",
@@ -6528,6 +6957,26 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           }
         }
       },
@@ -6535,6 +6984,14 @@
         "summary": "Lagerplatzgruppe anlegen",
         "tags": [
           "Lagerstruktur: Gruppen"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "requestBody": {
           "content": {
@@ -6558,6 +7015,26 @@
           },
           "400": {
             "description": "Ungültige Anfrage (Feldprüfung)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
             "content": {
               "application/json": {
                 "schema": {
@@ -6595,6 +7072,14 @@
         "tags": [
           "Lagerstruktur: Gruppen"
         ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
         "parameters": [
           {
             "schema": {
@@ -6617,6 +7102,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Nicht gefunden",
             "content": {
@@ -6633,6 +7138,14 @@
         "summary": "Beschreibung oder Gruppentyp ändern",
         "tags": [
           "Lagerstruktur: Gruppen"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -6675,6 +7188,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Nicht gefunden",
             "content": {
@@ -6702,6 +7235,14 @@
         "tags": [
           "Lagerstruktur: Gruppen"
         ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
         "parameters": [
           {
             "schema": {
@@ -6716,6 +7257,26 @@
         "responses": {
           "204": {
             "description": "Gelöscht"
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           },
           "404": {
             "description": "Nicht gefunden",
@@ -6745,6 +7306,14 @@
         "summary": "Ein- oder Auslagersperre setzen/aufheben (wirkt auf alle Untergruppen und Plätze)",
         "tags": [
           "Lagerstruktur: Gruppen"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -6787,6 +7356,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Nicht gefunden",
             "content": {
@@ -6815,6 +7404,14 @@
         "summary": "Lagerplätze suchen (nach Koordinate, ERP-/SPS-Code oder Gruppe)",
         "tags": [
           "Lagerstruktur: Lagerplätze"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -6929,6 +7526,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Nicht gefunden",
             "content": {
@@ -6945,6 +7562,14 @@
         "summary": "Lagerplatz anlegen",
         "tags": [
           "Lagerstruktur: Lagerplätze"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "requestBody": {
           "content": {
@@ -6968,6 +7593,26 @@
           },
           "400": {
             "description": "Ungültige Anfrage (Feldprüfung)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
             "content": {
               "application/json": {
                 "schema": {
@@ -7005,6 +7650,14 @@
         "tags": [
           "Lagerstruktur: Lagerplätze"
         ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
         "parameters": [
           {
             "schema": {
@@ -7027,6 +7680,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Nicht gefunden",
             "content": {
@@ -7043,6 +7716,14 @@
         "summary": "Lagerplatz ändern (Koordinate und Typ unveränderlich)",
         "tags": [
           "Lagerstruktur: Lagerplätze"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -7085,6 +7766,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Nicht gefunden",
             "content": {
@@ -7112,6 +7813,14 @@
         "tags": [
           "Lagerstruktur: Lagerplätze"
         ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
         "parameters": [
           {
             "schema": {
@@ -7126,6 +7835,26 @@
         "responses": {
           "204": {
             "description": "Gelöscht"
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           },
           "404": {
             "description": "Nicht gefunden",
@@ -7155,6 +7884,14 @@
         "summary": "Ein-, Auslager- oder Vergabesperre setzen/aufheben",
         "tags": [
           "Lagerstruktur: Lagerplätze"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -7197,6 +7934,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Nicht gefunden",
             "content": {
@@ -7220,11 +7977,470 @@
         }
       }
     },
+    "/v1/auth/login": {
+      "post": {
+        "summary": "Anmelden: setzt das Sitzungs-Cookie (HttpOnly, SameSite=Strict)",
+        "tags": [
+          "Anmeldung"
+        ],
+        "security": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Login"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Angemeldet",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Me"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ungültige Anfrage (Feldprüfung)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/logout": {
+      "post": {
+        "summary": "Abmelden (Sitzung beenden)",
+        "tags": [
+          "Anmeldung"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Abgemeldet"
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/me": {
+      "get": {
+        "summary": "Wer bin ich (Benutzer oder Service-Token) und welche Rollen",
+        "tags": [
+          "Anmeldung"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Identität",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Me"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/password": {
+      "post": {
+        "summary": "Eigenes Passwort ändern (beendet die anderen Sitzungen)",
+        "tags": [
+          "Anmeldung"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePassword"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Geändert"
+          },
+          "400": {
+            "description": "Ungültige Anfrage (Feldprüfung)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/roles": {
+      "get": {
+        "summary": "Rollen mit Beschreibung",
+        "tags": [
+          "Anmeldung"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Rollen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Roles"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/users": {
+      "get": {
+        "summary": "Benutzer",
+        "tags": [
+          "Benutzer"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Liste",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/User"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Benutzer anlegen",
+        "tags": [
+          "Benutzer"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUser"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Benutzer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ungültige Anfrage (Feldprüfung)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Konflikt oder verletzte Geschäftsregel",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/users/{username}": {
+      "patch": {
+        "summary": "Rollen, Anzeigename, aktiv, Passwort (beendet die Sitzungen des Benutzers)",
+        "tags": [
+          "Benutzer"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9._-]{2,60}$"
+            },
+            "required": true,
+            "name": "username",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUser"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Benutzer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ungültige Anfrage (Feldprüfung)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nicht gefunden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/transport-unit-types": {
       "get": {
         "summary": "Alle TU-Typen mit Regeln",
         "tags": [
           "Transporteinheiten: Typen"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "responses": {
           "200": {
@@ -7247,6 +8463,26 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           }
         }
       },
@@ -7254,6 +8490,14 @@
         "summary": "TU-Typ anlegen",
         "tags": [
           "Transporteinheiten: Typen"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "requestBody": {
           "content": {
@@ -7285,6 +8529,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "409": {
             "description": "Konflikt oder verletzte Geschäftsregel",
             "content": {
@@ -7303,6 +8567,14 @@
         "summary": "TU-Typ lesen",
         "tags": [
           "Transporteinheiten: Typen"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -7326,6 +8598,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Nicht gefunden",
             "content": {
@@ -7342,6 +8634,14 @@
         "summary": "TU-Typ ändern",
         "tags": [
           "Transporteinheiten: Typen"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -7384,6 +8684,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Nicht gefunden",
             "content": {
@@ -7411,6 +8731,14 @@
         "tags": [
           "Transporteinheiten: Typen"
         ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
         "parameters": [
           {
             "schema": {
@@ -7425,6 +8753,26 @@
         "responses": {
           "204": {
             "description": "Gelöscht"
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           },
           "404": {
             "description": "Nicht gefunden",
@@ -7454,6 +8802,14 @@
         "summary": "Platzierungsregeln ersetzen (erlaubte Platztypen)",
         "tags": [
           "Transporteinheiten: Typen"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -7496,6 +8852,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Nicht gefunden",
             "content": {
@@ -7524,6 +8900,14 @@
         "summary": "Stapelregeln ersetzen (was auf diesen Typ gestapelt werden darf)",
         "tags": [
           "Transporteinheiten: Typen"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -7566,6 +8950,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Nicht gefunden",
             "content": {
@@ -7594,6 +8998,14 @@
         "summary": "Transporteinheiten suchen",
         "tags": [
           "Transporteinheiten"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -7712,6 +9124,26 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           }
         }
       },
@@ -7719,6 +9151,14 @@
         "summary": "Transporteinheit auf einem Lagerplatz anlegen",
         "tags": [
           "Transporteinheiten"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "requestBody": {
           "content": {
@@ -7742,6 +9182,26 @@
           },
           "400": {
             "description": "Ungültige Anfrage (Feldprüfung)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
             "content": {
               "application/json": {
                 "schema": {
@@ -7779,6 +9239,14 @@
         "tags": [
           "Transporteinheiten"
         ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
         "parameters": [
           {
             "schema": {
@@ -7803,6 +9271,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Nicht gefunden",
             "content": {
@@ -7819,6 +9307,14 @@
         "summary": "Gewicht oder geplantes Ziel ändern",
         "tags": [
           "Transporteinheiten"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -7863,6 +9359,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Nicht gefunden",
             "content": {
@@ -7890,6 +9406,14 @@
         "tags": [
           "Transporteinheiten"
         ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
         "parameters": [
           {
             "schema": {
@@ -7906,6 +9430,26 @@
         "responses": {
           "204": {
             "description": "Gelöscht"
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           },
           "404": {
             "description": "Nicht gefunden",
@@ -7935,6 +9479,14 @@
         "summary": "Transporteinheit (samt Stapel) auf einen anderen Platz bewegen",
         "tags": [
           "Transporteinheiten"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -7979,6 +9531,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Nicht gefunden",
             "content": {
@@ -8007,6 +9579,14 @@
         "summary": "Zustand ändern (AVAILABLE, BLOCKED, QUALITY_CHECK)",
         "tags": [
           "Transporteinheiten"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -8051,6 +9631,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Nicht gefunden",
             "content": {
@@ -8069,6 +9669,14 @@
         "summary": "Auf eine andere TU stapeln",
         "tags": [
           "Transporteinheiten"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -8113,6 +9721,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Nicht gefunden",
             "content": {
@@ -8141,6 +9769,14 @@
         "summary": "Vom Stapel nehmen",
         "tags": [
           "Transporteinheiten"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -8185,6 +9821,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Nicht gefunden",
             "content": {
@@ -8213,6 +9869,14 @@
         "summary": "Produkte",
         "tags": [
           "Bestand"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -8265,6 +9929,26 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           }
         }
       },
@@ -8272,6 +9956,14 @@
         "summary": "Produkt anlegen",
         "tags": [
           "Bestand"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "requestBody": {
           "content": {
@@ -8303,6 +9995,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "409": {
             "description": "Konflikt oder verletzte Geschäftsregel",
             "content": {
@@ -8321,6 +10033,14 @@
         "summary": "Produkt lesen",
         "tags": [
           "Bestand"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -8344,6 +10064,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Nicht gefunden",
             "content": {
@@ -8360,6 +10100,14 @@
         "summary": "Produkt ändern",
         "tags": [
           "Bestand"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -8402,6 +10150,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Nicht gefunden",
             "content": {
@@ -8430,6 +10198,14 @@
         "summary": "Alternative Einheiten ersetzen",
         "tags": [
           "Bestand"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -8472,6 +10248,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Nicht gefunden",
             "content": {
@@ -8490,6 +10286,14 @@
         "summary": "Bestandsposten je TU (Filter: Barcode, SKU, Charge, Platz, Gruppe)",
         "tags": [
           "Bestand"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -8594,6 +10398,26 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           }
         }
       }
@@ -8603,6 +10427,14 @@
         "summary": "Summen je Produkt oder je Platz und Produkt",
         "tags": [
           "Bestand"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -8688,6 +10520,26 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           }
         }
       }
@@ -8697,6 +10549,14 @@
         "summary": "Bestandskorrektur mit Grund",
         "tags": [
           "Bestand"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -8739,6 +10599,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Nicht gefunden",
             "content": {
@@ -8767,6 +10647,14 @@
         "summary": "Abgang (optional gegen eine Reservierung)",
         "tags": [
           "Bestand"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -8809,6 +10697,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Nicht gefunden",
             "content": {
@@ -8837,6 +10745,14 @@
         "summary": "Teilmenge auf eine andere TU umbuchen",
         "tags": [
           "Bestand"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -8879,6 +10795,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Nicht gefunden",
             "content": {
@@ -8907,6 +10843,14 @@
         "summary": "Verfügbaren Bestand reservieren",
         "tags": [
           "Bestand"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -8949,6 +10893,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Nicht gefunden",
             "content": {
@@ -8977,6 +10941,14 @@
         "summary": "Reservierungen",
         "tags": [
           "Bestand"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -9059,6 +11031,26 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           }
         }
       }
@@ -9068,6 +11060,14 @@
         "summary": "Reservierung aufheben",
         "tags": [
           "Bestand"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -9083,6 +11083,26 @@
         "responses": {
           "204": {
             "description": "Aufgehoben"
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           },
           "404": {
             "description": "Nicht gefunden",
@@ -9112,6 +11132,14 @@
         "summary": "Buchungsjournal (neueste zuerst)",
         "tags": [
           "Bestand"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -9194,6 +11222,26 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           }
         }
       }
@@ -9203,6 +11251,14 @@
         "summary": "Inventuren (neueste zuerst)",
         "tags": [
           "Inventur"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -9280,6 +11336,26 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           }
         }
       },
@@ -9287,6 +11363,14 @@
         "summary": "Inventur einer TU öffnen (Soll festhalten, TU sperren)",
         "tags": [
           "Inventur"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "requestBody": {
           "content": {
@@ -9310,6 +11394,26 @@
           },
           "400": {
             "description": "Ungültige Anfrage (Feldprüfung)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
             "content": {
               "application/json": {
                 "schema": {
@@ -9347,6 +11451,14 @@
         "tags": [
           "Inventur"
         ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
         "parameters": [
           {
             "schema": {
@@ -9369,6 +11481,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Nicht gefunden",
             "content": {
@@ -9387,6 +11519,14 @@
         "summary": "Zählergebnis erfassen (auch erneut)",
         "tags": [
           "Inventur"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -9429,6 +11569,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Nicht gefunden",
             "content": {
@@ -9458,6 +11618,14 @@
         "tags": [
           "Inventur"
         ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
         "parameters": [
           {
             "schema": {
@@ -9476,6 +11644,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StockCount"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
                 }
               }
             }
@@ -9509,6 +11697,14 @@
         "tags": [
           "Inventur"
         ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
         "parameters": [
           {
             "schema": {
@@ -9527,6 +11723,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StockCount"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
                 }
               }
             }
@@ -9560,6 +11776,14 @@
         "tags": [
           "Strategien"
         ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "Katalog",
@@ -9567,6 +11791,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StrategyCatalog"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
                 }
               }
             }
@@ -9579,6 +11823,14 @@
         "summary": "Regelsätze (neueste Version zuerst)",
         "tags": [
           "Strategien"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -9612,6 +11864,26 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           }
         }
       },
@@ -9619,6 +11891,14 @@
         "summary": "Regelsatz-Entwurf anlegen (nächste Version)",
         "tags": [
           "Strategien"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "requestBody": {
           "content": {
@@ -9642,6 +11922,26 @@
           },
           "400": {
             "description": "Ungültige Anfrage (Feldprüfung)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
             "content": {
               "application/json": {
                 "schema": {
@@ -9679,6 +11979,14 @@
         "tags": [
           "Strategien"
         ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
         "parameters": [
           {
             "schema": {
@@ -9701,6 +12009,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Nicht gefunden",
             "content": {
@@ -9717,6 +12045,14 @@
         "summary": "Entwurf ändern",
         "tags": [
           "Strategien"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -9759,6 +12095,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Nicht gefunden",
             "content": {
@@ -9786,6 +12142,14 @@
         "tags": [
           "Strategien"
         ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
         "parameters": [
           {
             "schema": {
@@ -9800,6 +12164,26 @@
         "responses": {
           "204": {
             "description": "Gelöscht"
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           },
           "404": {
             "description": "Nicht gefunden",
@@ -9830,6 +12214,14 @@
         "tags": [
           "Strategien"
         ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
         "parameters": [
           {
             "schema": {
@@ -9854,6 +12246,26 @@
           },
           "400": {
             "description": "Ungültige Anfrage (Feldprüfung)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
             "content": {
               "application/json": {
                 "schema": {
@@ -9891,6 +12303,14 @@
         "tags": [
           "Strategien"
         ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -9913,6 +12333,26 @@
           },
           "400": {
             "description": "Ungültige Anfrage (Feldprüfung)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
             "content": {
               "application/json": {
                 "schema": {
@@ -9950,6 +12390,14 @@
         "tags": [
           "Strategien"
         ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -9972,6 +12420,26 @@
           },
           "400": {
             "description": "Ungültige Anfrage (Feldprüfung)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
             "content": {
               "application/json": {
                 "schema": {
@@ -10009,6 +12477,14 @@
         "tags": [
           "Strategien"
         ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -10031,6 +12507,26 @@
           },
           "400": {
             "description": "Ungültige Anfrage (Feldprüfung)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
             "content": {
               "application/json": {
                 "schema": {
@@ -10067,6 +12563,14 @@
         "summary": "Gespeicherte Entscheidungen (neueste zuerst)",
         "tags": [
           "Strategien"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -10138,6 +12642,26 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           }
         }
       }
@@ -10147,6 +12671,14 @@
         "summary": "Entscheidung mit Begründung lesen",
         "tags": [
           "Strategien"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -10170,6 +12702,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Nicht gefunden",
             "content": {
@@ -10188,6 +12740,14 @@
         "summary": "Lagerbewegungen, dringendste zuerst (Arbeitsliste)",
         "tags": [
           "Lagerbewegungen"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -10291,6 +12851,26 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           }
         }
       },
@@ -10298,6 +12878,14 @@
         "summary": "Lagerbewegung anlegen und Ziel reservieren",
         "tags": [
           "Lagerbewegungen"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "requestBody": {
           "content": {
@@ -10321,6 +12909,26 @@
           },
           "400": {
             "description": "Ungültige Anfrage (Feldprüfung)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
             "content": {
               "application/json": {
                 "schema": {
@@ -10358,6 +12966,14 @@
         "tags": [
           "Lagerbewegungen"
         ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
         "parameters": [
           {
             "schema": {
@@ -10380,6 +12996,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Nicht gefunden",
             "content": {
@@ -10398,6 +13034,14 @@
         "summary": "Bearbeitung beginnen (OPEN → IN_PROGRESS)",
         "tags": [
           "Lagerbewegungen"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -10426,6 +13070,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Movement"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
                 }
               }
             }
@@ -10459,6 +13123,14 @@
         "tags": [
           "Lagerbewegungen"
         ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
         "parameters": [
           {
             "schema": {
@@ -10477,6 +13149,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Movement"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
                 }
               }
             }
@@ -10509,6 +13201,14 @@
         "summary": "Abschließen: TU auf Ziel oder tatsächlichen Platz buchen",
         "tags": [
           "Lagerbewegungen"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -10551,6 +13251,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Nicht gefunden",
             "content": {
@@ -10579,6 +13299,14 @@
         "summary": "Stornieren und Zielreservierung freigeben",
         "tags": [
           "Lagerbewegungen"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -10611,6 +13339,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Nicht gefunden",
             "content": {
@@ -10639,6 +13387,14 @@
         "summary": "Transportaufträge in Startreihenfolge (Priorität, Alter)",
         "tags": [
           "Transportaufträge"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -10722,6 +13478,26 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           }
         }
       },
@@ -10729,6 +13505,14 @@
         "summary": "Transportauftrag anlegen (und starten, wenn möglich)",
         "tags": [
           "Transportaufträge"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "requestBody": {
           "content": {
@@ -10752,6 +13536,26 @@
           },
           "400": {
             "description": "Ungültige Anfrage (Feldprüfung)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
             "content": {
               "application/json": {
                 "schema": {
@@ -10789,6 +13593,14 @@
         "tags": [
           "Transportaufträge"
         ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "Ergebnis",
@@ -10796,6 +13608,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StartPendingResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
                 }
               }
             }
@@ -10808,6 +13640,14 @@
         "summary": "Transportauftrag lesen",
         "tags": [
           "Transportaufträge"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -10831,6 +13671,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Nicht gefunden",
             "content": {
@@ -10850,6 +13710,14 @@
         "tags": [
           "Transportaufträge"
         ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
         "parameters": [
           {
             "schema": {
@@ -10868,6 +13736,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/TransportOrder"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
                 }
               }
             }
@@ -10901,6 +13789,14 @@
         "tags": [
           "Transportaufträge"
         ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
         "parameters": [
           {
             "schema": {
@@ -10928,6 +13824,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/TransportOrder"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
                 }
               }
             }
@@ -10961,6 +13877,14 @@
         "tags": [
           "Transportaufträge"
         ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
         "parameters": [
           {
             "schema": {
@@ -10979,6 +13903,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/TransportOrder"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
                 }
               }
             }
@@ -11011,6 +13955,14 @@
         "summary": "Abschließen und nächsten Auftrag der TU starten",
         "tags": [
           "Transportaufträge"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -11053,6 +14005,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Nicht gefunden",
             "content": {
@@ -11081,6 +14053,14 @@
         "summary": "Stornieren",
         "tags": [
           "Transportaufträge"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -11113,6 +14093,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Nicht gefunden",
             "content": {
@@ -11141,6 +14141,14 @@
         "summary": "Als gescheitert markieren",
         "tags": [
           "Transportaufträge"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -11183,6 +14191,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Nicht gefunden",
             "content": {
@@ -11211,6 +14239,14 @@
         "summary": "Wareneingangsaufträge (neueste zuerst)",
         "tags": [
           "Wareneingang"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -11288,6 +14324,26 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           }
         }
       },
@@ -11295,6 +14351,14 @@
         "summary": "Wareneingangsauftrag (Avis) anlegen",
         "tags": [
           "Wareneingang"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "requestBody": {
           "content": {
@@ -11318,6 +14382,26 @@
           },
           "400": {
             "description": "Ungültige Anfrage (Feldprüfung)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
             "content": {
               "application/json": {
                 "schema": {
@@ -11355,6 +14439,14 @@
         "tags": [
           "Wareneingang"
         ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
         "parameters": [
           {
             "schema": {
@@ -11377,6 +14469,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Nicht gefunden",
             "content": {
@@ -11395,6 +14507,14 @@
         "summary": "Erfassungen zum Auftrag",
         "tags": [
           "Wareneingang"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -11433,6 +14553,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Nicht gefunden",
             "content": {
@@ -11449,6 +14589,14 @@
         "summary": "Ware gegen den Auftrag erfassen (Menge oder ganze TU)",
         "tags": [
           "Wareneingang"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -11491,6 +14639,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Nicht gefunden",
             "content": {
@@ -11519,6 +14687,14 @@
         "summary": "Unberührte Position stornieren",
         "tags": [
           "Wareneingang"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -11556,6 +14732,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ReceivingOrder"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
                 }
               }
             }
@@ -11589,6 +14785,14 @@
         "tags": [
           "Wareneingang"
         ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
         "parameters": [
           {
             "schema": {
@@ -11629,6 +14833,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Nicht gefunden",
             "content": {
@@ -11658,6 +14882,14 @@
         "tags": [
           "Wareneingang"
         ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
         "parameters": [
           {
             "schema": {
@@ -11685,6 +14917,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ReceivingOrder"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
                 }
               }
             }
@@ -11718,6 +14970,14 @@
         "tags": [
           "Wareneingang"
         ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
         "parameters": [
           {
             "schema": {
@@ -11745,6 +15005,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ReceivingOrder"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
                 }
               }
             }
@@ -11778,6 +15058,14 @@
         "tags": [
           "Wareneingang"
         ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -11800,6 +15088,26 @@
           },
           "400": {
             "description": "Ungültige Anfrage (Feldprüfung)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
             "content": {
               "application/json": {
                 "schema": {
@@ -11837,6 +15145,14 @@
         "tags": [
           "Materialfluss"
         ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -11859,6 +15175,26 @@
           },
           "400": {
             "description": "Ungültige Anfrage (Feldprüfung)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
             "content": {
               "application/json": {
                 "schema": {
@@ -11896,6 +15232,14 @@
         "tags": [
           "Materialfluss"
         ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -11926,6 +15270,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Nicht gefunden",
             "content": {
@@ -11944,6 +15308,14 @@
         "summary": "Entscheidungsprotokoll (neueste zuerst)",
         "tags": [
           "Materialfluss"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -12007,6 +15379,26 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           }
         }
       }
@@ -12016,6 +15408,14 @@
         "summary": "Eingebaute Programme mit Parameter-Schema",
         "tags": [
           "Materialfluss"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "responses": {
           "200": {
@@ -12038,6 +15438,26 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           }
         }
       }
@@ -12047,6 +15467,14 @@
         "summary": "Routen mit Schritten",
         "tags": [
           "Materialfluss"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "responses": {
           "200": {
@@ -12069,6 +15497,26 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           }
         }
       },
@@ -12076,6 +15524,14 @@
         "summary": "Route anlegen",
         "tags": [
           "Materialfluss"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "requestBody": {
           "content": {
@@ -12099,6 +15555,26 @@
           },
           "400": {
             "description": "Ungültige Anfrage (Feldprüfung)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
             "content": {
               "application/json": {
                 "schema": {
@@ -12136,6 +15612,14 @@
         "tags": [
           "Materialfluss"
         ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
         "parameters": [
           {
             "schema": {
@@ -12158,6 +15642,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Nicht gefunden",
             "content": {
@@ -12174,6 +15678,14 @@
         "summary": "Route ändern (wirkt sofort)",
         "tags": [
           "Materialfluss"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -12216,6 +15728,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Nicht gefunden",
             "content": {
@@ -12233,6 +15765,14 @@
         "tags": [
           "Materialfluss"
         ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
         "parameters": [
           {
             "schema": {
@@ -12247,6 +15787,26 @@
         "responses": {
           "204": {
             "description": "Gelöscht"
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           },
           "404": {
             "description": "Nicht gefunden",
@@ -12276,6 +15836,14 @@
         "summary": "Schritte der Route ersetzen (wirkt sofort)",
         "tags": [
           "Materialfluss"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -12318,6 +15886,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Nicht gefunden",
             "content": {
@@ -12336,6 +15924,14 @@
         "summary": "Action-Matrix",
         "tags": [
           "Materialfluss"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "responses": {
           "200": {
@@ -12358,6 +15954,26 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           }
         }
       },
@@ -12365,6 +15981,14 @@
         "summary": "Action anlegen (Parameter werden gegen das Programm geprüft)",
         "tags": [
           "Materialfluss"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "requestBody": {
           "content": {
@@ -12388,6 +16012,26 @@
           },
           "400": {
             "description": "Ungültige Anfrage (Feldprüfung)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
             "content": {
               "application/json": {
                 "schema": {
@@ -12424,6 +16068,14 @@
         "summary": "Action ändern (wirkt sofort)",
         "tags": [
           "Materialfluss"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -12466,6 +16118,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Nicht gefunden",
             "content": {
@@ -12483,6 +16155,14 @@
         "tags": [
           "Materialfluss"
         ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
         "parameters": [
           {
             "schema": {
@@ -12497,6 +16177,26 @@
         "responses": {
           "204": {
             "description": "Gelöscht"
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           },
           "404": {
             "description": "Nicht gefunden",
@@ -12516,6 +16216,14 @@
         "summary": "Auslageraufträge (neueste zuerst)",
         "tags": [
           "Auslagerung"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -12584,6 +16292,26 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           }
         }
       },
@@ -12591,6 +16319,14 @@
         "summary": "Auslagerauftrag anlegen",
         "tags": [
           "Auslagerung"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "requestBody": {
           "content": {
@@ -12614,6 +16350,26 @@
           },
           "400": {
             "description": "Ungültige Anfrage (Feldprüfung)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
             "content": {
               "application/json": {
                 "schema": {
@@ -12651,6 +16407,14 @@
         "tags": [
           "Auslagerung"
         ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
         "parameters": [
           {
             "schema": {
@@ -12673,6 +16437,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Nicht gefunden",
             "content": {
@@ -12691,6 +16475,14 @@
         "summary": "Offenen Bedarf per Auslagerstrategie zuteilen und reservieren",
         "tags": [
           "Auslagerung"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -12733,6 +16525,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Nicht gefunden",
             "content": {
@@ -12761,6 +16573,14 @@
         "summary": "Entnahme quittieren (Abgang gegen Reservierung, ggf. Fehlmenge)",
         "tags": [
           "Auslagerung"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -12812,6 +16632,26 @@
               }
             }
           },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Nicht gefunden",
             "content": {
@@ -12841,6 +16681,14 @@
         "tags": [
           "Auslagerung"
         ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
         "parameters": [
           {
             "schema": {
@@ -12868,6 +16716,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/OutboundOrder"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
                 }
               }
             }
@@ -12901,6 +16769,14 @@
         "tags": [
           "Auslagerung"
         ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
         "parameters": [
           {
             "schema": {
@@ -12928,6 +16804,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/OutboundOrder"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
                 }
               }
             }
@@ -12960,6 +16856,14 @@
         "summary": "Pick-Arbeitsliste (nach Platz sortiert)",
         "tags": [
           "Auslagerung"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
         ],
         "parameters": [
           {
@@ -13044,6 +16948,26 @@
                     "items",
                     "total"
                   ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
                 }
               }
             }

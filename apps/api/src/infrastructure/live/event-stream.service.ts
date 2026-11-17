@@ -3,6 +3,7 @@ import type { EventEnvelope } from '@wms/shared';
 import mqtt, { type MqttClient } from 'mqtt';
 import { Observable, Subject } from 'rxjs';
 import { APP_CONFIG, type AppConfig } from '../../config.js';
+import { mqttOptions } from '../messaging/mqtt-options.js';
 
 const DEDUP_SIZE = 2000;
 
@@ -43,11 +44,7 @@ export class EventStreamService implements OnApplicationShutdown {
 
   private connect(): void {
     if (this.client) return;
-    this.client = mqtt.connect(this.config.mqttUrl, {
-      clientId: `${this.config.serviceName}-live-${process.pid}-${Math.random().toString(16).slice(2, 8)}`,
-      reconnectPeriod: 2000,
-      clean: true,
-    });
+    this.client = mqtt.connect(this.config.mqttUrl, mqttOptions(this.config, 'live'));
     this.client.on('connect', () => {
       void this.client?.subscribeAsync('wms/#', { qos: 1 }).catch((error: Error) => this.logger.warn(`Abonnement fehlgeschlagen: ${error.message}`));
     });
