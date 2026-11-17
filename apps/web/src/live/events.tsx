@@ -34,6 +34,7 @@ export function affectedQueries(type: string): string[] {
     'transport-order': ['transport-orders', 'overview', 'units'],
     movement: ['movements', 'movement-groups', 'overview', 'units'],
     'movement-group': ['movement-groups', 'movements'],
+    partner: ['partners'],
     'transport-unit': ['units', 'stock', 'locations'],
     location: ['locations'],
     'location-group': ['locations'],

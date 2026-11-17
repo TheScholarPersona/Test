@@ -12,6 +12,7 @@ import { MovementModule } from './modules/movement/index.js';
 import { ReceivingModule } from './modules/receiving/index.js';
 import { AuthModule } from './modules/auth/index.js';
 import { FlowModule } from './modules/flow/index.js';
+import { PartnerModule } from './modules/partner/index.js';
 import { OutboundModule } from './modules/outbound/index.js';
 import { TransportOrderModule } from './modules/transport-order/index.js';
 import { StrategyModule } from './modules/strategy/index.js';
@@ -51,6 +52,7 @@ export class AppModule {
         TransportModule,
         StrategyModule,
         MovementModule,
+        PartnerModule,
         InventoryModule,
         ReceivingModule,
         TransportOrderModule,

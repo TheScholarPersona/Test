@@ -14,7 +14,7 @@ features:
       - channel: leitstand
         text: Seite **Auslagerung** – Auftrag anlegen (Rolle leitstand).
       - channel: api
-        text: '`POST /v1/outbound-orders` mit `orderId`, `customer?`, `priority?`, `target`, `lines`; lesen `GET …/{orderId}`, Liste `GET /v1/outbound-orders?state=…`.'
+        text: '`POST /v1/outbound-orders` mit `orderId`, `customer?`, `customerCode?`, `shipTo?`, `priority?`, `target`, `lines`; lesen `GET …/{orderId}`, Liste `GET /v1/outbound-orders?state=…`.'
     rules:
       - Auftragsnummer eindeutig, Produkte und Einheiten müssen existieren.
       - Zustände Auftrag `CREATED` → `PARTIALLY_ALLOCATED` → `ALLOCATED` → `IN_PICKING` → `COMPLETED` (`CANCELLED`).

@@ -10,6 +10,8 @@ const ReceivingOrderSchema = defineEntity({
     id: p.uuid().primary(),
     orderId: p.string().length(64).unique(),
     supplier: p.string().length(100).nullable(),
+    /** Geschäftspartner (Lieferant); Nummer statt Verweis, damit das Avis ihn überdauert. */
+    supplierCode: p.string().length(40).nullable().index(),
     expectedAt: p.datetime().nullable(),
     state: p.enum(ORDER_STATES).default('OPEN'),
     createdAt: p.datetime().onCreate(() => new Date()),

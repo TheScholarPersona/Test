@@ -182,3 +182,40 @@ test('Bewegungsgruppen: bilden, zuteilen, beginnen und zurückgeben', async ({ p
   await expect(page.getByRole('status')).toContainText('zurückgegeben');
   for (const n of numbers) expect((await fx.api('GET', `/v1/movements/${n}`)).state).toBe('OPEN');
 });
+
+test('Geschäftspartner: anlegen, im Auslagerauftrag verwenden, deaktivieren', async ({ page, fx }) => {
+  const w = await fx.warehouse();
+  const code = `PW-${fx.s}-K`;
+  const orderId = `PW-${fx.s}-PA`;
+  fx.onCleanup(async () => {
+    await fx.api('POST', `/v1/outbound-orders/${orderId}/cancel`, {}).catch(() => undefined);
+    await fx.api('PATCH', `/v1/partners/${code}`, { active: false }).catch(() => undefined);
+  });
+
+  await page.goto('./partner');
+  const form = page.locator('section', { hasText: 'Partner anlegen' });
+  await form.getByLabel('Partnernummer').fill(code);
+  await form.getByLabel('Name').fill('Musterkunde GmbH');
+  await form.getByLabel('Straße').fill('Musterstraße 1');
+  await form.getByLabel('PLZ').fill('12345');
+  await form.getByLabel('Ort').fill('Musterstadt');
+  await form.getByRole('button', { name: 'Anlegen' }).click();
+  await expect(page.getByText(`Partner ${code} angelegt`)).toBeVisible();
+  const table = page.getByRole('table', { name: 'Geschäftspartner' });
+  await expect(table.getByRole('row', { name: new RegExp(code) })).toContainText('Musterstraße 1, 12345 Musterstadt, DE');
+
+  await page.goto('./auslagerung');
+  const order = page.locator('section', { hasText: 'Auslagerauftrag anlegen' });
+  await order.getByLabel('Auftrag').fill(orderId);
+  await order.getByLabel('Kunde (Partner)').selectOption(code);
+  await order.getByLabel('SKU').fill(w.sku);
+  await order.getByLabel('Menge').fill('1');
+  await order.getByRole('button', { name: 'Anlegen' }).click();
+  await expect(page.getByText(`Auslagerauftrag ${orderId} angelegt`)).toBeVisible();
+  await page.getByRole('row', { name: new RegExp(orderId) }).click();
+  await expect(page.getByText('Lieferadresse: Musterkunde GmbH, Musterstraße 1, 12345 Musterstadt, DE')).toBeVisible();
+
+  await page.goto('./partner');
+  await table.getByRole('row', { name: new RegExp(code) }).getByRole('button', { name: 'Deaktivieren' }).click();
+  await expect(table.getByRole('row', { name: new RegExp(code) })).toContainText('inaktiv');
+});

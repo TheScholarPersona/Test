@@ -3,6 +3,7 @@ import { type FormEvent, useState } from 'react';
 import { api, unwrap } from '../api/client';
 import { Feedback } from '../components/Feedback';
 import { LocationSelect, UnitTypeSelect } from '../components/LocationSelect';
+import { PartnerSelect } from '../components/PartnerSelect';
 import { Empty, ErrorMessage, Panel, Quantity, StateBadge, dateTime } from '../components/ui';
 import { useAction } from '../components/useAction';
 import { useCan } from '../auth/session';
@@ -12,11 +13,12 @@ function CreateOrder() {
   const [sku, setSku] = useState('');
   const [amount, setAmount] = useState('');
   const [unit, setUnit] = useState('PCS');
+  const [supplierCode, setSupplierCode] = useState('');
   const create = useAction(
     () =>
       unwrap(
         api.POST('/v1/receiving-orders', {
-          body: { orderId, positions: [{ kind: 'quantity', sku, quantity: { amount, unit } }] },
+          body: { orderId, ...(supplierCode ? { supplierCode } : {}), positions: [{ kind: 'quantity', sku, quantity: { amount, unit } }] },
         }),
       ),
     ['receiving'],
@@ -31,6 +33,7 @@ function CreateOrder() {
       <Feedback message={create.message} />
       <form className="toolbar" onSubmit={submit}>
         <label>Auftrag<input value={orderId} onChange={(e) => setOrderId(e.target.value)} required /></label>
+        <PartnerSelect value={supplierCode} onChange={setSupplierCode} role="SUPPLIER" label="Lieferant (Partner)" />
         <label>SKU<input value={sku} onChange={(e) => setSku(e.target.value)} required /></label>
         <label>Menge<input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" required /></label>
         <label>Einheit<input value={unit} onChange={(e) => setUnit(e.target.value.toUpperCase())} required /></label>

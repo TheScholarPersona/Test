@@ -16,6 +16,7 @@ import { OutboxService } from '../../../infrastructure/outbox/outbox.service.js'
 import { InventoryService, type Product } from '../../inventory/index.js';
 import { type Location, LocationLookup } from '../../layout/index.js';
 import { MovementService } from '../../movement/index.js';
+import { PartnerService } from '../../partner/index.js';
 import { AllocationService } from '../../strategy/index.js';
 import { TransportOrderService } from '../../transport-order/index.js';
 import { TransportUnitClaims, TransportUnitService } from '../../transport/index.js';
@@ -55,6 +56,7 @@ export class OutboundService {
     private readonly claims: TransportUnitClaims,
     private readonly movements: MovementService,
     private readonly transportOrders: TransportOrderService,
+    private readonly partners: PartnerService,
   ) {}
 
   async list(query: OutboundQuery): Promise<{ items: OrderWithDetails[]; total: number }> {
@@ -86,10 +88,23 @@ export class OutboundService {
         throw new ConflictError('OUTBOUND_ORDER_EXISTS', `Auslagerauftrag [${input.orderId}] existiert bereits`, { orderId: input.orderId });
       }
       const target = input.target ? await this.lookup.resolve(tx, input.target) : null;
+      const partner = input.customerCode ? await this.partners.requireRole(tx, input.customerCode, 'CUSTOMER') : null;
+      const pick = <K extends 'name' | 'street' | 'postalCode' | 'city' | 'country'>(key: K): string | null => {
+        const given = input.shipTo?.[key];
+        if (given !== undefined) return given;
+        return partner?.[key] ?? null;
+      };
+      const shipTo = { name: pick('name'), street: pick('street'), postalCode: pick('postalCode'), city: pick('city'), country: pick('country') };
       const order = tx.create(OutboundOrder, {
         id: randomUUID(),
         orderId: input.orderId,
-        customer: input.customer ?? null,
+        customer: input.customer ?? partner?.code ?? null,
+        customerCode: partner?.code ?? null,
+        shipToName: shipTo.name,
+        shipToStreet: shipTo.street,
+        shipToPostalCode: shipTo.postalCode,
+        shipToCity: shipTo.city,
+        shipToCountry: shipTo.country,
         priority: input.priority,
         target,
         targetCoordinate: target?.locationId ?? null,

@@ -58,6 +58,7 @@ export function toOrderDto({ order, positions }: OrderWithPositions): ReceivingO
   return {
     orderId: order.orderId,
     supplier: order.supplier ?? null,
+    supplierCode: order.supplierCode ?? null,
     expectedAt: order.expectedAt?.toISOString() ?? null,
     state: order.state,
     positions: positions.map(positionDto),

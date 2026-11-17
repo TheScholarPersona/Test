@@ -15,6 +15,10 @@ export function summarize(type: string, p: Record<string, any>): string {
       return `${p.barcode}: ${p.from?.locationId ?? '?'} → ${p.location?.locationId ?? '?'}`;
     case 'transport-unit.error-reported':
       return `${p.barcode}: ${p.code}${p.message ? ` – ${p.message}` : ''}`;
+    case 'partner.created':
+      return `${p.code} ${p.name}`;
+    case 'partner.changed':
+      return `${p.code}: ${(p.fields ?? []).join(', ')}`;
     case 'location.plc-state-changed':
       return `${p.plcCode ?? p.locationId}: ${p.plcState === 0 ? 'in Ordnung' : `Störung ${p.plcState}${p.text ? ` – ${p.text}` : ''}`}`;
     case 'flow.command':

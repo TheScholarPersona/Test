@@ -57,10 +57,17 @@ export function toPickDto(p: OutboundPick): PickDto {
   };
 }
 
+function shipToOf(order: OutboundOrder): OutboundOrderDto['shipTo'] {
+  const shipTo = { name: order.shipToName ?? null, street: order.shipToStreet ?? null, postalCode: order.shipToPostalCode ?? null, city: order.shipToCity ?? null, country: order.shipToCountry ?? null };
+  return Object.values(shipTo).some((v) => v !== null) ? shipTo : null;
+}
+
 function toOrderDto({ order, lines, picks }: OrderWithDetails): OutboundOrderDto {
   return {
     orderId: order.orderId,
     customer: order.customer ?? null,
+    customerCode: order.customerCode ?? null,
+    shipTo: shipToOf(order),
     priority: order.priority,
     target: order.targetCoordinate ? { id: (order.target as Location | null)?.id ?? null, locationId: order.targetCoordinate } : null,
     state: order.state,

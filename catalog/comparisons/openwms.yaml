@@ -80,16 +80,6 @@ gaps:
     source: privat
     refs: [Analyse 1.1 private Repositories]
 
-  - id: openwms.partner
-    title: Geschäftspartner (Partner)
-    area: wareneingang
-    summary: Stammdaten für Lieferanten und Kunden.
-    status: fehlt
-    source: privat
-    note: Lieferant und Kunde sind heute nur Freitext am Auftrag.
-    refs: [Analyse 1.1 private Repositories]
-    related: [wareneingang.avis, auslagerung.auftrag]
-
   - id: openwms.erp-adapter
     title: ERP-Adapter (SAP, Dynamics)
     area: integration

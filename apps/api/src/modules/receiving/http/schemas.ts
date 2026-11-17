@@ -9,6 +9,7 @@ import {
   TransportUnitTypeCodeSchema,
 } from '@wms/shared';
 import { z } from 'zod';
+import { PartnerCodeSchema } from '../../partner/index.js';
 import { pageOf } from '../../../http/common-schemas.js';
 import { LocationReferenceSchema } from '../../layout/index.js';
 
@@ -37,7 +38,8 @@ const UnitPositionInput = z.strictObject({
 export const CreateReceivingOrderSchema = z
   .strictObject({
     orderId: OrderIdSchema,
-    supplier: z.string().trim().min(1).max(100).optional(),
+    supplier: z.string().trim().min(1).max(100).optional().meta({ description: 'Freitext; mit supplierCode ohne Angabe die Partnernummer' }),
+    supplierCode: PartnerCodeSchema.optional().meta({ description: 'Geschäftspartner mit Rolle SUPPLIER' }),
     expectedAt: z.iso.datetime({ offset: true }).optional(),
     positions: z.array(z.discriminatedUnion('kind', [QuantityPositionInput, UnitPositionInput])).min(1).max(500),
   })
@@ -107,6 +109,7 @@ export const ReceivingOrderDtoSchema = z
   .object({
     orderId: z.string(),
     supplier: z.string().nullable(),
+    supplierCode: z.string().nullable(),
     expectedAt: z.iso.datetime().nullable(),
     state: ReceivingOrderStateSchema,
     positions: z.array(PositionDtoSchema),

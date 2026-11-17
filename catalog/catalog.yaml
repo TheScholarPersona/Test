@@ -167,6 +167,22 @@ areas:
         title: Kommissionierung
         summary: Entnahmen quittieren.
 
+  - id: partner
+    title: Geschäftspartner
+    summary: Kunden, Lieferanten und Spediteure als Stammdaten mit Anschrift – Grundlage für Avis, Auslagerauftrag und Lieferadresse.
+    status: katalogisiert
+    owns:
+      endpoints: [/v1/partners]
+      events: [partner]
+      uiRoutes: [/partner]
+    groups:
+      - id: partner.stammdaten
+        title: Stammdaten
+        summary: Partner anlegen, pflegen und deaktivieren.
+      - id: partner.verwendung
+        title: Verwendung an Aufträgen
+        summary: Partner an Avis und Auslagerauftrag, Lieferadresse.
+
   - id: integration
     title: Integration und Automatisierung
     summary: Ereignisse über MQTT und Live-Stream, Node-RED-Bausteine und automatisierte Szenario-Tests.

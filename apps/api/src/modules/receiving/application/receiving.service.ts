@@ -17,6 +17,7 @@ import { OutboxService } from '../../../infrastructure/outbox/outbox.service.js'
 import { InventoryService, type Product } from '../../inventory/index.js';
 import { type Location, LocationLookup, type LocationReference } from '../../layout/index.js';
 import { MovementService } from '../../movement/index.js';
+import { PartnerService } from '../../partner/index.js';
 import { type TransportUnit, TransportUnitService } from '../../transport/index.js';
 import {
   chooseQuantityPosition,
@@ -50,6 +51,7 @@ export class ReceivingService {
     private readonly units: TransportUnitService,
     private readonly lookup: LocationLookup,
     private readonly movements: MovementService,
+    private readonly partners: PartnerService,
   ) {}
 
   async list(query: ReceivingQuery): Promise<{ items: OrderWithPositions[]; total: number }> {
@@ -88,10 +90,12 @@ export class ReceivingService {
       if (new Set(numbers).size !== numbers.length) {
         throw new DomainError('invalid', 'DUPLICATE_POSITION', 'Positionsnummern sind mehrfach vergeben', { posNos: numbers });
       }
+      const partner = input.supplierCode ? await this.partners.requireRole(tx, input.supplierCode, 'SUPPLIER') : null;
       const order = tx.create(ReceivingOrder, {
         id: randomUUID(),
         orderId: input.orderId,
-        supplier: input.supplier ?? null,
+        supplier: input.supplier ?? partner?.code ?? null,
+        supplierCode: partner?.code ?? null,
         expectedAt: input.expectedAt ? new Date(input.expectedAt) : null,
         state: 'OPEN',
       });

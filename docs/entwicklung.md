@@ -442,12 +442,31 @@ Schritt-Szenarien erreichen diese Endpunkte mit `request: () => ({ service: 'sim
 
 **Regelsätze in Szenarien:** Szenarien ersetzen nie einen aktiven Regelsatz; Strategien prüfen sie per Simulation mit einem Entwurf, der danach gelöscht wird. Einzige Ausnahme: `outbound-flow` legt einen FIFO-Standard für `allocation` an und aktiviert ihn, **nur wenn** noch keiner aktiv ist – ohne aktiven Regelsatz kann nicht zugeteilt werden. Dieser Standard bleibt danach bestehen.
 
+## Modul Geschäftspartner (`/v1/partners`)
+
+Kunden, Lieferanten und Spediteure als Stammdaten (`apps/api/src/modules/partner`):
+
+```json
+{ "code": "K-1000", "name": "Musterkunde GmbH", "roles": ["CUSTOMER"],
+  "address": { "street": "Musterstraße 1", "postalCode": "12345", "city": "Musterstadt", "country": "DE" }, "email": "versand@example.com" }
+```
+
+| Aktion | Endpunkt | Hinweis |
+|---|---|---|
+| anlegen | `POST /v1/partners` | Nummer eindeutig, mind. eine Rolle (`CUSTOMER`, `SUPPLIER`, `CARRIER`), Land als ISO-3166-Alpha-2 |
+| ändern | `PATCH /v1/partners/{code}` | einzelne Felder, `null` löscht; `active: false` deaktiviert (gelöscht wird nicht) |
+| suchen | `GET /v1/partners?role=…&active=true&q=…` | `q` sucht in Nummer, Name und Ort |
+
+Schreiben ist Stammdatenpflege und damit `admin`. Verwendung: `customerCode` am Auslagerauftrag (Rolle Kunde; Name und Anschrift werden als `shipTo` kopiert, einzelne Felder per `shipTo` überschreibbar) und `supplierCode` am Avis (Rolle Lieferant). Unbekannt → 404 `PARTNER_NOT_FOUND`, deaktiviert → 409 `PARTNER_INACTIVE`, falsche Rolle → 409 `PARTNER_ROLE_MISSING`. Aufträge speichern die Nummer und eine Momentaufnahme der Adresse, keinen Fremdschlüssel – spätere Änderungen am Partner ändern bestehende Aufträge nicht. Der Freitext `customer`/`supplier` bleibt erhalten (für Auslagerstrategien `order.customer`) und ist ohne Angabe die Partnernummer.
+
+Events: `partner.created`, `partner.changed` mit `fields` (`packages/shared/src/partner-events.ts`).
+
 ## Modul Auslagerung (`/v1/outbound-orders`, `/v1/outbound-picks`)
 
 **Auftrag** `POST /v1/outbound-orders`:
 
 ```json
-{ "orderId": "K-4711", "customer": "FRISCH", "priority": "HIGH", "target": { "erpCode": "VERSAND-1" },
+{ "orderId": "K-4711", "customer": "FRISCH", "customerCode": "K-1000", "priority": "HIGH", "target": { "erpCode": "VERSAND-1" },
   "lines": [ { "sku": "MILCH", "quantity": { "amount": "4", "unit": "KAR" } }, { "sku": "MEHL", "quantity": { "amount": "50", "unit": "KG" }, "lot": "L7" } ] }
 ```
 

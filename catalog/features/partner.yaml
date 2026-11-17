@@ -1,0 +1,147 @@
+# Feature-Katalog – Bereich Geschäftspartner.
+area: partner
+
+features:
+  - id: partner.stammdaten
+    title: Geschäftspartner pflegen
+    group: partner.stammdaten
+    summary: Führt Kunden, Lieferanten und Spediteure mit Nummer, Name, Anschrift und Kontakt – suchbar und deaktivierbar statt löschbar.
+    description: |
+      Ein Geschäftspartner hat eine eindeutige Nummer (z. B. die Kundennummer aus dem ERP), einen Namen, eine oder
+      mehrere Rollen (Kunde, Lieferant, Spediteur), eine Anschrift (Straße, PLZ, Ort, Land als ISO-Code) sowie E-Mail
+      und Telefon. Die Liste lässt sich nach Rolle, Aktivität und Suchbegriff (Nummer, Name, Ort) filtern. Partner
+      werden nicht gelöscht, sondern deaktiviert, weil Aufträge auf sie verweisen; Änderungen werden mit den geänderten
+      Feldern gemeldet.
+    usage:
+      - channel: leitstand
+        text: Seite **Partner** – anlegen, filtern, deaktivieren und wieder aktivieren (Anlegen und Ändern nur Rolle admin).
+      - channel: api
+        text: "Anlegen `POST /v1/partners` (`code`, `name`, `roles`, `address?`, `email?`, `phone?`), ändern `PATCH /v1/partners/{code}` (auch `active`), Liste `GET /v1/partners?role=…&active=…&q=…`."
+    rules:
+      - Nummer eindeutig (`PARTNER_EXISTS`), mindestens eine Rolle, Land als zweistelliger ISO-Code.
+      - Anlegen und Ändern sind Stammdaten und damit Sache der Rolle admin; lesen darf jeder Angemeldete.
+    technical:
+      components:
+        - apps/api/src/modules/partner/application/partner.service.ts
+        - apps/api/src/modules/partner/http/partners.controller.ts
+        - apps/api/src/modules/partner/entities/partner.entity.ts
+        - apps/web/src/pages/PartnersPage.tsx
+      endpoints:
+        - GET /v1/partners
+        - POST /v1/partners
+        - GET /v1/partners/{code}
+        - PATCH /v1/partners/{code}
+      events:
+        emits: [partner.created, partner.changed]
+      uiRoutes: [/partner]
+      notes:
+        - Tabelle `partner`; Rollen als drei Spalten `customer`, `supplier`, `carrier`.
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/partner.integration.test.ts
+        test: legt Partner mit Rollen und Anschrift an und meldet es
+      - kind: integration
+        file: apps/api/test/integration/partner.integration.test.ts
+        test: lehnt doppelte Nummern und ungültige Angaben ab
+      - kind: integration
+        file: apps/api/test/integration/partner.integration.test.ts
+        test: filtert nach Rolle, Aktivität und Suchbegriff
+      - kind: integration
+        file: apps/api/test/integration/partner.integration.test.ts
+        test: ändert Stammdaten, meldet die geänderten Felder und deaktiviert
+      - kind: web-e2e
+        file: apps/web/e2e/seiten.spec.ts
+        test: "Geschäftspartner: anlegen, im Auslagerauftrag verwenden, deaktivieren"
+    comparisons:
+      openwms:
+        status: nicht-einsehbar
+        note: OpenWMS führt Partner in einem privaten Dienst; Umfang und Felder sind nur aus der Projektbeschreibung bekannt.
+        refs:
+          - Analyse 1.1
+
+  - id: partner.lieferadresse
+    title: Kunde und Lieferadresse am Auslagerauftrag
+    group: partner.verwendung
+    summary: Verknüpft einen Auslagerauftrag mit einem Kunden und übernimmt dessen Anschrift als Lieferadresse – einzelne Felder lassen sich abweichend angeben.
+    description: |
+      Wird beim Anlegen eines Auslagerauftrags eine Kundennummer angegeben, muss der Partner aktiv sein und die Rolle
+      Kunde haben. Name und Anschrift werden als Lieferadresse in den Auftrag kopiert (Momentaufnahme: spätere
+      Änderungen am Partner ändern bestehende Aufträge nicht). Einzelne Felder der Lieferadresse können abweichend
+      mitgegeben werden. Der Freitext-Kunde bleibt für Auslagerstrategien (`order.customer`) erhalten und ist ohne
+      Angabe die Kundennummer.
+    usage:
+      - channel: leitstand
+        text: Seite **Auslagerung** – beim Anlegen „Kunde (Partner)“ wählen; die Lieferadresse steht im Auftrag.
+      - channel: api
+        text: "`POST /v1/outbound-orders` mit `customerCode` und optional `shipTo` (`name`, `street`, `postalCode`, `city`, `country`); der Auftrag liefert `customerCode` und `shipTo`."
+    rules:
+      - Partner unbekannt → 404 `PARTNER_NOT_FOUND`; deaktiviert → 409 `PARTNER_INACTIVE`; ohne Rolle Kunde → 409 `PARTNER_ROLE_MISSING`.
+    dependsOn: [partner.stammdaten, auslagerung.auftrag]
+    technical:
+      components:
+        - apps/api/src/modules/outbound/application/outbound.service.ts
+        - apps/web/src/pages/OutboundPage.tsx
+        - apps/web/src/components/PartnerSelect.tsx
+      endpoints:
+        - POST /v1/outbound-orders
+      uiRoutes: [/auslagerung]
+      notes:
+        - Spalten `customer_code` und `ship_to_*` an `outbound_order`; Nummer statt Fremdschlüssel, damit der Auftrag den Partner überdauert.
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/partner.integration.test.ts
+        test: übernimmt die Kundenanschrift als Lieferadresse in den Auslagerauftrag
+      - kind: integration
+        file: apps/api/test/integration/partner.integration.test.ts
+        test: lässt einzelne Felder der Lieferadresse überschreiben und Freitext-Kunden weiter zu
+      - kind: integration
+        file: apps/api/test/integration/partner.integration.test.ts
+        test: verlangt die passende Rolle und einen aktiven Partner
+      - kind: web-e2e
+        file: apps/web/e2e/seiten.spec.ts
+        test: "Geschäftspartner: anlegen, im Auslagerauftrag verwenden, deaktivieren"
+    comparisons:
+      openwms:
+        status: nicht-einsehbar
+        note: Lieferadressen gehören in OpenWMS zu den privaten Diensten Shipping und Partner.
+        refs:
+          - Analyse 1.1
+
+  - id: partner.lieferant
+    title: Lieferant am Avis
+    group: partner.verwendung
+    summary: Verknüpft ein Avis mit einem Lieferanten aus den Stammdaten.
+    description: |
+      Beim Anlegen eines Avis kann eine Lieferantennummer angegeben werden; der Partner muss aktiv sein und die Rolle
+      Lieferant haben. Ohne Freitext wird die Nummer auch als Lieferant angezeigt. Avise mit Freitext-Lieferant
+      bleiben möglich.
+    usage:
+      - channel: leitstand
+        text: Seite **Wareneingang** – beim Anlegen „Lieferant (Partner)“ wählen.
+      - channel: api
+        text: "`POST /v1/receiving-orders` mit `supplierCode`; das Avis liefert `supplierCode`."
+    rules:
+      - Gleiche Prüfungen wie beim Kunden (`PARTNER_NOT_FOUND`, `PARTNER_INACTIVE`, `PARTNER_ROLE_MISSING`).
+    dependsOn: [partner.stammdaten, wareneingang.avis]
+    technical:
+      components:
+        - apps/api/src/modules/receiving/application/receiving.service.ts
+        - apps/web/src/pages/ReceivingPage.tsx
+      endpoints:
+        - POST /v1/receiving-orders
+      uiRoutes: [/wareneingang]
+      notes:
+        - Spalte `supplier_code` an `receiving_order`.
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/partner.integration.test.ts
+        test: verknüpft das Avis mit dem Lieferanten
+      - kind: integration
+        file: apps/api/test/integration/partner.integration.test.ts
+        test: verlangt die passende Rolle und einen aktiven Partner
+    comparisons:
+      openwms:
+        status: nicht-einsehbar
+        note: Avis und Partner liegen in OpenWMS in privaten Diensten.
+        refs:
+          - Analyse 1.1

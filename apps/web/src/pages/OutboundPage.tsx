@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { api, unwrap } from '../api/client';
 import { Feedback, latest } from '../components/Feedback';
 import { LocationSelect } from '../components/LocationSelect';
+import { addressLine, PartnerSelect } from '../components/PartnerSelect';
 import { Empty, ErrorMessage, Panel, Quantity, StateBadge, dateTime } from '../components/ui';
 import { useAction } from '../components/useAction';
 import { useCan } from '../auth/session';
@@ -12,6 +13,7 @@ type Transport = 'none' | 'movement' | 'transport-order';
 function CreateOrder() {
   const [orderId, setOrderId] = useState('');
   const [customer, setCustomer] = useState('');
+  const [customerCode, setCustomerCode] = useState('');
   const [sku, setSku] = useState('');
   const [amount, setAmount] = useState('');
   const [unit, setUnit] = useState('PCS');
@@ -23,6 +25,7 @@ function CreateOrder() {
           body: {
             orderId,
             ...(customer ? { customer } : {}),
+            ...(customerCode ? { customerCode } : {}),
             ...(target ? { target: { id: target } } : {}),
             lines: [{ sku, quantity: { amount, unit } }],
           },
@@ -42,7 +45,8 @@ function CreateOrder() {
         }}
       >
         <label>Auftrag<input value={orderId} onChange={(e) => setOrderId(e.target.value)} required /></label>
-        <label>Kunde<input value={customer} onChange={(e) => setCustomer(e.target.value)} /></label>
+        <PartnerSelect value={customerCode} onChange={setCustomerCode} role="CUSTOMER" label="Kunde (Partner)" />
+        <label>Kunde (Freitext)<input value={customer} onChange={(e) => setCustomer(e.target.value)} /></label>
         <label>SKU<input value={sku} onChange={(e) => setSku(e.target.value)} required /></label>
         <label>Menge<input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" required /></label>
         <label>Einheit<input value={unit} onChange={(e) => setUnit(e.target.value.toUpperCase())} required /></label>
@@ -130,6 +134,7 @@ export function OutboundPage() {
           <div className="row" style={{ marginBottom: 12 }}>
             <StateBadge state={order.state} />
             {order.target && <span className="muted">Ziel {order.target.locationId}</span>}
+            {order.shipTo && <span className="muted">Lieferadresse: {addressLine(order.shipTo)}</span>}
             {order.closeReason && <span className="muted">{order.closeReason}</span>}
           </div>
           <div className="table-wrap">

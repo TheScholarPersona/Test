@@ -8,6 +8,7 @@ import { FlowPage } from './pages/FlowPage';
 import { LocationsPage } from './pages/LocationsPage';
 import { OutboundPage } from './pages/OutboundPage';
 import { OverviewPage } from './pages/OverviewPage';
+import { PartnersPage } from './pages/PartnersPage';
 import { ReceivingPage } from './pages/ReceivingPage';
 import { ScannerPage } from './pages/ScannerPage';
 import { StockPage } from './pages/StockPage';
@@ -21,6 +22,7 @@ const NAV = [
   ['/auslagerung', 'Auslagerung'],
   ['/transport', 'Transport'],
   ['/materialfluss', 'Materialfluss'],
+  ['/partner', 'Partner'],
   ['/ereignisse', 'Ereignisse'],
   ['/scanner', 'Scanner'],
 ] as const;
@@ -59,6 +61,7 @@ export function App() {
           <Route path="/auslagerung" element={<OutboundPage />} />
           <Route path="/transport" element={<TransportPage />} />
           <Route path="/materialfluss" element={<FlowPage />} />
+          <Route path="/partner" element={<PartnersPage />} />
           <Route path="/ereignisse" element={<EventsPage />} />
           <Route path="/scanner/*" element={<ScannerPage />} />
           <Route path="/konto" element={<AccountPage />} />

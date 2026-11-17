@@ -727,6 +727,229 @@
         ],
         "additionalProperties": false
       },
+      "Partner": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "CUSTOMER",
+                "SUPPLIER",
+                "CARRIER"
+              ]
+            }
+          },
+          "address": {
+            "type": "object",
+            "properties": {
+              "street": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "postalCode": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "city": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "country": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "street",
+              "postalCode",
+              "city",
+              "country"
+            ]
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "phone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "code",
+          "name",
+          "roles",
+          "address",
+          "email",
+          "phone",
+          "active",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "CreatePartner": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.\\-/]{1,40}$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "CUSTOMER",
+                "SUPPLIER",
+                "CARRIER"
+              ]
+            },
+            "minItems": 1,
+            "maxItems": 3,
+            "description": "Mindestens eine Rolle: CUSTOMER, SUPPLIER, CARRIER"
+          },
+          "address": {
+            "$ref": "#/components/schemas/AddressInput"
+          },
+          "email": {
+            "type": "string",
+            "maxLength": 200,
+            "format": "email"
+          },
+          "phone": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 50
+          }
+        },
+        "required": [
+          "code",
+          "name",
+          "roles"
+        ],
+        "additionalProperties": false
+      },
+      "AddressInput": {
+        "type": "object",
+        "properties": {
+          "street": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "postalCode": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 20
+          },
+          "city": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "country": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[A-Za-z]{2}$"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ChangePartner": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "CUSTOMER",
+                "SUPPLIER",
+                "CARRIER"
+              ]
+            },
+            "minItems": 1,
+            "maxItems": 3,
+            "description": "Mindestens eine Rolle: CUSTOMER, SUPPLIER, CARRIER"
+          },
+          "address": {
+            "$ref": "#/components/schemas/AddressInput"
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 200,
+            "format": "email"
+          },
+          "phone": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 50
+          },
+          "active": {
+            "type": "boolean",
+            "description": "false deaktiviert: neue Aufträge können den Partner nicht mehr verwenden"
+          }
+        },
+        "additionalProperties": false
+      },
       "Me": {
         "type": "object",
         "properties": {
@@ -4520,6 +4743,12 @@
               "null"
             ]
           },
+          "supplierCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "expectedAt": {
             "type": [
               "string",
@@ -4684,6 +4913,7 @@
         "required": [
           "orderId",
           "supplier",
+          "supplierCode",
           "expectedAt",
           "state",
           "positions",
@@ -4702,7 +4932,13 @@
           "supplier": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 100
+            "maxLength": 100,
+            "description": "Freitext; mit supplierCode ohne Angabe die Partnernummer"
+          },
+          "supplierCode": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.\\-/]{1,40}$",
+            "description": "Geschäftspartner mit Rolle SUPPLIER"
           },
           "expectedAt": {
             "type": "string",
@@ -6225,6 +6461,15 @@
               "null"
             ]
           },
+          "customerCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "shipTo": {
+            "$ref": "#/components/schemas/ShipTo"
+          },
           "priority": {
             "type": "string",
             "enum": [
@@ -6405,6 +6650,8 @@
         "required": [
           "orderId",
           "customer",
+          "customerCode",
+          "shipTo",
           "priority",
           "target",
           "state",
@@ -6415,6 +6662,52 @@
           "createdAt",
           "updatedAt"
         ]
+      },
+      "ShipTo": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "street": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "postalCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "city": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "country": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "street",
+          "postalCode",
+          "city",
+          "country"
+        ],
+        "description": "Lieferadresse zum Zeitpunkt der Anlage (Momentaufnahme)"
       },
       "OutboundPick": {
         "type": "object",
@@ -6553,7 +6846,59 @@
           "customer": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 100
+            "maxLength": 100,
+            "description": "Freitext; mit customerCode ohne Angabe die Partnernummer"
+          },
+          "customerCode": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.\\-/]{1,40}$",
+            "description": "Geschäftspartner mit Rolle CUSTOMER; seine Anschrift wird Lieferadresse"
+          },
+          "shipTo": {
+            "type": "object",
+            "properties": {
+              "street": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "postalCode": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "minLength": 1,
+                "maxLength": 20
+              },
+              "city": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "country": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^[A-Za-z]{2}$"
+              },
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "minLength": 1,
+                "maxLength": 100
+              }
+            },
+            "additionalProperties": false,
+            "description": "Lieferadresse; überschreibt einzelne Felder der Partneranschrift"
           },
           "priority": {
             "type": "string",
@@ -8359,6 +8704,374 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Location"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ungültige Anfrage (Feldprüfung)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nicht gefunden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/partners": {
+      "get": {
+        "summary": "Geschäftspartner nach Nummer (Filter: Rolle, aktiv, Suche)",
+        "tags": [
+          "Geschäftspartner"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "CUSTOMER",
+                "SUPPLIER",
+                "CARRIER"
+              ]
+            },
+            "required": false,
+            "name": "role",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ],
+              "description": "Ohne Angabe: aktive und inaktive"
+            },
+            "required": false,
+            "description": "Ohne Angabe: aktive und inaktive",
+            "name": "active",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "description": "Sucht in Nummer, Name und Ort"
+            },
+            "required": false,
+            "description": "Sucht in Nummer, Name und Ort",
+            "name": "q",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 100
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0,
+              "default": 0
+            },
+            "required": false,
+            "name": "offset",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Liste",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Partner"
+                      }
+                    },
+                    "total": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "total"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ungültige Anfrage (Feldprüfung)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Geschäftspartner anlegen",
+        "tags": [
+          "Geschäftspartner"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePartner"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Geschäftspartner",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Partner"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ungültige Anfrage (Feldprüfung)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Konflikt oder verletzte Geschäftsregel",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/partners/{code}": {
+      "get": {
+        "summary": "Geschäftspartner lesen",
+        "tags": [
+          "Geschäftspartner"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.\\-/]{1,40}$"
+            },
+            "required": true,
+            "name": "code",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Geschäftspartner",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Partner"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nicht gefunden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "Stammdaten ändern oder deaktivieren",
+        "tags": [
+          "Geschäftspartner"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.\\-/]{1,40}$"
+            },
+            "required": true,
+            "name": "code",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePartner"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Geschäftspartner",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Partner"
                 }
               }
             }
