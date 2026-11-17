@@ -29,6 +29,7 @@ apps/api/                  WMS-Kern (NestJS)
   test/integration/        Integrationstests mit Testcontainers
 packages/shared/           gemeinsamer Kern: Kennungen, Quantity, Event-Format und -Katalog
 packages/scenario-runner/  führt Node-RED-Szenarien aus, schreibt reports/e2e-junit.xml
+packages/node-red-nodes/   eigene Node-RED-Nodes (Verbindung, fachliche Nodes, Ereignisse, Test-Nodes)
 flows/
   scenarios/*.js           Schritt-Szenarien (lesbare Schrittlisten)
   simulator/config.json    Anlagensimulator: Fahrzeiten, Meldeart je Platz
@@ -514,6 +515,36 @@ Das Testframework stellt bereit:
 |---|---|
 | `GET /test/scenarios` | `{ scenarios: [{ id, description }] }` |
 | `POST /test/scenarios/:id/run` | `{ scenario, runId, passed, durationMs, steps, error? }`; 404 bei unbekanntem Szenario |
+
+## Eigene Node-RED-Nodes (`packages/node-red-nodes`)
+
+Palette „WMS“ in Node-RED, siehe auch `packages/node-red-nodes/README.md`:
+
+| Node | Zweck |
+|---|---|
+| `wms-config` | Verbindung: URL (`${WMS_API_URL}`), MQTT-Broker für Ereignisse |
+| `wms-api` | beliebiger Aufruf der API (`/openapi.json`) |
+| `wms-move-tu`, `wms-receive`, `wms-device-event` | TU bewegen, Wareneingang erfassen, Geräte-Ereignis melden |
+| `wms-event` | Ereignisse nach Typ (`stock.*`) und Feldern |
+| `wms-wait-event` | auf ein Ereignis warten (Timeout statt Pause; Ereignisse kurz vor der Nachricht zählen mit) |
+| `wms-test-start`, `wms-assert`, `wms-test-result` | Tests als Flow; das Ergebnis geht auch an das Testframework |
+
+**Leitplanken:** Die Nodes rufen nur die öffentliche API auf, alle Regeln bleiben im WMS. Eine Regelverletzung kommt als Fehler im Flow an: `msg.wmsError` mit `code`, `message`, `statusCode`, `details`; standardmäßig als Node-RED-Fehler für einen Catch-Node, mit „Fehlerausgang“ an Ausgang 2. Felder nehmen feste Werte oder `msg.…`-Verweise; fehlt ein Feld in einem von Hand geschriebenen Flow, gilt derselbe Standard wie im Editor.
+
+**Tests:** `pnpm --filter @wms/node-red-nodes test` (offizieller `node-red-node-test-helper`, ein Test-WMS als HTTP-Server und ein nachgebildeter MQTT-Broker-Node). Die Editor-Dateien `nodes/*.html` erzeugt `scripts/build-html.mjs`; der Test prüft, dass sie aktuell sind. Hinweis: Der Test-Helper erwartet `@node-red/registry` neben `node-red` (npm-Layout); dafür steht eine `packageExtensions`-Angabe in `pnpm-workspace.yaml`.
+
+**In Compose** werden `package.json`, `lib/` und `nodes/` nach `/data/node_modules/@wms/node-red-nodes` eingebunden (ohne Entwicklungsabhängigkeiten); nach Änderungen `docker compose restart node-red`.
+
+**Beispiel-Flows** (Tabs im Generator):
+
+| Tab | Endpunkt / Auslöser | Inhalt |
+|---|---|---|
+| Beispiel: ERP-CSV → Wareneingang | `POST /examples/erp-receipts` (text/csv: `sku;menge;einheit;tu;tu_typ;platz;charge;mhd`) | je Zeile Wareneingang ohne Avis; Antwort mit Ergebnis oder Fehlercode je Zeile |
+| Beispiel: Scan → TU bewegen | `POST /examples/scan` `{ barcode, location }` | geprüfte Buchung; Regelverletzung → Catch-Node → HTTP 409 mit Code |
+| Beispiel: Ereignis → Meldung | `stock.issued`, `outbound-order.state-changed`, `flow.no-route` | lesbare Meldung im Debug-Fenster |
+| Szenario: nodes-selftest | Testframework | Szenario aus Test-Nodes statt Schrittliste |
+
+Szenario `node-red-examples` prüft die Beispiel-Flows; Schritt-Szenarien erreichen Endpunkte dieses Node-RED mit `service: 'node-red'` (eigene Header über `headers`).
 
 ## API außerhalb von Docker gegen die Compose-Umgebung
 

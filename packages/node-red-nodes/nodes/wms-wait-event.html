@@ -1,0 +1,76 @@
+<!-- Generiert von scripts/build-html.mjs – dort ändern. -->
+<script type="text/javascript">
+  RED.nodes.registerType('wms-wait-event', {
+    category: 'WMS',
+    color: '#C7E9C0',
+    defaults: {
+      "name": {
+            "value": ""
+      },
+      "server": {
+            "value": "",
+            "type": "wms-config",
+            "required": true
+      },
+      "types": {
+            "value": "",
+            "required": true
+      },
+      "conditions": {
+            "value": []
+      },
+      "timeout": {
+            "value": 10000
+      },
+      "lookbackMs": {
+            "value": 5000
+      }
+    },
+    inputs: 1,
+    outputs: 2,
+    outputLabels: ["Ereignis","Timeout"],
+    icon: 'watch.svg',
+    paletteLabel: 'Auf Ereignis warten',
+    label: function () {
+      return this.name || 'warte auf ' + (this.types || '*');
+    },
+    oneditprepare: function () {
+      const list = $('#node-input-conditions-list').css('min-height', '120px').editableList({
+        addItem: function (container, i, item) {
+          $('<input type="text" class="col-path" placeholder="payload.number" style="width:45%; margin-right:4px">').val(item.path || '').appendTo(container);
+          $('<input type="text" class="col-value" placeholder="msg.payload.number" style="width:45%; margin-right:4px">').val(item.value || '').appendTo(container);
+        },
+        removable: true,
+        sortable: true,
+      });
+      (this.conditions || []).forEach((item) => list.editableList('addItem', item));
+    },
+    oneditsave: function () {
+      const items = [];
+      $('#node-input-conditions-list').editableList('items').each(function () {
+        const item = {};
+        item.path = $(this).find('.col-path').val(); item.value = $(this).find('.col-value').val();
+        if (item.path) items.push(item);
+      });
+      this.conditions = items;
+    },
+  });
+</script>
+
+<script type="text/html" data-template-name="wms-wait-event">
+    <div class="form-row"><label for="node-input-server">Verbindung</label><input type="text" id="node-input-server"></div>
+    <div class="form-row"><label for="node-input-types">Typen</label><input type="text" id="node-input-types" placeholder="transport-order.finished"></div>
+    <div class="form-row node-input-conditions-row"><label>Bedingungen</label><ol id="node-input-conditions-list"></ol></div>
+    <div class="form-row"><label for="node-input-timeout">Timeout (ms)</label><input type="text" id="node-input-timeout" placeholder="10000"></div>
+    <div class="form-row"><label for="node-input-lookbackMs">Rückblick (ms)</label><input type="text" id="node-input-lookbackMs" placeholder="5000"></div>
+    <div class="form-row"><label for="node-input-name">Name</label><input type="text" id="node-input-name"></div>
+</script>
+
+<script type="text/html" data-help-name="wms-wait-event">
+<p>Wartet auf ein passendes Ereignis – mit Timeout statt fester Pause. Bedingungswerte dürfen auf die Nachricht verweisen
+(<code>msg.payload.number</code>), so lässt sich ein Ereignis einem Aufruf zuordnen.</p>
+<p>Ereignisse seit dem letzten WMS-Aufruf dieser Nachricht (<code>msg.wmsRequestedAt</code>, sonst im <i>Rückblick</i>) zählen mit,
+damit ein schnelles Ereignis nicht verloren geht.</p>
+<h3>Ausgaben</h3><ol class="node-ports"><li>Ereignis in <code>msg.event</code></li><li>Timeout, <code>msg.wmsError.code</code> = <code>EVENT_TIMEOUT</code></li></ol>
+<p>Mit <code>msg.test</code> (siehe <i>Test starten</i>) wird ein Testschritt notiert.</p>
+</script>

@@ -73,6 +73,10 @@ services:
     volumes:
       - node-red-data:/data
       - ./flows/node-red/flows.json:/data/flows.json:ro
+      # Eigene WMS-Nodes (packages/node-red-nodes) ohne Entwicklungsabhängigkeiten
+      - ./packages/node-red-nodes/package.json:/data/node_modules/@wms/node-red-nodes/package.json:ro
+      - ./packages/node-red-nodes/lib:/data/node_modules/@wms/node-red-nodes/lib:ro
+      - ./packages/node-red-nodes/nodes:/data/node_modules/@wms/node-red-nodes/nodes:ro
     depends_on:
       api:
         condition: service_healthy

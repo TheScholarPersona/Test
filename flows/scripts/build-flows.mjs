@@ -95,6 +95,10 @@ add({
         id: 'system-ping',
         description: 'API erzeugt ein system.ping-Event; es kommt über Outbox und MQTT in Node-RED an.',
       },
+      {
+        id: 'nodes-selftest',
+        description: 'Szenario aus WMS-Test-Nodes: Gruppe über WMS-API anlegen, prüfen, auf Ereignis warten, löschen.',
+      },
     ]);
   }),
   finalize: '',
@@ -570,10 +574,11 @@ add({
           continue;
         }
         msg.method = request.method;
-        // service: 'simulator' spricht die Endpunkte des Anlagensimulators in diesem Node-RED an.
-        const base = request.service === 'simulator' ? `http://127.0.0.1:${env.get('PORT') || 1880}` : env.get('WMS_API_URL');
+        // service 'node-red' (bzw. 'simulator') spricht Endpunkte dieses Node-RED an (Simulator, Beispiel-Flows).
+        const local = request.service === 'simulator' || request.service === 'node-red';
+        const base = local ? `http://127.0.0.1:${env.get('PORT') || 1880}` : env.get('WMS_API_URL');
         msg.url = `${base}${request.path}`;
-        msg.headers = { 'content-type': 'application/json' };
+        msg.headers = Object.assign({ 'content-type': 'application/json' }, request.headers || {});
         msg.payload = request.body === undefined ? '' : request.body;
         return [msg, null, null];
       } catch (error) {
@@ -1164,6 +1169,190 @@ add({
   y: 80,
   wires: [],
 });
+
+// ---------------------------------------------------------------------------
+// WMS-Nodes (packages/node-red-nodes): Verbindung, Beispiel-Flows, Selbsttest
+// ---------------------------------------------------------------------------
+const WMS = 'b0000000000000c1';
+add({ id: WMS, type: 'wms-config', name: 'WMS', url: '${WMS_API_URL}', broker: BROKER, prefix: 'wms', timeout: 10000 });
+const fn = (id, z, name, code, wires, x, y, outputs = 1) => ({ id, type: 'function', z, name, func: body(code), outputs, timeout: 0, noerr: 0, initialize: '', finalize: '', libs: [], x, y, wires });
+const response = (id, z, x, y) => ({ id, type: 'http response', z, name: 'Antwort', statusCode: '', headers: {}, x, y, wires: [] });
+
+// --- Beispiel: ERP-CSV → Wareneingang ------------------------------------------
+const TAB_CSV = 'f000000000000007';
+add({
+  id: TAB_CSV,
+  type: 'tab',
+  label: 'Beispiel: ERP-CSV → Wareneingang',
+  disabled: false,
+  info:
+    'Nimmt eine CSV-Datei aus dem ERP entgegen (`POST /examples/erp-receipts`, Content-Type text/csv) und erfasst jede Zeile ' +
+    'als Wareneingang ohne Avis.\n\nSpalten (Trennzeichen `;`, erste Zeile Überschrift): `sku;menge;einheit;tu;tu_typ;platz;charge;mhd`.\n\n' +
+    'Die Antwort nennt je Zeile Erfolg oder den fachlichen Fehlercode des WMS.',
+});
+add({ id: 'f700000000000001', type: 'http in', z: TAB_CSV, name: 'POST /examples/erp-receipts', url: '/examples/erp-receipts', method: 'post', upload: false, swaggerDoc: '', x: 170, y: 80, wires: [['f700000000000002']] });
+add(
+  fn('f700000000000002', TAB_CSV, 'CSV lesen', function () {
+    const text = typeof msg.payload === 'string' ? msg.payload : Buffer.isBuffer(msg.payload) ? msg.payload.toString('utf8') : '';
+    const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    const [header, ...rows] = lines;
+    const names = (header || '').split(';').map((h) => h.trim().toLowerCase());
+    if (!names.includes('sku') || rows.length === 0) {
+      msg.statusCode = 400;
+      msg.payload = { message: 'CSV braucht eine Überschrift mit sku;menge;einheit;tu;tu_typ;platz und mindestens eine Zeile' };
+      return [null, msg];
+    }
+    const id = RED.util.generateId();
+    const out = rows.map((row, index) => {
+      const values = row.split(';').map((v) => v.trim());
+      const get = (name) => values[names.indexOf(name)] || '';
+      return {
+        req: msg.req,
+        res: msg.res,
+        line: index + 2,
+        payload: { sku: get('sku'), amount: get('menge'), unit: get('einheit'), barcode: get('tu'), typeCode: get('tu_typ'), location: get('platz'), lot: get('charge'), bestBefore: get('mhd') },
+        parts: { id, type: 'array', len: 1, index, count: rows.length },
+      };
+    });
+    return [out, null];
+  }, [['f700000000000003'], ['f700000000000007']], 360, 80, 2),
+);
+add({
+  id: 'f700000000000003',
+  type: 'wms-receive',
+  z: TAB_CSV,
+  name: 'Wareneingang (blind)',
+  server: WMS,
+  mode: 'blind',
+  sku: 'msg.payload.sku',
+  amount: 'msg.payload.amount',
+  unit: 'msg.payload.unit',
+  unitBarcode: 'msg.payload.barcode',
+  typeCode: 'msg.payload.typeCode',
+  locationKind: 'erpCode',
+  location: 'msg.payload.location',
+  lot: 'msg.payload.lot',
+  bestBefore: 'msg.payload.bestBefore',
+  errorOutput: true,
+  outputs: 2,
+  x: 570,
+  y: 80,
+  wires: [['f700000000000004'], ['f700000000000004']],
+});
+add(
+  fn('f700000000000004', TAB_CSV, 'Ergebnis der Zeile', function () {
+    msg.payload = msg.wmsError
+      ? { line: msg.line, ok: false, code: msg.wmsError.code, message: msg.wmsError.message }
+      : { line: msg.line, ok: true, barcode: msg.payload.barcode, onHand: msg.payload.onHand };
+    return msg;
+  }, [['f700000000000005']], 780, 80),
+);
+add({ id: 'f700000000000005', type: 'join', z: TAB_CSV, name: 'alle Zeilen', mode: 'auto', build: 'array', property: 'payload', propertyType: 'msg', key: 'topic', joiner: '\\n', joinerType: 'str', accumulate: false, timeout: '', count: '', reduceRight: false, x: 970, y: 80, wires: [['f700000000000006']] });
+add(
+  fn('f700000000000006', TAB_CSV, 'Zusammenfassen', function () {
+    const results = [...msg.payload].sort((a, b) => a.line - b.line);
+    msg.statusCode = 200;
+    msg.payload = { ok: results.filter((r) => r.ok).length, failed: results.filter((r) => !r.ok).length, results };
+    return msg;
+  }, [['f700000000000007']], 1150, 80),
+);
+add(response('f700000000000007', TAB_CSV, 1330, 80));
+
+// --- Beispiel: Scan → TU bewegen -----------------------------------------------
+const TAB_SCAN = 'f000000000000008';
+add({
+  id: TAB_SCAN,
+  type: 'tab',
+  label: 'Beispiel: Scan → TU bewegen',
+  disabled: false,
+  info:
+    'Ein Scanner meldet „TU auf Platz abgestellt“ (`POST /examples/scan` mit `{ barcode, location }`, Platz als ERP-Code). ' +
+    'Der Node „TU bewegen“ bucht geprüft; verletzt das eine Regel (Platz voll, gesperrt …), fängt der Catch-Node den Fehler ' +
+    'und antwortet mit HTTP 409 und dem Fehlercode – so sieht der Scanner den Grund.',
+});
+add({ id: 'f800000000000001', type: 'http in', z: TAB_SCAN, name: 'POST /examples/scan', url: '/examples/scan', method: 'post', upload: false, swaggerDoc: '', x: 150, y: 80, wires: [['f800000000000002']] });
+add({ id: 'f800000000000002', type: 'wms-move-tu', z: TAB_SCAN, name: 'TU bewegen', server: WMS, barcode: 'msg.payload.barcode', locationKind: 'erpCode', location: 'msg.payload.location', mode: 'checked', errorOutput: false, outputs: 1, x: 360, y: 80, wires: [['f800000000000003']] });
+add(
+  fn('f800000000000003', TAB_SCAN, 'Quittung', function () {
+    msg.statusCode = 200;
+    msg.payload = { ok: true, barcode: msg.payload.unit.barcode, location: msg.payload.unit.location };
+    return msg;
+  }, [['f800000000000006']], 560, 80),
+);
+add({ id: 'f800000000000004', type: 'catch', z: TAB_SCAN, name: 'Regelverletzung', scope: ['f800000000000002'], uncaught: false, x: 360, y: 160, wires: [['f800000000000005']] });
+add(
+  fn('f800000000000005', TAB_SCAN, 'Ablehnung', function () {
+    const e = msg.wmsError || { code: 'UNKNOWN', message: String(msg.error && msg.error.message) };
+    msg.statusCode = e.statusCode >= 400 ? e.statusCode : 422;
+    msg.payload = { ok: false, code: e.code, message: e.message, details: e.details };
+    return msg;
+  }, [['f800000000000006']], 560, 160),
+);
+add(response('f800000000000006', TAB_SCAN, 760, 120));
+
+// --- Beispiel: Ereignis → Meldung ----------------------------------------------
+const TAB_NOTICE = 'f000000000000009';
+add({
+  id: TAB_NOTICE,
+  type: 'tab',
+  label: 'Beispiel: Ereignis → Meldung',
+  disabled: false,
+  info: 'Formuliert aus WMS-Ereignissen lesbare Meldungen (z. B. für ein Etikett, eine Leitstand-Anzeige oder einen Chat-Kanal). Ausgabe hier im Debug-Fenster.',
+});
+add({ id: 'f900000000000001', type: 'wms-event', z: TAB_NOTICE, name: 'Abgang, Auftragszustand, keine Route', server: WMS, types: 'stock.issued, outbound-order.state-changed, flow.no-route', conditions: [], x: 200, y: 80, wires: [['f900000000000002']] });
+add(
+  fn('f900000000000002', TAB_NOTICE, 'Meldung formulieren', function () {
+    const e = msg.payload;
+    const p = e.payload;
+    const text =
+      e.type === 'stock.issued'
+        ? `Abgang ${p.quantity.amount} ${p.quantity.unit} ${p.sku} von ${p.barcode} (${p.reference}), Rest ${p.onHand.amount}`
+        : e.type === 'outbound-order.state-changed'
+          ? `Auslagerauftrag ${p.orderId}: ${p.before} → ${p.state}`
+          : `Keine Route für ${p.barcode} (Auftrag ${p.orderNumber}) an ${p.location.locationId}`;
+    msg.payload = { at: e.occurredAt, type: e.type, text };
+    return msg;
+  }, [['f900000000000003']], 460, 80),
+);
+add({ id: 'f900000000000003', type: 'debug', z: TAB_NOTICE, name: 'Meldung', active: true, tosidebar: true, console: false, tostatus: true, complete: 'payload.text', targetType: 'msg', statusVal: 'payload.text', statusType: 'msg', x: 680, y: 80, wires: [] });
+
+// --- Szenario mit Test-Nodes: nodes-selftest -------------------------------------
+const TAB_SELF = 'f000000000000010';
+add({
+  id: TAB_SELF,
+  type: 'tab',
+  label: 'Szenario: nodes-selftest',
+  disabled: false,
+  info:
+    'Szenario aus den WMS-Test-Nodes statt einer Schrittliste: Gruppe anlegen (WMS-API), Status prüfen, auf das Ereignis ' +
+    '`location-group.created` warten, Gruppe löschen, Ergebnis an das Testframework zurückgeben.',
+});
+add({ id: 'fa00000000000001', type: 'link in', z: TAB_SELF, name: 'scenario:nodes-selftest', links: [], x: 120, y: 80, wires: [['fa00000000000002']] });
+add({ id: 'fa00000000000002', type: 'wms-test-start', z: TAB_SELF, name: 'nodes-selftest', x: 290, y: 80, wires: [['fa00000000000003']] });
+add(
+  fn('fa00000000000003', TAB_SELF, 'Gruppe vorbereiten', function () {
+    msg.groupName = `NR-${String(msg.test.runId).replace(/[^a-z0-9]/gi, '').slice(-8).toUpperCase()}`;
+    msg.method = 'POST';
+    msg.path = '/v1/location-groups';
+    msg.payload = { name: msg.groupName, description: 'Selbsttest der WMS-Nodes' };
+    return msg;
+  }, [['fa00000000000004']], 480, 80),
+);
+add({ id: 'fa00000000000004', type: 'wms-api', z: TAB_SELF, name: 'Gruppe anlegen', server: WMS, method: 'POST', path: '/v1/location-groups', body: 'msg.payload', errorOutput: true, outputs: 2, x: 680, y: 80, wires: [['fa00000000000005'], ['fa00000000000010']] });
+add({ id: 'fa00000000000005', type: 'wms-assert', z: TAB_SELF, name: 'HTTP 201, Name stimmt', checks: [{ path: 'statusCode', op: 'eq', value: '201' }, { path: 'payload.name', op: 'eq', value: 'msg.groupName' }], x: 890, y: 80, wires: [['fa00000000000006'], ['fa00000000000010']] });
+add({ id: 'fa00000000000006', type: 'wms-wait-event', z: TAB_SELF, name: 'Ereignis location-group.created', server: WMS, types: 'location-group.created', conditions: [{ path: 'payload.name', value: 'msg.groupName' }], timeout: 10000, lookbackMs: 5000, x: 300, y: 180, wires: [['fa00000000000007'], ['fa00000000000007']] });
+add(
+  fn('fa00000000000007', TAB_SELF, 'Löschen vorbereiten', function () {
+    msg.method = 'DELETE';
+    msg.path = '/v1/location-groups/{name}';
+    msg.params = { name: msg.groupName };
+    return msg;
+  }, [['fa00000000000008']], 520, 180),
+);
+add({ id: 'fa00000000000008', type: 'wms-api', z: TAB_SELF, name: 'Gruppe löschen', server: WMS, method: 'DELETE', path: '/v1/location-groups/{name}', body: '', errorOutput: true, outputs: 2, x: 710, y: 180, wires: [['fa00000000000009'], ['fa00000000000010']] });
+add({ id: 'fa00000000000009', type: 'wms-assert', z: TAB_SELF, name: 'HTTP 204', checks: [{ path: 'statusCode', op: 'eq', value: '204' }], x: 890, y: 180, wires: [['fa00000000000010'], ['fa00000000000010']] });
+add({ id: 'fa00000000000010', type: 'wms-test-result', z: TAB_SELF, name: 'Ergebnis', x: 1080, y: 130, wires: [['fa00000000000011']] });
+add({ id: 'fa00000000000011', type: 'link out', z: TAB_SELF, name: 'Ergebnis zurück', mode: 'return', links: [], x: 1240, y: 130, wires: [] });
 
 // Syntaxprüfung aller Funktions-Nodes: Fehler fallen beim Erzeugen auf, nicht erst in Node-RED.
 const SANDBOX = ['msg', 'node', 'context', 'flow', 'global', 'env', 'RED'];

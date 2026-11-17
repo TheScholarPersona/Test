@@ -1,0 +1,37 @@
+{
+  "name": "@wms/node-red-nodes",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Node-RED-Nodes für das WMS: Verbindung, fachliche Nodes, Ereignisse und Test-Nodes",
+  "license": "UNLICENSED",
+  "type": "commonjs",
+  "keywords": ["node-red"],
+  "engines": {
+    "node": ">=22.9"
+  },
+  "node-red": {
+    "version": ">=4.0.0",
+    "nodes": {
+      "wms-config": "nodes/wms-config.js",
+      "wms-api": "nodes/wms-api.js",
+      "wms-move-tu": "nodes/wms-move-tu.js",
+      "wms-receive": "nodes/wms-receive.js",
+      "wms-device-event": "nodes/wms-device-event.js",
+      "wms-event": "nodes/wms-event.js",
+      "wms-wait-event": "nodes/wms-wait-event.js",
+      "wms-test-start": "nodes/wms-test-start.js",
+      "wms-assert": "nodes/wms-assert.js",
+      "wms-test-result": "nodes/wms-test-result.js"
+    }
+  },
+  "files": ["lib", "nodes", "examples"],
+  "scripts": {
+    "typecheck": "node --check lib/*.js && for f in nodes/*.js; do node --check \"$f\" || exit 1; done",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "node-red": "5.0.9",
+    "node-red-node-test-helper": "0.3.6",
+    "vitest": "5.1.0"
+  }
+}

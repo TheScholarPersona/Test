@@ -42,7 +42,7 @@
     "outputs": 0,
     "timeout": 0,
     "noerr": 0,
-    "initialize": "    // Jedes Szenario: id = Name des link-in-Nodes ohne Präfix \"scenario:\".\n    global.set('scenarioCatalog', [\n      {\n        id: 'system-ping',\n        description: 'API erzeugt ein system.ping-Event; es kommt über Outbox und MQTT in Node-RED an.',\n      },\n    ]);\n",
+    "initialize": "    // Jedes Szenario: id = Name des link-in-Nodes ohne Präfix \"scenario:\".\n    global.set('scenarioCatalog', [\n      {\n        id: 'system-ping',\n        description: 'API erzeugt ein system.ping-Event; es kommt über Outbox und MQTT in Node-RED an.',\n      },\n      {\n        id: 'nodes-selftest',\n        description: 'Szenario aus WMS-Test-Nodes: Gruppe über WMS-API anlegen, prüfen, auf Ereignis warten, löschen.',\n      },\n    ]);\n",
     "finalize": "",
     "libs": [],
     "x": 200,
@@ -364,7 +364,7 @@
     "type": "function",
     "z": "f000000000000004",
     "name": "Nächster Schritt",
-    "func": "    const s = msg.scenario;\n    const def = (global.get('stepScenarios') || {})[s.id];\n    const fail = (name, detail) => {\n      s.steps.push({ name, passed: false, detail });\n      if (!s.failed) {\n        s.failed = true;\n        s.error = `${name}: ${detail}`;\n      }\n    };\n    if (!def) {\n      fail('Szenario laden', `Szenario [${s.id}] ist nicht definiert`);\n      s.passed = false;\n      return [null, null, msg];\n    }\n    if (s.vars === undefined) {\n      s.vars = def.init ? def.init(s.runId) : {};\n      s.idx = 0;\n      s.failed = false;\n    }\n    for (;;) {\n      // Nach einem Fehler nur noch Aufräumschritte ausführen.\n      while (s.idx < def.steps.length && s.failed && !def.steps[s.idx].cleanup) {\n        s.idx++;\n      }\n      if (s.idx >= def.steps.length) {\n        s.passed = !s.failed && s.steps.every((step) => step.passed === true);\n        return [null, null, msg];\n      }\n      const step = def.steps[s.idx];\n      if (step.event) {\n        return [null, msg, null];\n      }\n      try {\n        const request = step.request(s.vars);\n        if (request === null) {\n          // Schritt bewusst übersprungen, z. B. Aufräumen eines nie angelegten Objekts.\n          s.steps.push({ name: step.name, passed: true, detail: 'übersprungen' });\n          s.idx++;\n          continue;\n        }\n        msg.method = request.method;\n        // service: 'simulator' spricht die Endpunkte des Anlagensimulators in diesem Node-RED an.\n        const base = request.service === 'simulator' ? `http://127.0.0.1:${env.get('PORT') || 1880}` : env.get('WMS_API_URL');\n        msg.url = `${base}${request.path}`;\n        msg.headers = { 'content-type': 'application/json' };\n        msg.payload = request.body === undefined ? '' : request.body;\n        return [msg, null, null];\n      } catch (error) {\n        fail(step.name, `Anfrage konnte nicht erstellt werden: ${error.message}`);\n        s.idx++;\n      }\n    }\n",
+    "func": "    const s = msg.scenario;\n    const def = (global.get('stepScenarios') || {})[s.id];\n    const fail = (name, detail) => {\n      s.steps.push({ name, passed: false, detail });\n      if (!s.failed) {\n        s.failed = true;\n        s.error = `${name}: ${detail}`;\n      }\n    };\n    if (!def) {\n      fail('Szenario laden', `Szenario [${s.id}] ist nicht definiert`);\n      s.passed = false;\n      return [null, null, msg];\n    }\n    if (s.vars === undefined) {\n      s.vars = def.init ? def.init(s.runId) : {};\n      s.idx = 0;\n      s.failed = false;\n    }\n    for (;;) {\n      // Nach einem Fehler nur noch Aufräumschritte ausführen.\n      while (s.idx < def.steps.length && s.failed && !def.steps[s.idx].cleanup) {\n        s.idx++;\n      }\n      if (s.idx >= def.steps.length) {\n        s.passed = !s.failed && s.steps.every((step) => step.passed === true);\n        return [null, null, msg];\n      }\n      const step = def.steps[s.idx];\n      if (step.event) {\n        return [null, msg, null];\n      }\n      try {\n        const request = step.request(s.vars);\n        if (request === null) {\n          // Schritt bewusst übersprungen, z. B. Aufräumen eines nie angelegten Objekts.\n          s.steps.push({ name: step.name, passed: true, detail: 'übersprungen' });\n          s.idx++;\n          continue;\n        }\n        msg.method = request.method;\n        // service 'node-red' (bzw. 'simulator') spricht Endpunkte dieses Node-RED an (Simulator, Beispiel-Flows).\n        const local = request.service === 'simulator' || request.service === 'node-red';\n        const base = local ? `http://127.0.0.1:${env.get('PORT') || 1880}` : env.get('WMS_API_URL');\n        msg.url = `${base}${request.path}`;\n        msg.headers = Object.assign({ 'content-type': 'application/json' }, request.headers || {});\n        msg.payload = request.body === undefined ? '' : request.body;\n        return [msg, null, null];\n      } catch (error) {\n        fail(step.name, `Anfrage konnte nicht erstellt werden: ${error.message}`);\n        s.idx++;\n      }\n    }\n",
     "outputs": 3,
     "timeout": 0,
     "noerr": 0,
@@ -583,15 +583,15 @@
   {
     "id": "f504000000000000",
     "type": "tab",
-    "label": "Szenario: outbound-flow",
+    "label": "Szenario: node-red-examples",
     "disabled": false,
-    "info": "Schrittliste aus flows/scenarios/outbound-flow.js; ausgeführt vom Tab „Schritt-Engine“."
+    "info": "Schrittliste aus flows/scenarios/node-red-examples.js; ausgeführt vom Tab „Schritt-Engine“."
   },
   {
     "id": "f504000000000001",
     "type": "comment",
     "z": "f504000000000000",
-    "name": "Definition: flows/scenarios/outbound-flow.js (im Repository bearbeiten, dann Flows neu erzeugen)",
+    "name": "Definition: flows/scenarios/node-red-examples.js (im Repository bearbeiten, dann Flows neu erzeugen)",
     "info": "",
     "x": 380,
     "y": 40,
@@ -601,6 +601,39 @@
     "id": "f504000000000002",
     "type": "function",
     "z": "f504000000000000",
+    "name": "Szenario node-red-examples anmelden",
+    "func": "return msg;\n",
+    "outputs": 0,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "const registerScenario = (definition) => {\n  const all = global.get('stepScenarios') || {};\n  all[definition.id] = definition;\n  global.set('stepScenarios', all);\n};\n/**\n * Szenario: Beispiel-Flows mit den WMS-Nodes.\n *\n * ERP-CSV → Wareneingang: zwei gültige Zeilen werden erfasst, eine Zeile mit\n * unbekanntem Produkt wird mit Fehlercode gemeldet (die anderen laufen weiter).\n * Scan → TU bewegen: erster Scan bucht, zweiter auf den vollen Platz wird\n * abgelehnt – die Regelverletzung kommt als Fehler im Flow an und wird dem\n * Scanner als HTTP 409 mit Code beantwortet.\n * Schrittformat: siehe flows/scenarios/layout-locks.js; `service: 'node-red'` ruft Endpunkte dieses Node-RED.\n */\nregisterScenario({\n  id: 'node-red-examples',\n  description: 'Beispiel-Flows: ERP-CSV → Wareneingang (mit Fehlerzeile), Scan → TU bewegen (Regelverletzung als 409).',\n  init: (runId) => {\n    const s = runId.replace(/[^a-z0-9]/gi, '').slice(-8).toUpperCase();\n    return {\n      locationType: `SN-${s}`,\n      group: `SN-${s}-G`,\n      unitType: `SN-${s}`,\n      sku: `SN-${s}-ART`,\n      erp: { we: `SN-${s}-WE`, a: `SN-${s}-A` },\n      coords: { we: `N${s}/0001/0001/0001/0000`, a: `N${s}/0002/0001/0001/0000` },\n      loc: {},\n      tu: { t1: `SN-${s}-T1`, t2: `SN-${s}-T2` },\n    };\n  },\n  steps: [\n    { name: 'Platztyp anlegen', request: (v) => ({ method: 'POST', path: '/v1/location-types', body: { code: v.locationType } }), expectStatus: 201 },\n    { name: 'Gruppe anlegen', request: (v) => ({ method: 'POST', path: '/v1/location-groups', body: { name: v.group } }), expectStatus: 201 },\n    ...[\n      ['we', 10],\n      ['a', 1],\n    ].map(([key, max]) => ({\n      name: `Platz ${key} anlegen (${max} TU)`,\n      request: (v) => ({ method: 'POST', path: '/v1/locations', body: { locationId: v.coords[key], erpCode: v.erp[key], typeCode: v.locationType, groupName: v.group, maxTransportUnits: max } }),\n      expectStatus: 201,\n      save: (body, v) => {\n        v.loc[key] = body.id;\n      },\n    })),\n    { name: 'TU-Typ anlegen', request: (v) => ({ method: 'POST', path: '/v1/transport-unit-types', body: { code: v.unitType } }), expectStatus: 201 },\n    { name: 'Produkt anlegen', request: (v) => ({ method: 'POST', path: '/v1/products', body: { sku: v.sku, baseUnit: 'PCS' } }), expectStatus: 201 },\n    {\n      name: 'ERP-CSV mit drei Zeilen (eine mit unbekanntem Produkt) senden',\n      request: (v) => ({\n        service: 'node-red',\n        method: 'POST',\n        path: '/examples/erp-receipts',\n        headers: { 'content-type': 'text/csv' },\n        body: [\n          'sku;menge;einheit;tu;tu_typ;platz;charge;mhd',\n          `${v.sku};10;PCS;${v.tu.t1};${v.unitType};${v.erp.we};L1;`,\n          `${v.sku};5;PCS;${v.tu.t2};${v.unitType};${v.erp.we};;`,\n          `UNBEKANNT-${v.sku};1;PCS;;${v.unitType};${v.erp.we};;`,\n        ].join('\\n'),\n      }),\n      expectStatus: 200,\n      check: (body) => {\n        const failed = (body.results || []).filter((r) => !r.ok);\n        return body.ok === 2 && body.failed === 1 && failed[0].line === 4 && failed[0].code === 'PRODUCT_NOT_FOUND' ? null : `Unerwartet: ${JSON.stringify(body)}`;\n      },\n    },\n    { name: 'Event stock.received für die erste Zeile', event: (e, v) => e.type === 'stock.received' && e.payload.barcode === v.tu.t1 && e.payload.lot === 'L1' },\n    {\n      name: 'Bestand: 15 PCS auf zwei TUs',\n      request: (v) => ({ method: 'GET', path: `/v1/stock/summary?sku=${v.sku}` }),\n      expectStatus: 200,\n      check: (body) => (body.items[0] && body.items[0].onHand.amount === '15' && body.items[0].units === 2 ? null : `Unerwartet: ${JSON.stringify(body.items)}`),\n    },\n    {\n      name: 'Scan: TU 1 auf Platz A',\n      request: (v) => ({ service: 'node-red', method: 'POST', path: '/examples/scan', body: { barcode: v.tu.t1, location: v.erp.a } }),\n      expectStatus: 200,\n      check: (body, v) => (body.ok === true && body.location.erpCode === v.erp.a ? null : `Unerwartet: ${JSON.stringify(body)}`),\n    },\n    {\n      name: 'Scan: TU 2 auf den vollen Platz A wird abgelehnt (Fehler im Flow → 409)',\n      request: (v) => ({ service: 'node-red', method: 'POST', path: '/examples/scan', body: { barcode: v.tu.t2, location: v.erp.a } }),\n      expectStatus: 409,\n      check: (body) => (body.ok === false && body.code === 'PLACEMENT_REJECTED' ? null : `Unerwartet: ${JSON.stringify(body)}`),\n    },\n    ...['t1', 't2'].map((t) => ({\n      name: `Aufräumen: Bestand auf TU ${t} lesen`,\n      cleanup: true,\n      request: (v) => ({ method: 'GET', path: `/v1/stock?barcode=${v.tu[t]}` }),\n      save: (body, v) => {\n        v[`rest_${t}`] = (body.items || [])[0] || null;\n      },\n    })),\n    ...['t1', 't2'].map((t) => ({\n      name: `Aufräumen: Bestand auf TU ${t} ausbuchen`,\n      cleanup: true,\n      request: (v) => {\n        const rest = v[`rest_${t}`];\n        return rest ? { method: 'POST', path: `/v1/stock/${rest.id}/corrections`, body: { delta: { amount: `-${rest.quantity.amount}`, unit: 'PCS' }, reason: 'Aufräumen' } } : null;\n      },\n    })),\n    ...['t1', 't2'].map((t) => ({ name: `Aufräumen: TU ${t} löschen`, cleanup: true, request: (v) => ({ method: 'DELETE', path: `/v1/transport-units/${v.tu[t]}` }) })),\n    ...['we', 'a'].map((key) => ({\n      name: `Aufräumen: Platz ${key} löschen`,\n      cleanup: true,\n      request: (v) => (v.loc[key] ? { method: 'DELETE', path: `/v1/locations/${v.loc[key]}` } : null),\n      expectStatus: 204,\n    })),\n    { name: 'Aufräumen: Gruppe löschen', cleanup: true, request: (v) => ({ method: 'DELETE', path: `/v1/location-groups/${v.group}` }), expectStatus: 204 },\n    { name: 'Aufräumen: TU-Typ löschen', cleanup: true, request: (v) => ({ method: 'DELETE', path: `/v1/transport-unit-types/${v.unitType}` }), expectStatus: 204 },\n    { name: 'Aufräumen: Platztyp löschen', cleanup: true, request: (v) => ({ method: 'DELETE', path: `/v1/location-types/${v.locationType}` }), expectStatus: 204 },\n  ],\n});\n",
+    "finalize": "",
+    "libs": [],
+    "x": 200,
+    "y": 100,
+    "wires": []
+  },
+  {
+    "id": "f505000000000000",
+    "type": "tab",
+    "label": "Szenario: outbound-flow",
+    "disabled": false,
+    "info": "Schrittliste aus flows/scenarios/outbound-flow.js; ausgeführt vom Tab „Schritt-Engine“."
+  },
+  {
+    "id": "f505000000000001",
+    "type": "comment",
+    "z": "f505000000000000",
+    "name": "Definition: flows/scenarios/outbound-flow.js (im Repository bearbeiten, dann Flows neu erzeugen)",
+    "info": "",
+    "x": 380,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "f505000000000002",
+    "type": "function",
+    "z": "f505000000000000",
     "name": "Szenario outbound-flow anmelden",
     "func": "return msg;\n",
     "outputs": 0,
@@ -614,16 +647,16 @@
     "wires": []
   },
   {
-    "id": "f505000000000000",
+    "id": "f506000000000000",
     "type": "tab",
     "label": "Szenario: putaway-strategy",
     "disabled": false,
     "info": "Schrittliste aus flows/scenarios/putaway-strategy.js; ausgeführt vom Tab „Schritt-Engine“."
   },
   {
-    "id": "f505000000000001",
+    "id": "f506000000000001",
     "type": "comment",
-    "z": "f505000000000000",
+    "z": "f506000000000000",
     "name": "Definition: flows/scenarios/putaway-strategy.js (im Repository bearbeiten, dann Flows neu erzeugen)",
     "info": "",
     "x": 380,
@@ -631,9 +664,9 @@
     "wires": []
   },
   {
-    "id": "f505000000000002",
+    "id": "f506000000000002",
     "type": "function",
-    "z": "f505000000000000",
+    "z": "f506000000000000",
     "name": "Szenario putaway-strategy anmelden",
     "func": "return msg;\n",
     "outputs": 0,
@@ -647,16 +680,16 @@
     "wires": []
   },
   {
-    "id": "f506000000000000",
+    "id": "f507000000000000",
     "type": "tab",
     "label": "Szenario: receiving-flow",
     "disabled": false,
     "info": "Schrittliste aus flows/scenarios/receiving-flow.js; ausgeführt vom Tab „Schritt-Engine“."
   },
   {
-    "id": "f506000000000001",
+    "id": "f507000000000001",
     "type": "comment",
-    "z": "f506000000000000",
+    "z": "f507000000000000",
     "name": "Definition: flows/scenarios/receiving-flow.js (im Repository bearbeiten, dann Flows neu erzeugen)",
     "info": "",
     "x": 380,
@@ -664,9 +697,9 @@
     "wires": []
   },
   {
-    "id": "f506000000000002",
+    "id": "f507000000000002",
     "type": "function",
-    "z": "f506000000000000",
+    "z": "f507000000000000",
     "name": "Szenario receiving-flow anmelden",
     "func": "return msg;\n",
     "outputs": 0,
@@ -680,16 +713,16 @@
     "wires": []
   },
   {
-    "id": "f507000000000000",
+    "id": "f508000000000000",
     "type": "tab",
     "label": "Szenario: stock-flow",
     "disabled": false,
     "info": "Schrittliste aus flows/scenarios/stock-flow.js; ausgeführt vom Tab „Schritt-Engine“."
   },
   {
-    "id": "f507000000000001",
+    "id": "f508000000000001",
     "type": "comment",
-    "z": "f507000000000000",
+    "z": "f508000000000000",
     "name": "Definition: flows/scenarios/stock-flow.js (im Repository bearbeiten, dann Flows neu erzeugen)",
     "info": "",
     "x": 380,
@@ -697,9 +730,9 @@
     "wires": []
   },
   {
-    "id": "f507000000000002",
+    "id": "f508000000000002",
     "type": "function",
-    "z": "f507000000000000",
+    "z": "f508000000000000",
     "name": "Szenario stock-flow anmelden",
     "func": "return msg;\n",
     "outputs": 0,
@@ -713,16 +746,16 @@
     "wires": []
   },
   {
-    "id": "f508000000000000",
+    "id": "f509000000000000",
     "type": "tab",
     "label": "Szenario: transport-order-flow",
     "disabled": false,
     "info": "Schrittliste aus flows/scenarios/transport-order-flow.js; ausgeführt vom Tab „Schritt-Engine“."
   },
   {
-    "id": "f508000000000001",
+    "id": "f509000000000001",
     "type": "comment",
-    "z": "f508000000000000",
+    "z": "f509000000000000",
     "name": "Definition: flows/scenarios/transport-order-flow.js (im Repository bearbeiten, dann Flows neu erzeugen)",
     "info": "",
     "x": 380,
@@ -730,9 +763,9 @@
     "wires": []
   },
   {
-    "id": "f508000000000002",
+    "id": "f509000000000002",
     "type": "function",
-    "z": "f508000000000000",
+    "z": "f509000000000000",
     "name": "Szenario transport-order-flow anmelden",
     "func": "return msg;\n",
     "outputs": 0,
@@ -746,16 +779,16 @@
     "wires": []
   },
   {
-    "id": "f509000000000000",
+    "id": "f510000000000000",
     "type": "tab",
     "label": "Szenario: tu-placement",
     "disabled": false,
     "info": "Schrittliste aus flows/scenarios/tu-placement.js; ausgeführt vom Tab „Schritt-Engine“."
   },
   {
-    "id": "f509000000000001",
+    "id": "f510000000000001",
     "type": "comment",
-    "z": "f509000000000000",
+    "z": "f510000000000000",
     "name": "Definition: flows/scenarios/tu-placement.js (im Repository bearbeiten, dann Flows neu erzeugen)",
     "info": "",
     "x": 380,
@@ -763,9 +796,9 @@
     "wires": []
   },
   {
-    "id": "f509000000000002",
+    "id": "f510000000000002",
     "type": "function",
-    "z": "f509000000000000",
+    "z": "f510000000000000",
     "name": "Szenario tu-placement anmelden",
     "func": "return msg;\n",
     "outputs": 0,
@@ -1050,6 +1083,557 @@
     "libs": [],
     "x": 820,
     "y": 80,
+    "wires": []
+  },
+  {
+    "id": "b0000000000000c1",
+    "type": "wms-config",
+    "name": "WMS",
+    "url": "${WMS_API_URL}",
+    "broker": "b0000000000000b1",
+    "prefix": "wms",
+    "timeout": 10000
+  },
+  {
+    "id": "f000000000000007",
+    "type": "tab",
+    "label": "Beispiel: ERP-CSV → Wareneingang",
+    "disabled": false,
+    "info": "Nimmt eine CSV-Datei aus dem ERP entgegen (`POST /examples/erp-receipts`, Content-Type text/csv) und erfasst jede Zeile als Wareneingang ohne Avis.\n\nSpalten (Trennzeichen `;`, erste Zeile Überschrift): `sku;menge;einheit;tu;tu_typ;platz;charge;mhd`.\n\nDie Antwort nennt je Zeile Erfolg oder den fachlichen Fehlercode des WMS."
+  },
+  {
+    "id": "f700000000000001",
+    "type": "http in",
+    "z": "f000000000000007",
+    "name": "POST /examples/erp-receipts",
+    "url": "/examples/erp-receipts",
+    "method": "post",
+    "upload": false,
+    "swaggerDoc": "",
+    "x": 170,
+    "y": 80,
+    "wires": [
+      [
+        "f700000000000002"
+      ]
+    ]
+  },
+  {
+    "id": "f700000000000002",
+    "type": "function",
+    "z": "f000000000000007",
+    "name": "CSV lesen",
+    "func": "    const text = typeof msg.payload === 'string' ? msg.payload : Buffer.isBuffer(msg.payload) ? msg.payload.toString('utf8') : '';\n    const lines = text.split(/\\r?\\n/).map((l) => l.trim()).filter(Boolean);\n    const [header, ...rows] = lines;\n    const names = (header || '').split(';').map((h) => h.trim().toLowerCase());\n    if (!names.includes('sku') || rows.length === 0) {\n      msg.statusCode = 400;\n      msg.payload = { message: 'CSV braucht eine Überschrift mit sku;menge;einheit;tu;tu_typ;platz und mindestens eine Zeile' };\n      return [null, msg];\n    }\n    const id = RED.util.generateId();\n    const out = rows.map((row, index) => {\n      const values = row.split(';').map((v) => v.trim());\n      const get = (name) => values[names.indexOf(name)] || '';\n      return {\n        req: msg.req,\n        res: msg.res,\n        line: index + 2,\n        payload: { sku: get('sku'), amount: get('menge'), unit: get('einheit'), barcode: get('tu'), typeCode: get('tu_typ'), location: get('platz'), lot: get('charge'), bestBefore: get('mhd') },\n        parts: { id, type: 'array', len: 1, index, count: rows.length },\n      };\n    });\n    return [out, null];\n",
+    "outputs": 2,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 360,
+    "y": 80,
+    "wires": [
+      [
+        "f700000000000003"
+      ],
+      [
+        "f700000000000007"
+      ]
+    ]
+  },
+  {
+    "id": "f700000000000003",
+    "type": "wms-receive",
+    "z": "f000000000000007",
+    "name": "Wareneingang (blind)",
+    "server": "b0000000000000c1",
+    "mode": "blind",
+    "sku": "msg.payload.sku",
+    "amount": "msg.payload.amount",
+    "unit": "msg.payload.unit",
+    "unitBarcode": "msg.payload.barcode",
+    "typeCode": "msg.payload.typeCode",
+    "locationKind": "erpCode",
+    "location": "msg.payload.location",
+    "lot": "msg.payload.lot",
+    "bestBefore": "msg.payload.bestBefore",
+    "errorOutput": true,
+    "outputs": 2,
+    "x": 570,
+    "y": 80,
+    "wires": [
+      [
+        "f700000000000004"
+      ],
+      [
+        "f700000000000004"
+      ]
+    ]
+  },
+  {
+    "id": "f700000000000004",
+    "type": "function",
+    "z": "f000000000000007",
+    "name": "Ergebnis der Zeile",
+    "func": "    msg.payload = msg.wmsError\n      ? { line: msg.line, ok: false, code: msg.wmsError.code, message: msg.wmsError.message }\n      : { line: msg.line, ok: true, barcode: msg.payload.barcode, onHand: msg.payload.onHand };\n    return msg;\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 780,
+    "y": 80,
+    "wires": [
+      [
+        "f700000000000005"
+      ]
+    ]
+  },
+  {
+    "id": "f700000000000005",
+    "type": "join",
+    "z": "f000000000000007",
+    "name": "alle Zeilen",
+    "mode": "auto",
+    "build": "array",
+    "property": "payload",
+    "propertyType": "msg",
+    "key": "topic",
+    "joiner": "\\n",
+    "joinerType": "str",
+    "accumulate": false,
+    "timeout": "",
+    "count": "",
+    "reduceRight": false,
+    "x": 970,
+    "y": 80,
+    "wires": [
+      [
+        "f700000000000006"
+      ]
+    ]
+  },
+  {
+    "id": "f700000000000006",
+    "type": "function",
+    "z": "f000000000000007",
+    "name": "Zusammenfassen",
+    "func": "    const results = [...msg.payload].sort((a, b) => a.line - b.line);\n    msg.statusCode = 200;\n    msg.payload = { ok: results.filter((r) => r.ok).length, failed: results.filter((r) => !r.ok).length, results };\n    return msg;\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 1150,
+    "y": 80,
+    "wires": [
+      [
+        "f700000000000007"
+      ]
+    ]
+  },
+  {
+    "id": "f700000000000007",
+    "type": "http response",
+    "z": "f000000000000007",
+    "name": "Antwort",
+    "statusCode": "",
+    "headers": {},
+    "x": 1330,
+    "y": 80,
+    "wires": []
+  },
+  {
+    "id": "f000000000000008",
+    "type": "tab",
+    "label": "Beispiel: Scan → TU bewegen",
+    "disabled": false,
+    "info": "Ein Scanner meldet „TU auf Platz abgestellt“ (`POST /examples/scan` mit `{ barcode, location }`, Platz als ERP-Code). Der Node „TU bewegen“ bucht geprüft; verletzt das eine Regel (Platz voll, gesperrt …), fängt der Catch-Node den Fehler und antwortet mit HTTP 409 und dem Fehlercode – so sieht der Scanner den Grund."
+  },
+  {
+    "id": "f800000000000001",
+    "type": "http in",
+    "z": "f000000000000008",
+    "name": "POST /examples/scan",
+    "url": "/examples/scan",
+    "method": "post",
+    "upload": false,
+    "swaggerDoc": "",
+    "x": 150,
+    "y": 80,
+    "wires": [
+      [
+        "f800000000000002"
+      ]
+    ]
+  },
+  {
+    "id": "f800000000000002",
+    "type": "wms-move-tu",
+    "z": "f000000000000008",
+    "name": "TU bewegen",
+    "server": "b0000000000000c1",
+    "barcode": "msg.payload.barcode",
+    "locationKind": "erpCode",
+    "location": "msg.payload.location",
+    "mode": "checked",
+    "errorOutput": false,
+    "outputs": 1,
+    "x": 360,
+    "y": 80,
+    "wires": [
+      [
+        "f800000000000003"
+      ]
+    ]
+  },
+  {
+    "id": "f800000000000003",
+    "type": "function",
+    "z": "f000000000000008",
+    "name": "Quittung",
+    "func": "    msg.statusCode = 200;\n    msg.payload = { ok: true, barcode: msg.payload.unit.barcode, location: msg.payload.unit.location };\n    return msg;\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 560,
+    "y": 80,
+    "wires": [
+      [
+        "f800000000000006"
+      ]
+    ]
+  },
+  {
+    "id": "f800000000000004",
+    "type": "catch",
+    "z": "f000000000000008",
+    "name": "Regelverletzung",
+    "scope": [
+      "f800000000000002"
+    ],
+    "uncaught": false,
+    "x": 360,
+    "y": 160,
+    "wires": [
+      [
+        "f800000000000005"
+      ]
+    ]
+  },
+  {
+    "id": "f800000000000005",
+    "type": "function",
+    "z": "f000000000000008",
+    "name": "Ablehnung",
+    "func": "    const e = msg.wmsError || { code: 'UNKNOWN', message: String(msg.error && msg.error.message) };\n    msg.statusCode = e.statusCode >= 400 ? e.statusCode : 422;\n    msg.payload = { ok: false, code: e.code, message: e.message, details: e.details };\n    return msg;\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 560,
+    "y": 160,
+    "wires": [
+      [
+        "f800000000000006"
+      ]
+    ]
+  },
+  {
+    "id": "f800000000000006",
+    "type": "http response",
+    "z": "f000000000000008",
+    "name": "Antwort",
+    "statusCode": "",
+    "headers": {},
+    "x": 760,
+    "y": 120,
+    "wires": []
+  },
+  {
+    "id": "f000000000000009",
+    "type": "tab",
+    "label": "Beispiel: Ereignis → Meldung",
+    "disabled": false,
+    "info": "Formuliert aus WMS-Ereignissen lesbare Meldungen (z. B. für ein Etikett, eine Leitstand-Anzeige oder einen Chat-Kanal). Ausgabe hier im Debug-Fenster."
+  },
+  {
+    "id": "f900000000000001",
+    "type": "wms-event",
+    "z": "f000000000000009",
+    "name": "Abgang, Auftragszustand, keine Route",
+    "server": "b0000000000000c1",
+    "types": "stock.issued, outbound-order.state-changed, flow.no-route",
+    "conditions": [],
+    "x": 200,
+    "y": 80,
+    "wires": [
+      [
+        "f900000000000002"
+      ]
+    ]
+  },
+  {
+    "id": "f900000000000002",
+    "type": "function",
+    "z": "f000000000000009",
+    "name": "Meldung formulieren",
+    "func": "    const e = msg.payload;\n    const p = e.payload;\n    const text =\n      e.type === 'stock.issued'\n        ? `Abgang ${p.quantity.amount} ${p.quantity.unit} ${p.sku} von ${p.barcode} (${p.reference}), Rest ${p.onHand.amount}`\n        : e.type === 'outbound-order.state-changed'\n          ? `Auslagerauftrag ${p.orderId}: ${p.before} → ${p.state}`\n          : `Keine Route für ${p.barcode} (Auftrag ${p.orderNumber}) an ${p.location.locationId}`;\n    msg.payload = { at: e.occurredAt, type: e.type, text };\n    return msg;\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 460,
+    "y": 80,
+    "wires": [
+      [
+        "f900000000000003"
+      ]
+    ]
+  },
+  {
+    "id": "f900000000000003",
+    "type": "debug",
+    "z": "f000000000000009",
+    "name": "Meldung",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": true,
+    "complete": "payload.text",
+    "targetType": "msg",
+    "statusVal": "payload.text",
+    "statusType": "msg",
+    "x": 680,
+    "y": 80,
+    "wires": []
+  },
+  {
+    "id": "f000000000000010",
+    "type": "tab",
+    "label": "Szenario: nodes-selftest",
+    "disabled": false,
+    "info": "Szenario aus den WMS-Test-Nodes statt einer Schrittliste: Gruppe anlegen (WMS-API), Status prüfen, auf das Ereignis `location-group.created` warten, Gruppe löschen, Ergebnis an das Testframework zurückgeben."
+  },
+  {
+    "id": "fa00000000000001",
+    "type": "link in",
+    "z": "f000000000000010",
+    "name": "scenario:nodes-selftest",
+    "links": [],
+    "x": 120,
+    "y": 80,
+    "wires": [
+      [
+        "fa00000000000002"
+      ]
+    ]
+  },
+  {
+    "id": "fa00000000000002",
+    "type": "wms-test-start",
+    "z": "f000000000000010",
+    "name": "nodes-selftest",
+    "x": 290,
+    "y": 80,
+    "wires": [
+      [
+        "fa00000000000003"
+      ]
+    ]
+  },
+  {
+    "id": "fa00000000000003",
+    "type": "function",
+    "z": "f000000000000010",
+    "name": "Gruppe vorbereiten",
+    "func": "    msg.groupName = `NR-${String(msg.test.runId).replace(/[^a-z0-9]/gi, '').slice(-8).toUpperCase()}`;\n    msg.method = 'POST';\n    msg.path = '/v1/location-groups';\n    msg.payload = { name: msg.groupName, description: 'Selbsttest der WMS-Nodes' };\n    return msg;\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 480,
+    "y": 80,
+    "wires": [
+      [
+        "fa00000000000004"
+      ]
+    ]
+  },
+  {
+    "id": "fa00000000000004",
+    "type": "wms-api",
+    "z": "f000000000000010",
+    "name": "Gruppe anlegen",
+    "server": "b0000000000000c1",
+    "method": "POST",
+    "path": "/v1/location-groups",
+    "body": "msg.payload",
+    "errorOutput": true,
+    "outputs": 2,
+    "x": 680,
+    "y": 80,
+    "wires": [
+      [
+        "fa00000000000005"
+      ],
+      [
+        "fa00000000000010"
+      ]
+    ]
+  },
+  {
+    "id": "fa00000000000005",
+    "type": "wms-assert",
+    "z": "f000000000000010",
+    "name": "HTTP 201, Name stimmt",
+    "checks": [
+      {
+        "path": "statusCode",
+        "op": "eq",
+        "value": "201"
+      },
+      {
+        "path": "payload.name",
+        "op": "eq",
+        "value": "msg.groupName"
+      }
+    ],
+    "x": 890,
+    "y": 80,
+    "wires": [
+      [
+        "fa00000000000006"
+      ],
+      [
+        "fa00000000000010"
+      ]
+    ]
+  },
+  {
+    "id": "fa00000000000006",
+    "type": "wms-wait-event",
+    "z": "f000000000000010",
+    "name": "Ereignis location-group.created",
+    "server": "b0000000000000c1",
+    "types": "location-group.created",
+    "conditions": [
+      {
+        "path": "payload.name",
+        "value": "msg.groupName"
+      }
+    ],
+    "timeout": 10000,
+    "lookbackMs": 5000,
+    "x": 300,
+    "y": 180,
+    "wires": [
+      [
+        "fa00000000000007"
+      ],
+      [
+        "fa00000000000007"
+      ]
+    ]
+  },
+  {
+    "id": "fa00000000000007",
+    "type": "function",
+    "z": "f000000000000010",
+    "name": "Löschen vorbereiten",
+    "func": "    msg.method = 'DELETE';\n    msg.path = '/v1/location-groups/{name}';\n    msg.params = { name: msg.groupName };\n    return msg;\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 520,
+    "y": 180,
+    "wires": [
+      [
+        "fa00000000000008"
+      ]
+    ]
+  },
+  {
+    "id": "fa00000000000008",
+    "type": "wms-api",
+    "z": "f000000000000010",
+    "name": "Gruppe löschen",
+    "server": "b0000000000000c1",
+    "method": "DELETE",
+    "path": "/v1/location-groups/{name}",
+    "body": "",
+    "errorOutput": true,
+    "outputs": 2,
+    "x": 710,
+    "y": 180,
+    "wires": [
+      [
+        "fa00000000000009"
+      ],
+      [
+        "fa00000000000010"
+      ]
+    ]
+  },
+  {
+    "id": "fa00000000000009",
+    "type": "wms-assert",
+    "z": "f000000000000010",
+    "name": "HTTP 204",
+    "checks": [
+      {
+        "path": "statusCode",
+        "op": "eq",
+        "value": "204"
+      }
+    ],
+    "x": 890,
+    "y": 180,
+    "wires": [
+      [
+        "fa00000000000010"
+      ],
+      [
+        "fa00000000000010"
+      ]
+    ]
+  },
+  {
+    "id": "fa00000000000010",
+    "type": "wms-test-result",
+    "z": "f000000000000010",
+    "name": "Ergebnis",
+    "x": 1080,
+    "y": 130,
+    "wires": [
+      [
+        "fa00000000000011"
+      ]
+    ]
+  },
+  {
+    "id": "fa00000000000011",
+    "type": "link out",
+    "z": "f000000000000010",
+    "name": "Ergebnis zurück",
+    "mode": "return",
+    "links": [],
+    "x": 1240,
+    "y": 130,
     "wires": []
   }
 ]

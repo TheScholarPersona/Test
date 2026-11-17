@@ -1,0 +1,35 @@
+<!-- Generiert von scripts/build-html.mjs – dort ändern. -->
+<script type="text/javascript">
+  RED.nodes.registerType('wms-test-result', {
+    category: 'WMS',
+    color: '#C7E9C0',
+    defaults: {
+      "name": {
+            "value": ""
+      }
+    },
+    inputs: 1,
+    outputs: 1,
+    
+    icon: 'debug.svg',
+    paletteLabel: 'Testergebnis',
+    label: function () {
+      return this.name || 'Testergebnis';
+    },
+    oneditprepare: function () {
+    },
+    oneditsave: function () {
+    },
+  });
+</script>
+
+<script type="text/html" data-template-name="wms-test-result">
+    
+    <div class="form-row"><label for="node-input-name">Name</label><input type="text" id="node-input-name"></div>
+</script>
+
+<script type="text/html" data-help-name="wms-test-result">
+<p>Wertet <code>msg.test</code> aus: <code>passed</code> (alle Schritte bestanden) und <code>durationMs</code>. Ein Fehler eines
+WMS-Nodes (<code>msg.wmsError</code>) zählt als fehlgeschlagener Schritt.</p>
+<p>Im Testframework werden Schritte und Ergebnis in <code>msg.scenario</code> übertragen; danach mit einem <code>link out</code> („return“) antworten.</p>
+</script>

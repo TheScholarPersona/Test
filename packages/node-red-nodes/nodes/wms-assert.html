@@ -1,0 +1,61 @@
+<!-- Generiert von scripts/build-html.mjs – dort ändern. -->
+<script type="text/javascript">
+  RED.nodes.registerType('wms-assert', {
+    category: 'WMS',
+    color: '#C7E9C0',
+    defaults: {
+      "name": {
+            "value": ""
+      },
+      "checks": {
+            "value": [
+                  {
+                        "path": "statusCode",
+                        "op": "eq",
+                        "value": "200"
+                  }
+            ]
+      }
+    },
+    inputs: 1,
+    outputs: 2,
+    outputLabels: ["bestanden","nicht bestanden"],
+    icon: 'switch.svg',
+    paletteLabel: 'Prüfen',
+    label: function () {
+      return this.name || 'prüfe ' + ((this.checks || []).map((c) => c.path).join(', ') || '…');
+    },
+    oneditprepare: function () {
+      const list = $('#node-input-checks-list').css('min-height', '120px').editableList({
+        addItem: function (container, i, item) {
+          $('<input type="text" class="col-path" placeholder="payload.state" style="width:38%; margin-right:4px">').val(item.path || '').appendTo(container);
+          $('<select class="col-op" style="width:18%"><option value="eq">eq</option><option value="neq">neq</option><option value="exists">exists</option><option value="notExists">notExists</option><option value="contains">contains</option><option value="gt">gt</option><option value="lt">lt</option><option value="length">length</option></select>').val(item.op || 'eq').appendTo(container);
+          $('<input type="text" class="col-value" placeholder="Wert oder msg.…" style="width:36%; margin-right:4px">').val(item.value || '').appendTo(container);
+        },
+        removable: true,
+        sortable: true,
+      });
+      (this.checks || []).forEach((item) => list.editableList('addItem', item));
+    },
+    oneditsave: function () {
+      const items = [];
+      $('#node-input-checks-list').editableList('items').each(function () {
+        const item = {};
+        item.path = $(this).find('.col-path').val(); item.op = $(this).find('.col-op').val(); item.value = $(this).find('.col-value').val();
+        if (item.path) items.push(item);
+      });
+      this.checks = items;
+    },
+  });
+</script>
+
+<script type="text/html" data-template-name="wms-assert">
+    <div class="form-row node-input-checks-row"><label>Bedingungen</label><ol id="node-input-checks-list"></ol></div>
+    <div class="form-row"><label for="node-input-name">Name</label><input type="text" id="node-input-name"></div>
+</script>
+
+<script type="text/html" data-help-name="wms-assert">
+<p>Prüft Felder der Nachricht, z. B. <code>statusCode</code> eq <code>201</code> oder <code>payload.state</code> eq <code>STARTED</code>.
+Verglichen wird als Text (Dezimalwerte), <code>gt</code>/<code>lt</code> numerisch. Werte dürfen <code>msg.…</code> sein.</p>
+<h3>Ausgaben</h3><ol class="node-ports"><li>bestanden</li><li>nicht bestanden (Schritt mit Abweichung in <code>msg.test.steps</code>)</li></ol>
+</script>
