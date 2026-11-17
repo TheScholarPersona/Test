@@ -56,11 +56,13 @@ test('Transport: Lagerbewegung und Transportauftrag bedienen', async ({ page, fx
 
   const order = await fx.api('POST', '/v1/transport-orders', { barcode, target: { location: { erpCode: w.a } }, autoStart: false });
   fx.onCleanup(() => fx.api('POST', `/v1/transport-orders/${order.number}/cancel`, {}).catch(() => undefined));
-  // Die Seite zeigt nur die Meldung der ersten Aktion (Lagerbewegung) weiter an – deshalb hier den Zustand prüfen.
+  // Nach mehreren Aktionen zeigt die Seite die Meldung der zuletzt ausgeführten.
   await page.getByRole('button', { name: 'Wartende starten' }).click();
+  await expect(page.getByRole('status')).toHaveText('Wartende Aufträge geprüft');
   const toRow = page.getByRole('row', { name: new RegExp(order.number) });
   await expect(toRow).toContainText('STARTED');
   await toRow.getByRole('button', { name: 'Abschließen' }).click();
+  await expect(page.getByRole('status')).toHaveText(`${order.number}: finish ausgeführt`);
   await expect(toRow).toHaveCount(0);
   expect((await fx.api('GET', `/v1/transport-orders/${order.number}`)).state).toBe('FINISHED');
 });

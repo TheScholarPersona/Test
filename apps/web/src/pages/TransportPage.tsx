@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { api, unwrap } from '../api/client';
-import { Feedback } from '../components/Feedback';
+import { Feedback, latest } from '../components/Feedback';
 import { Empty, ErrorMessage, Panel, StateBadge, dateTime } from '../components/ui';
 import { useAction } from '../components/useAction';
 import { useCan } from '../auth/session';
@@ -45,7 +45,7 @@ export function TransportPage() {
     <>
       <h1>Transport</h1>
       <ErrorMessage error={orders.error ?? movements.error} />
-      <Feedback message={toAction.message ?? mvAction.message ?? startPending.message} />
+      <Feedback message={latest(toAction.message, mvAction.message, startPending.message)} />
       <Panel title="Transportaufträge (Anlage, offen)" actions={can('leitstand', 'anlage') && <button className="secondary" onClick={() => startPending.run(undefined)}>Wartende starten</button>}>
         {orders.data?.items.length ? (
           <div className="table-wrap">
