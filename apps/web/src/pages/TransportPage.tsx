@@ -3,11 +3,13 @@ import { api, unwrap } from '../api/client';
 import { Feedback } from '../components/Feedback';
 import { Empty, ErrorMessage, Panel, StateBadge, dateTime } from '../components/ui';
 import { useAction } from '../components/useAction';
+import { useCan } from '../auth/session';
 
 type ToAction = 'start' | 'finish' | 'cancel' | 'resume';
 type MvAction = 'start' | 'complete' | 'cancel';
 
 export function TransportPage() {
+  const can = useCan();
   const orders = useQuery({
     queryKey: ['transport-orders'],
     queryFn: () => unwrap(api.GET('/v1/transport-orders', { params: { query: { state: 'INITIALIZED,STARTED,INTERRUPTED', limit: 200 } } })),
@@ -44,7 +46,7 @@ export function TransportPage() {
       <h1>Transport</h1>
       <ErrorMessage error={orders.error ?? movements.error} />
       <Feedback message={toAction.message ?? mvAction.message ?? startPending.message} />
-      <Panel title="Transportaufträge (Anlage, offen)" actions={<button className="secondary" onClick={() => startPending.run(undefined)}>Wartende starten</button>}>
+      <Panel title="Transportaufträge (Anlage, offen)" actions={can('leitstand', 'anlage') && <button className="secondary" onClick={() => startPending.run(undefined)}>Wartende starten</button>}>
         {orders.data?.items.length ? (
           <div className="table-wrap">
             <table>
@@ -61,7 +63,7 @@ export function TransportPage() {
                     <td className="muted">{o.problem ? `${o.problem.code}: ${o.problem.message}` : '–'}</td>
                     <td className="row">
                       {(['start', 'resume', 'finish', 'cancel'] as const)
-                        .filter((a) => o.allowedActions.includes(a))
+                        .filter((a) => o.allowedActions.includes(a) && can('leitstand', 'anlage'))
                         .map((a) => (
                           <button key={a} className={a === 'cancel' ? 'danger' : 'secondary'} onClick={() => toAction.run({ number: o.number, action: a })}>
                             {{ start: 'Starten', resume: 'Fortsetzen', finish: 'Abschließen', cancel: 'Stornieren' }[a]}
@@ -94,7 +96,7 @@ export function TransportPage() {
                     <td>{dateTime(m.createdAt)}</td>
                     <td className="row">
                       {(['start', 'complete', 'cancel'] as const)
-                        .filter((a) => m.allowedActions.includes(a))
+                        .filter((a) => m.allowedActions.includes(a) && (a === 'cancel' ? can('leitstand') : can('lager', 'leitstand')))
                         .map((a) => (
                           <button key={a} className={a === 'cancel' ? 'danger' : 'secondary'} onClick={() => mvAction.run({ number: m.number, action: a })}>
                             {{ start: 'Beginnen', complete: 'Abschließen', cancel: 'Stornieren' }[a]}

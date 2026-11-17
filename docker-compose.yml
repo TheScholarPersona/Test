@@ -1,7 +1,9 @@
-# Lokale Entwicklungs- und Testumgebung – NICHT für den Betrieb.
-# Die API läuft im Profil "test" (Test-Endpunkte aktiv), Mosquitto und
-# Node-RED ohne Anmeldung.
+# Lokale Entwicklungs- und Testumgebung.
+# Alle Dienste mit Anmeldung, MQTT nur über TLS, Ports nur auf 127.0.0.1.
+# Geheimnisse kommen aus der .env – vorher einmal `pnpm env:init`.
+# Die API läuft im Profil "test" (Test-Endpunkte aktiv, nur für admin).
 #
+#   pnpm env:init     # .env mit Zufallsgeheimnissen anlegen/ergänzen
 #   pnpm stack:up     # bauen und starten, wartet auf Healthchecks
 #   pnpm test:e2e     # Node-RED-Szenarien ausführen
 #   pnpm stack:down   # stoppen und Daten löschen
@@ -17,7 +19,7 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: wms
-      POSTGRES_PASSWORD: wms
+      POSTGRES_PASSWORD: ${WMS_POSTGRES_PASSWORD:?WMS_POSTGRES_PASSWORD fehlt in der .env – pnpm env:init ausführen}
       POSTGRES_DB: wms
     ports:
       - "127.0.0.1:${WMS_POSTGRES_PORT:-5432}:5432"
@@ -29,17 +31,38 @@ services:
       timeout: 3s
       retries: 30
 
+  # Einmalig: lokale Zertifizierungsstelle und Serverzertifikat für MQTT/TLS (Volume certs)
+  certs:
+    image: nodered/node-red:5.0.9
+    user: "0"
+    entrypoint: ["/bin/sh", "/generate.sh"]
+    volumes:
+      - certs:/certs
+      - ./docker/certs/generate.sh:/generate.sh:ro
+    restart: "no"
+
   mosquitto:
     image: eclipse-mosquitto:2
+    command: ["/bin/sh", "/mosquitto/config/start.sh"]
+    environment:
+      MQTT_API_PASSWORD: ${WMS_MQTT_API_PASSWORD:?WMS_MQTT_API_PASSWORD fehlt in der .env – pnpm env:init ausführen}
+      MQTT_NODE_RED_PASSWORD: ${WMS_MQTT_NODE_RED_PASSWORD:?WMS_MQTT_NODE_RED_PASSWORD fehlt in der .env – pnpm env:init ausführen}
+      MQTT_HEALTH_PASSWORD: ${WMS_MQTT_HEALTH_PASSWORD:?WMS_MQTT_HEALTH_PASSWORD fehlt in der .env – pnpm env:init ausführen}
     volumes:
       - ./docker/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./docker/mosquitto/acl:/mosquitto/config/acl:ro
+      - ./docker/mosquitto/start.sh:/mosquitto/config/start.sh:ro
+      - certs:/mosquitto/certs:ro
     ports:
-      - "127.0.0.1:${WMS_MQTT_PORT:-1883}:1883"
+      - "127.0.0.1:${WMS_MQTT_PORT:-8883}:8883"
     healthcheck:
-      test: ["CMD-SHELL", "mosquitto_pub -h localhost -t health/check -m ok -q 0"]
+      test: ["CMD-SHELL", "mosquitto_pub -h localhost -p 8883 --cafile /mosquitto/certs/ca.crt -u health -P \"$$MQTT_HEALTH_PASSWORD\" -t health/check -m ok -q 1"]
       interval: 2s
       timeout: 3s
       retries: 30
+    depends_on:
+      certs:
+        condition: service_completed_successfully
 
   api:
     build:
@@ -48,9 +71,17 @@ services:
     image: wms-api:dev
     environment:
       APP_PROFILE: ${APP_PROFILE:-test}
-      DATABASE_URL: postgresql://wms:wms@postgres:5432/wms
-      MQTT_URL: mqtt://mosquitto:1883
+      DATABASE_URL: postgresql://wms:${WMS_POSTGRES_PASSWORD}@postgres:5432/wms
+      MQTT_URL: mqtts://mosquitto:8883
+      MQTT_USERNAME: wms-api
+      MQTT_PASSWORD: ${WMS_MQTT_API_PASSWORD}
+      MQTT_CA_FILE: /certs/ca.crt
       DB_MIGRATE_ON_START: "true"
+      AUTH_ADMIN_PASSWORD: ${WMS_ADMIN_PASSWORD:?WMS_ADMIN_PASSWORD fehlt in der .env – pnpm env:init ausführen}
+      # Node-RED führt Szenarien aus, die Stammdaten anlegen – deshalb admin. Im Betrieb eine engere Rolle (anlage) wählen.
+      AUTH_SERVICE_TOKENS: node-red:admin:${WMS_NODE_RED_API_TOKEN:?WMS_NODE_RED_API_TOKEN fehlt in der .env – pnpm env:init ausführen}
+    volumes:
+      - certs:/certs:ro
     ports:
       - "127.0.0.1:${WMS_API_PORT:-3000}:3000"
     depends_on:
@@ -64,14 +95,20 @@ services:
     environment:
       TZ: Europe/Berlin
       WMS_API_URL: ${WMS_API_URL:-http://api:3000}
+      WMS_API_TOKEN: ${WMS_NODE_RED_API_TOKEN}
       MQTT_HOST: mosquitto
-      MQTT_PORT: "1883"
+      MQTT_PORT: "8883"
+      MQTT_NODE_RED_PASSWORD: ${WMS_MQTT_NODE_RED_PASSWORD}
+      NODE_RED_ADMIN_PASSWORD: ${WMS_NODE_RED_ADMIN_PASSWORD:?WMS_NODE_RED_ADMIN_PASSWORD fehlt in der .env – pnpm env:init ausführen}
+      NODE_RED_HTTP_PASSWORD: ${WMS_NODE_RED_HTTP_PASSWORD:?WMS_NODE_RED_HTTP_PASSWORD fehlt in der .env – pnpm env:init ausführen}
       SCENARIO_EVENT_TIMEOUT_MS: "10000"
       SIMULATOR_ENABLED: ${SIMULATOR_ENABLED:-true}
     ports:
       - "127.0.0.1:${WMS_NODE_RED_PORT:-1880}:1880"
     volumes:
       - node-red-data:/data
+      - certs:/certs:ro
+      - ./docker/node-red/settings.js:/data/settings.js:ro
       - ./flows/node-red/flows.json:/data/flows.json:ro
       # Eigene WMS-Nodes (packages/node-red-nodes) ohne Entwicklungsabhängigkeiten
       - ./packages/node-red-nodes/package.json:/data/node_modules/@wms/node-red-nodes/package.json:ro
@@ -86,3 +123,4 @@ services:
 volumes:
   postgres-data:
   node-red-data:
+  certs:

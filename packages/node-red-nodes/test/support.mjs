@@ -40,7 +40,7 @@ export async function startApi(routes) {
     req.on('end', () => {
       const body = raw ? JSON.parse(raw) : undefined;
       const key = `${req.method} ${req.url}`;
-      requests.push({ method: req.method, url: req.url, body });
+      requests.push({ method: req.method, url: req.url, body, authorization: req.headers.authorization });
       const route = routes[key];
       const answer = typeof route === 'function' ? route(body) : (route ?? { status: 404, body: { code: 'NOT_FOUND', message: `Keine Route ${key}` } });
       res.writeHead(answer.status, { 'content-type': 'application/json' });

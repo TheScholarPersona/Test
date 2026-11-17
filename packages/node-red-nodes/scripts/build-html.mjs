@@ -30,6 +30,9 @@ function row(f, prefix = 'node-input') {
   if (f.type === 'config') {
     return `<div class="form-row"><label for="${id}">${f.label}</label><input type="text" id="${id}"></div>`;
   }
+  if (f.type === 'password') {
+    return `<div class="form-row"><label for="${id}">${f.label}</label><input type="password" id="${id}" placeholder="${f.placeholder ?? ''}"></div>`;
+  }
   if (f.type === 'list') {
     return `<div class="form-row ${id}-row"><label>${f.label}</label><ol id="${id}-list"></ol></div>`;
   }
@@ -71,7 +74,7 @@ function html(n) {
   RED.nodes.registerType('${n.type}', {
     category: ${n.category ? `'${n.category}'` : "'WMS'"},
     color: '${n.test ? TEST_COLOR : COLOR}',
-    defaults: ${defaults},
+    defaults: ${defaults},${n.credentials ? `\n    credentials: ${JSON.stringify(n.credentials)},` : ''}
     inputs: ${n.inputs},
     outputs: ${n.outputs},
     ${n.outputLabels ? `outputLabels: ${JSON.stringify(n.outputLabels)},` : ''}
@@ -125,16 +128,23 @@ const nodes = [
       broker: { value: '', type: 'mqtt-broker', required: false },
       prefix: { value: 'wms' },
       timeout: { value: 10000 },
+      tokenEnv: { value: 'WMS_API_TOKEN' },
     },
+    credentials: { token: { type: 'password' } },
     fields: [
       { name: 'url', label: 'URL', placeholder: '${WMS_API_URL} oder http://api:3000' },
+      { name: 'token', label: 'API-Token', type: 'password', placeholder: 'leer: aus Umgebungsvariable' },
+      { name: 'tokenEnv', label: 'Token-Variable', placeholder: 'WMS_API_TOKEN' },
       { name: 'broker', label: 'MQTT-Broker', type: 'config' },
       { name: 'prefix', label: 'Topic-Präfix', placeholder: 'wms' },
       { name: 'timeout', label: 'Timeout (ms)', placeholder: '10000' },
     ],
     help: `<p>Verbindung zum WMS: REST-API und (optional) MQTT-Broker für Ereignisse.</p>
 <p>Die URL darf Umgebungsvariablen enthalten, z. B. <code>\${WMS_API_URL}</code>. Ereignisse kommen über den gewählten
-MQTT-Broker unter <code>&lt;Präfix&gt;/#</code>; doppelt gelieferte Ereignisse (gleiche <code>id</code>) werden verworfen.</p>`,
+MQTT-Broker unter <code>&lt;Präfix&gt;/#</code>; doppelt gelieferte Ereignisse (gleiche <code>id</code>) werden verworfen.</p>
+<p>Anmeldung an der API mit einem Service-Token (<code>Authorization: Bearer …</code>): entweder hier als <i>API-Token</i>
+(verschlüsselt in den Credentials) oder – empfohlen – aus der Umgebungsvariable unter <i>Token-Variable</i>
+(Standard <code>WMS_API_TOKEN</code>). Das Token wird in der API über <code>AUTH_SERVICE_TOKENS</code> mit Rollen versehen.</p>`,
   },
   {
     type: 'wms-api',

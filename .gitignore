@@ -18,3 +18,4 @@ flows/node-red/lib/
 apps/web/src/api/schema.d.ts
 apps/web/test-results/
 apps/web/playwright-report/
+apps/web/.auth/

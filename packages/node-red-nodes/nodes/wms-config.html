@@ -21,8 +21,12 @@
       },
       "timeout": {
             "value": 10000
+      },
+      "tokenEnv": {
+            "value": "WMS_API_TOKEN"
       }
     },
+    credentials: {"token":{"type":"password"}},
     inputs: 0,
     outputs: 0,
     
@@ -40,6 +44,8 @@
 
 <script type="text/html" data-template-name="wms-config">
     <div class="form-row"><label for="node-config-input-url">URL</label><input type="text" id="node-config-input-url" placeholder="${WMS_API_URL} oder http://api:3000"></div>
+    <div class="form-row"><label for="node-config-input-token">API-Token</label><input type="password" id="node-config-input-token" placeholder="leer: aus Umgebungsvariable"></div>
+    <div class="form-row"><label for="node-config-input-tokenEnv">Token-Variable</label><input type="text" id="node-config-input-tokenEnv" placeholder="WMS_API_TOKEN"></div>
     <div class="form-row"><label for="node-config-input-broker">MQTT-Broker</label><input type="text" id="node-config-input-broker"></div>
     <div class="form-row"><label for="node-config-input-prefix">Topic-Präfix</label><input type="text" id="node-config-input-prefix" placeholder="wms"></div>
     <div class="form-row"><label for="node-config-input-timeout">Timeout (ms)</label><input type="text" id="node-config-input-timeout" placeholder="10000"></div>
@@ -50,4 +56,7 @@
 <p>Verbindung zum WMS: REST-API und (optional) MQTT-Broker für Ereignisse.</p>
 <p>Die URL darf Umgebungsvariablen enthalten, z. B. <code>${WMS_API_URL}</code>. Ereignisse kommen über den gewählten
 MQTT-Broker unter <code>&lt;Präfix&gt;/#</code>; doppelt gelieferte Ereignisse (gleiche <code>id</code>) werden verworfen.</p>
+<p>Anmeldung an der API mit einem Service-Token (<code>Authorization: Bearer …</code>): entweder hier als <i>API-Token</i>
+(verschlüsselt in den Credentials) oder – empfohlen – aus der Umgebungsvariable unter <i>Token-Variable</i>
+(Standard <code>WMS_API_TOKEN</code>). Das Token wird in der API über <code>AUTH_SERVICE_TOKENS</code> mit Rollen versehen.</p>
 </script>

@@ -22,6 +22,10 @@ type Result<T> = { data?: T; error?: unknown; response: Response };
 /** Antwort entpacken: Daten zurückgeben oder einen `ApiError` werfen. */
 export async function unwrap<T>(request: Promise<Result<T>>): Promise<T> {
   const { data, error, response } = await request;
+  if (response.status === 401) {
+    // Sitzung abgelaufen oder abgemeldet: die Anmeldung reagiert darauf (auth/session.tsx).
+    window.dispatchEvent(new Event('wms:unauthenticated'));
+  }
   if (error !== undefined || !response.ok) {
     const e = (error ?? {}) as { code?: string; message?: string; details?: unknown; issues?: unknown };
     throw new ApiError(response.status, e.code ?? `HTTP_${response.status}`, e.message ?? response.statusText, e.details ?? e.issues);

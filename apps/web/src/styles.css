@@ -104,6 +104,16 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .feed time { color: var(--muted); font-variant-numeric: tabular-nums; }
 .trace { margin: 0; padding-left: 18px; font-size: 0.88rem; }
 
+/* Anmeldung */
+.login { min-height: 100vh; display: grid; place-items: center; padding: 16px; }
+.login form { width: min(380px, 100%); }
+.user { border-top: 1px solid var(--border); padding-top: 10px; margin-top: 8px; font-size: 0.88rem; display: flex; flex-direction: column; gap: 6px; }
+.user .name { font-weight: 600; }
+@media (max-width: 760px) {
+  .user { border-top: 0; margin: 0 0 0 auto; padding: 0; flex-direction: row; align-items: center; }
+  .user .roles { display: none; }
+}
+
 /* Scanner: große Bedienelemente für Handscanner und Handys. */
 .scanner { max-width: 520px; }
 .scanner input, .scanner button, .scanner select { font-size: 1.15rem; padding: 14px; }

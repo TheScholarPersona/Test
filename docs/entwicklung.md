@@ -46,7 +46,8 @@ docker/                    Konfiguration für Hilfsdienste (Mosquitto)
 | `pnpm verify` | Build, Typprüfung, Architekturregeln, Unit-Tests |
 | `pnpm lint:deps` | Architekturregeln (dependency-cruiser, `.dependency-cruiser.cjs`) |
 | `pnpm test:integration` | Integrationstests; braucht Docker |
-| `pnpm stack:up` / `pnpm stack:down` | Umgebung mit API, PostgreSQL, Mosquitto, Node-RED |
+| `pnpm env:init` | `.env` anlegen bzw. ergänzen; leere Passwörter und Tokens werden mit Zufallswerten gefüllt, vorhandene bleiben |
+| `pnpm stack:up` / `pnpm stack:down` | Umgebung mit API, PostgreSQL, Mosquitto, Node-RED (`stack:down` löscht die Daten) |
 | `pnpm demo:data` | Demo-Daten über die API anlegen (Lager, Bestand, Aufträge, Route; wiederholbar) |
 | `pnpm test:web` | Oberfläche im Browser testen (Playwright) gegen die laufende Umgebung |
 | `pnpm web:dev` | Entwicklungsserver der Oberfläche (Vite) gegen die laufende API |
@@ -526,7 +527,7 @@ Palette „WMS“ in Node-RED, siehe auch `packages/node-red-nodes/README.md`:
 
 | Node | Zweck |
 |---|---|
-| `wms-config` | Verbindung: URL (`${WMS_API_URL}`), MQTT-Broker für Ereignisse |
+| `wms-config` | Verbindung: URL (`${WMS_API_URL}`), Service-Token (Standard: Umgebungsvariable `WMS_API_TOKEN`), MQTT-Broker für Ereignisse |
 | `wms-api` | beliebiger Aufruf der API (`/openapi.json`) |
 | `wms-move-tu`, `wms-receive`, `wms-device-event` | TU bewegen, Wareneingang erfassen, Geräte-Ereignis melden |
 | `wms-event` | Ereignisse nach Typ (`stock.*`) und Feldern |
@@ -574,14 +575,54 @@ Szenario `node-red-examples` prüft die Beispiel-Flows; Schritt-Szenarien erreic
 
 **Tests:** `pnpm --filter @wms/web test` (Hilfsfunktionen), `pnpm test:web` (Playwright: Leitstand am Desktop, Scanner im Handyformat; Testdaten mit eigenem Präfix, danach aufgeräumt). Der Test „Auslagerauftrag“ braucht einen aktiven Auslager-Regelsatz und wird sonst übersprungen.
 
-Noch nicht enthalten: Anmeldung und Rollen, Bearbeiten von Stammdaten (Plätze, Produkte, Regelsätze) in der Oberfläche, Druck (Etiketten, Picklisten).
+Die Oberfläche zeigt ohne Sitzung die Anmeldung; Schaltflächen erscheinen nur, wenn die Rolle sie erlaubt (die API prüft trotzdem selbst). Unter **Konto** ändert jeder sein Passwort, unter **Benutzer** (nur admin) werden Benutzer angelegt, Rollen vergeben, gesperrt und Passwörter neu gesetzt. Die Playwright-Tests melden sich einmal als admin an (`WMS_ADMIN_PASSWORD` aus der `.env`).
+
+Noch nicht enthalten: Bearbeiten von Stammdaten (Plätze, Produkte, Regelsätze) in der Oberfläche, Druck (Etiketten, Picklisten).
+
+## Absicherung
+
+Jeder Zugang braucht eine Anmeldung. Alle Geheimnisse stehen in der `.env` (nicht im Repository); `pnpm env:init` erzeugt sie.
+
+| Zugang | Anmeldung | Geheimnis in der `.env` |
+|---|---|---|
+| Oberfläche und API (Menschen) | Benutzer und Passwort → Sitzungs-Cookie `wms_session` (HttpOnly, SameSite=Strict, 12 h) | `WMS_ADMIN_PASSWORD` für den Benutzer `admin` (wird beim ersten Start angelegt) |
+| API (Maschinen) | `Authorization: Bearer <Token>`; Token und Rollen über `AUTH_SERVICE_TOKENS="name:rolle+rolle:token;…"` | `WMS_NODE_RED_API_TOKEN` (Node-RED) |
+| MQTT | nur TLS auf Port 8883, Benutzer und Passwort, Rechte je Topic (`docker/mosquitto/acl`) | `WMS_MQTT_API_PASSWORD`, `WMS_MQTT_NODE_RED_PASSWORD`, `WMS_MQTT_HEALTH_PASSWORD` |
+| Node-RED-Editor | Benutzer `admin` (`docker/node-red/settings.js`) | `WMS_NODE_RED_ADMIN_PASSWORD` |
+| Node-RED-HTTP-Endpunkte (`/test`, `/sim`, `/examples`) | Basic Auth, Benutzer `wms` | `WMS_NODE_RED_HTTP_PASSWORD` |
+| PostgreSQL | Benutzer `wms` | `WMS_POSTGRES_PASSWORD` |
+
+**Rollen** (Rechtetabelle in `apps/api/src/modules/auth/domain/policy.ts`; unbekannte schreibende Endpunkte nur für admin; `admin` darf alles):
+
+| Rolle | Darf |
+|---|---|
+| `admin` | Alles, auch Stammdaten, Regelsätze, Materialfluss-Konfiguration und Benutzer |
+| `leitstand` | Aufträge steuern (Wareneingang, Auslagerung, Transport), Sperren, Korrekturen, Inventur |
+| `lager` | Ausführen am Scanner: TUs bewegen, Ware erfassen, Picks quittieren, Bewegungen bearbeiten |
+| `anlage` | Anlagen und Adapter (Node-RED): Geräte-Ereignisse, Fahrbefehle, Transportaufträge |
+| `lesen` | Nur ansehen |
+
+Ohne Anmeldung erreichbar sind nur `/health`, `/openapi.json`, `/v1/auth/login` und die Dateien der Oberfläche. Nach fünf Fehlversuchen ist ein Benutzer fünf Minuten gesperrt. Ereignisse tragen den Auslöser im Feld `actor` (`user:<name>` bzw. `service:<name>`).
+
+**Zertifikate:** Beim ersten Start erzeugt der Dienst `certs` eine lokale Zertifizierungsstelle und das Serverzertifikat für Mosquitto (Namen `mosquitto`, `localhost`, `127.0.0.1`) im Volume `certs`. Für `mosquitto_sub` vom Rechner aus:
+
+```bash
+docker compose cp mosquitto:/mosquitto/certs/ca.crt ./ca.crt
+mosquitto_sub -h localhost -p 8883 --cafile ca.crt -u wms-api -P "<WMS_MQTT_API_PASSWORD>" -t 'wms/#' -v
+```
+
+**Geheimnisse wechseln:** Wert in der `.env` ändern (oder löschen und `pnpm env:init` ausführen) und `docker compose up -d` – die Dienste übernehmen die Werte beim Neustart. Ausnahme: `WMS_POSTGRES_PASSWORD` gilt nur beim Anlegen der Datenbank; danach `pnpm stack:down` (löscht die Daten) oder das Passwort in PostgreSQL selbst ändern. `WMS_ADMIN_PASSWORD` legt `admin` nur beim ersten Start an; später ändert admin sein Passwort unter **Konto**.
+
+**Umstieg von einer älteren Umgebung (ohne Anmeldung):** `git pull`, `pnpm install`, `pnpm env:init`, `pnpm stack:down`, `pnpm stack:up`.
+
+Für den Betrieb außerhalb des eigenen Rechners zusätzlich: die API hinter einen TLS-Proxy (HTTPS) stellen, `AUTH_COOKIE_SECURE=true`, Profil `production` (keine Test-Endpunkte), für Node-RED ein Token mit Rolle `anlage` statt `admin`, ein Zertifikat einer eigenen oder öffentlichen Zertifizierungsstelle für MQTT.
 
 ## Ports der lokalen Umgebung
 
-Die Compose-Umgebung belegt auf dem Rechner `3000` (API), `1880` (Node-RED), `5432` (PostgreSQL) und `1883` (MQTT), jeweils nur auf `127.0.0.1` (es gibt noch keine Anmeldung). Ist ein Port belegt, z. B. durch eine andere Node-RED-Instanz:
+Die Compose-Umgebung belegt auf dem Rechner `3000` (API), `1880` (Node-RED), `5432` (PostgreSQL) und `8883` (MQTT mit TLS), jeweils nur auf `127.0.0.1`. Ist ein Port belegt, z. B. durch eine andere Node-RED-Instanz, in der `.env` ändern:
 
 ```bash
-cp .env.example .env     # dann z. B. WMS_NODE_RED_PORT=1881 eintragen
+pnpm env:init            # falls noch keine .env – dann z. B. WMS_NODE_RED_PORT=1881 eintragen
 pnpm stack:up
 pnpm test:e2e            # liest dieselbe .env (oder NODE_RED_URL setzen)
 ```
@@ -590,12 +631,15 @@ Innerhalb der Umgebung sprechen die Dienste über ihre Containernamen und festen
 
 ## API außerhalb von Docker gegen die Compose-Umgebung
 
-Zum schnellen Ausprobieren von API-Änderungen ohne Image-Build:
+Zum schnellen Ausprobieren von API-Änderungen ohne Image-Build (Werte aus der `.env`, `ca.crt` wie unter *Absicherung* kopiert):
 
 ```bash
+set -a; . ./.env; set +a
 docker compose up -d --no-deps --wait postgres mosquitto
 (cd apps/api && pnpm build && APP_PROFILE=test DB_MIGRATE_ON_START=true \
-  DATABASE_URL=postgresql://wms:wms@localhost:5432/wms MQTT_URL=mqtt://localhost:1883 node dist/main.js) &
+  DATABASE_URL=postgresql://wms:$WMS_POSTGRES_PASSWORD@localhost:5432/wms MQTT_URL=mqtts://localhost:8883 \
+  MQTT_USERNAME=wms-api MQTT_PASSWORD=$WMS_MQTT_API_PASSWORD MQTT_CA_FILE=$PWD/../../ca.crt \
+  AUTH_ADMIN_PASSWORD=$WMS_ADMIN_PASSWORD AUTH_SERVICE_TOKENS=node-red:admin:$WMS_NODE_RED_API_TOKEN node dist/main.js) &
 WMS_API_URL=http://<Gateway-IP des Compose-Netzes>:3000 docker compose up -d --no-deps --wait node-red
 pnpm test:e2e
 ```
@@ -614,5 +658,5 @@ docker compose up -d --wait --no-build
 ## Noch nicht enthalten
 
 - ESLint (Typprüfung und Architekturregeln laufen bereits)
-- Authentifizierung der API, MQTT-Benutzer und TLS, Node-RED `adminAuth` – vor jedem Betrieb außerhalb der lokalen Umgebung nötig
+- Anmeldung über einen zentralen Identitätsdienst (OIDC/SSO); bisher eigene Benutzer im WMS
 - Aufräumen veröffentlichter Outbox-Einträge (Aufbewahrungsfrist)

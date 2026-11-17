@@ -65,6 +65,19 @@ describe('WMS-Nodes für Node-RED', () => {
       expect(api.requests[0]).toMatchObject({ method: 'POST', url: '/v1/transport-units/P1/move', body: { to: { plcCode: 'CV01' }, mode: 'physical' } });
     });
 
+    it('meldet sich mit dem Service-Token aus der Umgebung an', async () => {
+      process.env.WMS_API_TOKEN = 'token-aus-der-umgebung';
+      try {
+        await load([{ id: 'n', type: 'wms-move-tu', server: 'cfg', barcode: 'P1', locationKind: 'plcCode', location: 'CV01', wires: [['out']] }]);
+        const out = next(helper.getNode('out'));
+        helper.getNode('n').receive({ payload: {} });
+        await out;
+        expect(api.requests[0].authorization).toBe('Bearer token-aus-der-umgebung');
+      } finally {
+        delete process.env.WMS_API_TOKEN;
+      }
+    });
+
     it('meldet fehlende Eingaben verständlich', async () => {
       await load([
         { id: 'n', type: 'wms-move-tu', server: 'cfg', wires: [['out']] },

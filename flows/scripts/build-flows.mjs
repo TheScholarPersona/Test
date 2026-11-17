@@ -33,6 +33,9 @@ const add = (node) => {
 // Konfiguration
 // ---------------------------------------------------------------------------
 const BROKER = 'b0000000000000b1';
+// TLS zum Broker: Zertifizierungsstelle aus dem Volume certs (docker/certs/generate.sh)
+const TLS = 'b0000000000000b2';
+add({ id: TLS, type: 'tls-config', name: 'WMS-CA', cert: '', key: '', ca: '/certs/ca.crt', certname: '', keyname: '', caname: '', servername: '${MQTT_HOST}', verifyservercert: true, alpnprotocol: '' });
 add({
   id: BROKER,
   type: 'mqtt-broker',
@@ -41,7 +44,8 @@ add({
   port: '${MQTT_PORT}',
   clientid: '',
   autoConnect: true,
-  usetls: false,
+  usetls: true,
+  tls: TLS,
   protocolVersion: '4',
   keepalive: '60',
   cleansession: true,
@@ -345,7 +349,7 @@ add({
     s.steps.push({ name: 'Ping-Event über die API anfordern', passed: null });
     msg.url = `${env.get('WMS_API_URL')}/test/events/ping`;
     msg.method = 'POST';
-    msg.headers = { 'content-type': 'application/json' };
+    msg.headers = { 'content-type': 'application/json', authorization: `Bearer ${env.get('WMS_API_TOKEN') || ''}` };
     msg.payload = { message: s.runId, correlationId: s.runId };
     return msg;
   }),
@@ -578,7 +582,11 @@ add({
         const local = request.service === 'simulator' || request.service === 'node-red';
         const base = local ? `http://127.0.0.1:${env.get('PORT') || 1880}` : env.get('WMS_API_URL');
         msg.url = `${base}${request.path}`;
-        msg.headers = Object.assign({ 'content-type': 'application/json' }, request.headers || {});
+        // Anmeldung: Service-Token gegenüber der API, Basic-Auth gegenüber den eigenen HTTP-Endpunkten.
+        const auth = local
+          ? `Basic ${Buffer.from(`wms:${env.get('NODE_RED_HTTP_PASSWORD') || ''}`).toString('base64')}`
+          : `Bearer ${env.get('WMS_API_TOKEN') || ''}`;
+        msg.headers = Object.assign({ 'content-type': 'application/json', authorization: auth }, request.headers || {});
         msg.payload = request.body === undefined ? '' : request.body;
         return [msg, null, null];
       } catch (error) {
@@ -934,7 +942,7 @@ add({
       node.send({
         method: 'POST',
         url: `${env.get('WMS_API_URL')}/v1/flow/events`,
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${env.get('WMS_API_TOKEN') || ''}` },
         payload: body,
         sim: { barcode: c.barcode, to: key, type: body.type, travelMs, commandId: event.id },
       });
@@ -1113,7 +1121,7 @@ add({
     }
     msg.method = 'POST';
     msg.url = `${env.get('WMS_API_URL')}/v1/flow/commands`;
-    msg.headers = { 'content-type': 'application/json' };
+    msg.headers = { 'content-type': 'application/json', authorization: `Bearer ${env.get('WMS_API_TOKEN') || ''}` };
     msg.payload = { barcode: p.barcode, to: { plcCode: p.params.toPlc }, deviceId: p.deviceId || undefined, reason: `node-red:send-to-plc (${p.decisionId})` };
     return msg;
   }),

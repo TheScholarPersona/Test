@@ -14,6 +14,9 @@ module.exports = function (RED) {
     node.url = String(config.url || '').replace(/\/+$/, '');
     node.prefix = config.prefix || 'wms';
     node.timeout = Number(config.timeout) || 10000;
+    // Service-Token: aus den Credentials oder aus der Umgebungsvariable (Standard WMS_API_TOKEN)
+    const tokenEnv = config.tokenEnv === undefined ? 'WMS_API_TOKEN' : config.tokenEnv;
+    const token = () => (node.credentials && node.credentials.token) || (tokenEnv ? process.env[tokenEnv] : '') || '';
     node.brokerConn = config.broker ? RED.nodes.getNode(config.broker) : null;
     const listeners = new Set();
     const seen = [];
@@ -28,7 +31,10 @@ module.exports = function (RED) {
       try {
         response = await fetch(`${node.url}${path}`, {
           method,
-          headers: body === undefined ? {} : { 'content-type': 'application/json' },
+          headers: {
+            ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+            ...(token() ? { authorization: `Bearer ${token()}` } : {}),
+          },
           body: body === undefined ? undefined : JSON.stringify(body),
           signal: controller.signal,
         });
@@ -98,5 +104,5 @@ module.exports = function (RED) {
       }
     });
   }
-  RED.nodes.registerType('wms-config', WmsConfigNode);
+  RED.nodes.registerType('wms-config', WmsConfigNode, { credentials: { token: { type: 'password' } } });
 };

@@ -18,7 +18,8 @@
     "stack:down": "docker compose down -v",
     "demo:data": "node scripts/demo-data.mjs",
     "web:dev": "pnpm --filter @wms/web dev",
-    "test:web": "pnpm --filter @wms/web test:e2e"
+    "test:web": "pnpm --filter @wms/web test:e2e",
+    "env:init": "node scripts/init-env.mjs"
   },
   "devDependencies": {
     "dependency-cruiser": "18.7.2",

@@ -36,11 +36,15 @@ try {
   // keine .env – Standardports
 }
 const baseUrl = (process.env['NODE_RED_URL'] ?? `http://localhost:${process.env['WMS_NODE_RED_PORT'] ?? '1880'}`).replace(/\/$/, '');
+// Die HTTP-Endpunkte von Node-RED sind geschützt (Benutzer `wms`, Passwort aus der .env).
+const httpPassword = process.env['WMS_NODE_RED_HTTP_PASSWORD'];
+if (!httpPassword) throw new Error('WMS_NODE_RED_HTTP_PASSWORD fehlt – pnpm env:init ausführen');
+const authorization = `Basic ${Buffer.from(`wms:${httpPassword}`).toString('base64')}`;
 
 async function listScenarios(): Promise<ScenarioInfo[]> {
   let response: Response;
   try {
-    response = await fetch(`${baseUrl}/test/scenarios`);
+    response = await fetch(`${baseUrl}/test/scenarios`, { headers: { authorization } });
   } catch (error) {
     throw new Error(`Node-RED unter ${baseUrl} nicht erreichbar – läuft die Umgebung (pnpm stack:up)? ${String(error)}`);
   }
@@ -67,7 +71,7 @@ describe('Node-RED-Szenarien', () => {
   it.each(scenarios.map((s) => [s.id, s.description] as const))('%s – %s', async (id) => {
     const response = await fetch(`${baseUrl}/test/scenarios/${encodeURIComponent(id)}/run`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', authorization },
       body: JSON.stringify({}),
     });
     expect(response.status).toBe(200);
@@ -75,8 +79,13 @@ describe('Node-RED-Szenarien', () => {
     expect(result.passed, describeFailure(result)).toBe(true);
   });
 
+  it('lehnt Aufrufe ohne Anmeldung ab', async () => {
+    expect((await fetch(`${baseUrl}/test/scenarios`)).status).toBe(401);
+    expect((await fetch(`${baseUrl}/flows`)).status).toBe(401);
+  });
+
   it('meldet unbekannte Szenarien mit HTTP 404', async () => {
-    const response = await fetch(`${baseUrl}/test/scenarios/gibt-es-nicht/run`, { method: 'POST' });
+    const response = await fetch(`${baseUrl}/test/scenarios/gibt-es-nicht/run`, { method: 'POST', headers: { authorization } });
     expect(response.status).toBe(404);
   });
 });
