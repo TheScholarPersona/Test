@@ -546,6 +546,18 @@ Palette „WMS“ in Node-RED, siehe auch `packages/node-red-nodes/README.md`:
 
 Szenario `node-red-examples` prüft die Beispiel-Flows; Schritt-Szenarien erreichen Endpunkte dieses Node-RED mit `service: 'node-red'` (eigene Header über `headers`).
 
+## Ports der lokalen Umgebung
+
+Die Compose-Umgebung belegt auf dem Rechner `3000` (API), `1880` (Node-RED), `5432` (PostgreSQL) und `1883` (MQTT), jeweils nur auf `127.0.0.1` (es gibt noch keine Anmeldung). Ist ein Port belegt, z. B. durch eine andere Node-RED-Instanz:
+
+```bash
+cp .env.example .env     # dann z. B. WMS_NODE_RED_PORT=1881 eintragen
+pnpm stack:up
+pnpm test:e2e            # liest dieselbe .env (oder NODE_RED_URL setzen)
+```
+
+Innerhalb der Umgebung sprechen die Dienste über ihre Containernamen und festen Ports miteinander; die Einstellung betrifft nur den Zugriff vom Rechner aus. Für die API außerhalb von Docker (nächster Abschnitt) die geänderten Ports in `DATABASE_URL` und `MQTT_URL` verwenden.
+
 ## API außerhalb von Docker gegen die Compose-Umgebung
 
 Zum schnellen Ausprobieren von API-Änderungen ohne Image-Build:

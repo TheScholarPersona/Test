@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
  * Führt alle in Node-RED registrierten Szenarien aus.
  *
  * Voraussetzung: laufende Umgebung (`pnpm stack:up`). Die Adresse von
- * Node-RED kommt aus NODE_RED_URL (Standard http://localhost:1880).
+ * Node-RED kommt aus NODE_RED_URL, sonst http://localhost:<WMS_NODE_RED_PORT aus .env, Standard 1880>.
  * Ist Node-RED nicht erreichbar, schlägt der Lauf fehl – er wird bewusst
  * nicht übersprungen, damit eine fehlende Umgebung in der CI auffällt.
  */
@@ -29,7 +29,13 @@ interface ScenarioResult {
   error?: string;
 }
 
-const baseUrl = (process.env['NODE_RED_URL'] ?? 'http://localhost:1880').replace(/\/$/, '');
+// Ports aus der .env im Projektverzeichnis (dieselbe Datei, die docker compose liest), falls vorhanden.
+try {
+  process.loadEnvFile(new URL('../../../.env', import.meta.url));
+} catch {
+  // keine .env – Standardports
+}
+const baseUrl = (process.env['NODE_RED_URL'] ?? `http://localhost:${process.env['WMS_NODE_RED_PORT'] ?? '1880'}`).replace(/\/$/, '');
 
 async function listScenarios(): Promise<ScenarioInfo[]> {
   let response: Response;
