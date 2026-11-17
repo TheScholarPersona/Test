@@ -39,20 +39,20 @@ Fachliche Module der API (`apps/api/src/modules/*`): layout, transport, strategy
 
 **Funktionsbereich → Feature-Gruppe → Feature.** Bereiche sind stabil und am fachlichen Lagerablauf orientiert, nicht an Code-Modulen. Gruppen werden beim Katalogisieren eines Bereichs festgelegt.
 
-| Bereich | Zuständig für (Auszug) | Stand |
-|---|---|---|
-| Lagerstruktur | `/v1/locations`, `/v1/location-groups`, `/v1/location-types`, `location*`-Ereignisse, `/lagerplaetze` | offen |
-| Transporteinheiten | `/v1/transport-units`, `/v1/transport-unit-types`, `wms-move-tu` | offen |
-| Strategien und Regeln | `/v1/strategies`, `/v1/strategy-rule-sets`, `/v1/putaway`, `/v1/allocation`, `/v1/strategy-decisions` | offen |
-| **Bestand** | `/v1/products`, `/v1/stock…`, `/v1/stock-counts`, `product`/`stock`/`stock-count`-Ereignisse, `/bestand` | **katalogisiert (Pilot)** |
-| Wareneingang | `/v1/receiving-…`, `wms-receive`, `/wareneingang` | offen |
-| Lagerbewegungen | `/v1/movements` | offen |
-| Transportaufträge | `/v1/transport-orders`, `/transport` | offen |
-| Materialfluss und Anlagen | `/v1/flow`, `wms-device-event`, `/materialfluss` | offen |
-| Auslagerung | `/v1/outbound-…`, `/auslagerung` | offen |
-| Integration und Automatisierung | `/v1/events`, `/test`, `system`-Ereignisse, übrige Node-RED-Nodes, `/ereignisse` | offen |
-| Bedienoberfläche | `/`, `/scanner/*` | offen |
-| Sicherheit und Betrieb | `/v1/auth`, `/v1/users`, `/health`, `/konto`, `/benutzer` | offen |
+| Bereich | Zuständig für (Auszug) |
+|---|---|
+| Lagerstruktur | `/v1/locations`, `/v1/location-groups`, `/v1/location-types`, `location*`-Ereignisse, `/lagerplaetze` |
+| Transporteinheiten | `/v1/transport-units`, `/v1/transport-unit-types`, `wms-move-tu` |
+| Strategien und Regeln | `/v1/strategies`, `/v1/strategy-rule-sets`, `/v1/putaway`, `/v1/allocation`, `/v1/strategy-decisions` |
+| Bestand | `/v1/products`, `/v1/stock…`, `/v1/stock-counts`, `product`/`stock`/`stock-count`-Ereignisse, `/bestand` |
+| Wareneingang | `/v1/receiving-…`, `wms-receive`, `/wareneingang` |
+| Lagerbewegungen | `/v1/movements` |
+| Transportaufträge | `/v1/transport-orders`, `/transport` |
+| Materialfluss und Anlagen | `/v1/flow`, `wms-device-event`, `/materialfluss` |
+| Auslagerung | `/v1/outbound-…`, `/auslagerung` |
+| Integration und Automatisierung | `/v1/events`, `/test`, `system`-Ereignisse, übrige Node-RED-Nodes, `/ereignisse` |
+| Bedienoberfläche | `/`, `/scanner/*` |
+| Sicherheit und Betrieb | `/v1/auth`, `/v1/users`, `/health`, `/konto`, `/benutzer` |
 
 **Zuschnitt eines Features:** eine Fähigkeit, die ein Anwender oder System als Ganzes nutzt („Bestand reservieren und freigeben“), nicht ein einzelner Endpunkt. Ein Feature bündelt die dafür nötigen Endpunkte, Ereignisse, Seiten und Nodes. Auch Qualitätsmerkmale mit fachlicher Wirkung sind Features („Sichere Buchungen bei gleichzeitigem Zugriff“). Mehrere Features dürfen denselben Bestandteil nennen.
 
@@ -102,7 +102,7 @@ Ein Eintrag (Katalog und Prüfbestand haben denselben Aufbau; Schema: `packages/
 
 Die Prüfung **legt nie Features an**. Sie meldet, was zugeordnet werden muss; ob daraus ein neues Feature, eine Erweiterung eines bestehenden, ein Prüfbestand-Eintrag oder eine begründete Ausnahme (`exclusions` in `catalog.yaml`) wird, entscheidet ein Mensch.
 
-**In der CI:** Der Job *verify* prüft statisch (`pnpm test` enthält den Katalogtest, dazu `pnpm catalog:check`) und sichert den JUnit-Bericht der Integrationstests. Der Job *Feature-Katalog* läuft nach *verify* und *e2e*, holt alle JUnit-Berichte (Integrationstests, Node-RED-Szenarien, Browser-Tests), prüft jedes Katalog-Feature gegen die Ergebnisse und legt die Ansicht als Artefakt `feature-katalog` ab.
+**In der CI:** Der Job *verify* prüft statisch (der Katalogtest läuft mit den Unit-Tests, dazu `pnpm catalog:check`) und sichert die JUnit-Berichte der Unit-Tests (API, Node-RED-Nodes) und der Integrationstests. Der Job *Feature-Katalog* läuft nach *verify* und *e2e*, holt alle JUnit-Berichte (Unit-, Integrations-, Szenario- und Browser-Tests), prüft jedes Katalog-Feature gegen die Ergebnisse und legt die Ansicht als Artefakt `feature-katalog` ab.
 
 ## 5. Pflege
 
@@ -115,15 +115,40 @@ Die Prüfung **legt nie Features an**. Sie meldet, was zugeordnet werden muss; o
 | Prüfbestand-Eintrag bekommt einen Test | Eintrag mit Nachweis nach `features/<bereich>.yaml` verschieben. |
 | Bereich fertig katalogisiert | In `catalog.yaml` `status: katalogisiert` setzen – ab dann sind Lücken Fehler. |
 
-## 6. Pilot: Bereich Bestand
+## 6. Stand der Bestandsaufnahme
 
-| | Anzahl |
+Alle 12 Bereiche sind katalogisiert (`status: katalogisiert`); jeder erkannte Bestandteil ist einem Feature oder Prüfbestand-Eintrag zugeordnet. Mit den Testberichten aller Testarten (Unit, Integration, Node-RED-Szenarien, Browser) sind alle Katalog-Features im Testlauf nachgewiesen.
+
+| Bereich | Features | Prüfbestand | Erkannte Bestandteile |
+|---|---|---|---|
+| Lagerstruktur | 5 | 2 | 29 |
+| Transporteinheiten | 8 | 1 | 27 |
+| Strategien und Regeln | 7 | 1 | 15 |
+| Bestand | 12 | 2 | 30 |
+| Wareneingang | 4 | 1 | 16 |
+| Lagerbewegungen | 3 | 0 | 12 |
+| Transportaufträge | 2 | 1 | 19 |
+| Materialfluss und Anlagen | 6 | 1 | 21 |
+| Auslagerung | 4 | 2 | 13 |
+| Integration und Automatisierung | 6 | 1 | 11 |
+| Bedienoberfläche | 5 | 0 | 2 |
+| Sicherheit und Betrieb | 8 | 2 | 11 |
+| **Summe** | **70** | **14** | **206** |
+
+**Festlegungen** (Produktentscheidung nach dem Pilot):
+
+- Eine Funktion, die nur über API oder Node-RED bedienbar ist, ist **nicht** unvollständig; die API ist ein vollwertiger Bedienweg.
+- Ein Feature ist eine nutzbare Fähigkeit, kein einzelner Endpunkt.
+- Eine Seite der Oberfläche oder ein Endpunkt ohne eigenen Test steht im Prüfbestand, auch wenn die Fachfunktion dahinter nachgewiesen ist.
+
+**Prüfbestand – was fehlt:**
+
+| Art | Einträge |
 |---|---|
-| Erkannte Bestandteile (20 Endpunkte, 9 Ereignisse, 1 Seite) | 30, alle zugeordnet |
-| Features im Katalog (6 Gruppen) | 12, alle mit bestandenen Nachweisen (Integrationstests, Szenario `stock-flow`, Browser-Test) |
-| Prüfbestand | 2 – „Produkte abfragen“ und „Inventuren abfragen“: die Leseendpunkte ruft kein Test auf |
+| Lese- oder Änderungsendpunkte ohne Test | Produkte abfragen, einzelne Inventur lesen, Platztypen auflisten, Gruppe ändern, TU-Typen auflisten/ändern, einzelnen Regelsatz lesen, Liste der Auslageraufträge |
+| Seiten ohne Browser-Test | Wareneingang, Transport, Materialfluss (dazu Routen-/Action-Listen und Action ändern), Ereignisse, Konto und Benutzer (dazu Rollenliste), Picks am Scanner |
+| Infrastruktur nur von Hand geprüft | MQTT nur mit TLS und Benutzern |
 
-Beobachtungen aus dem Pilot:
+Jeder Eintrag wird mit einem passenden Test zum Katalog-Feature; das ist der kürzeste Weg, den Prüfbestand abzubauen.
 
-- Reservierung, Umbuchung, Korrektur und Inventur sind nur über API und Node-RED bedienbar; die Oberfläche zeigt Bestand lesend. Das steht im Katalog unter „Bedienwege“ – ob eine fehlende Bedienoberfläche ein Feature „unvollständig“ macht, ist eine Produktentscheidung (bisher: nein, die API ist ein vollwertiger Bedienweg).
-- Die Erkennung „aufgerufen in“ übersieht Aufrufe über Hilfsfunktionen. Deshalb ist sie nur eine Warnung; verbindlich sind die ausdrücklichen Nachweise und deren Testergebnisse.
+**Grenze der Erkennung:** „Aufgerufen in“ erkennt Aufrufe mit Methode und Pfad im Quelltext (auch Template-Ausdrücke und `fetch` ohne Methode). Aufrufe über Hilfsfunktionen wie `post(id, 'issues')` bleiben unsichtbar; deshalb ist das nur eine Warnung. Verbindlich sind die ausdrücklichen Nachweise und ihre Testergebnisse.

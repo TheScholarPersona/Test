@@ -49,10 +49,10 @@ export function coveredKinds(tests: ReportedTest[]): Set<Evidence['kind']> {
   const kinds = new Set<Evidence['kind']>();
   for (const t of tests) {
     const where = `${t.classname} ${t.file}`;
-    if (/ – /.test(t.name) && /scenario|Szenario|scenarios\.test/.test(`${where} ${t.report}`)) kinds.add('scenario');
-    if (/test\/integration\//.test(where)) kinds.add('integration');
-    if (/test\/unit\//.test(where)) kinds.add('unit');
-    if (/\.spec\.ts/.test(where)) kinds.add('web-e2e');
+    if (/scenarios\.test/.test(where)) kinds.add('scenario');
+    else if (/test\/integration\//.test(where)) kinds.add('integration');
+    else if (/\.spec\.ts/.test(where)) kinds.add('web-e2e');
+    else if (/(^|\/)test\//.test(where)) kinds.add('unit');
   }
   return kinds;
 }

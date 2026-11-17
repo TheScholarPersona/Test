@@ -1,0 +1,186 @@
+# Feature-Katalog – Bereich Integration und Automatisierung.
+area: integration
+
+features:
+  - id: integration.ereignisse
+    title: Fachliche Ereignisse über MQTT
+    group: integration.ereignisse
+    summary: Meldet jede fachliche Änderung als Ereignis an angebundene Systeme – zuverlässig, auch wenn der Broker kurz weg ist.
+    description: |
+      Jedes Fachmodul speichert seine Ereignisse in derselben Transaktion wie die Änderung (Outbox). Ein Relay
+      veröffentlicht sie danach auf `wms/<bereich>/<ereignis>` (QoS 1) mit Kennung, Typ, Version, Zeitpunkt, Quelle,
+      Korrelation, auslösendem Benutzer bzw. Token und Nutzdaten. Ohne Broker bleiben Ereignisse in der Outbox und
+      werden mit wachsender Wartezeit erneut versucht.
+    usage:
+      - channel: mqtt
+        text: "Topic `wms/#` abonnieren (Benutzer und TLS erforderlich); Duplikate über die Ereignis-`id` erkennen."
+      - channel: node-red
+        text: Node `wms-event` filtert nach Typ und Feldern und verwirft Duplikate.
+    rules:
+      - Zustellung mindestens einmal; auch mehrere parallele Relays senden jedes Ereignis genau einmal.
+      - Ereignis-Schemas sind versioniert (`packages/shared/src`).
+    technical:
+      components:
+        - apps/api/src/infrastructure/outbox/outbox.service.ts
+        - apps/api/src/infrastructure/outbox/outbox-relay.service.ts
+        - apps/api/src/infrastructure/messaging/mqtt-event-publisher.ts
+        - packages/shared/src/events.ts
+        - packages/node-red-nodes/nodes/wms-event.js
+      nodeRedNodes: [wms-event]
+      notes:
+        - Tabelle `outbox_message`; Wartezeit 1 s bis 60 s.
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/api.integration.test.ts
+        test: veröffentlicht ein Ping-Event über Outbox und MQTT
+      - kind: integration
+        file: apps/api/test/integration/api.integration.test.ts
+        test: zählt Fehlversuche, wartet ab und veröffentlicht später
+      - kind: integration
+        file: apps/api/test/integration/api.integration.test.ts
+        test: veröffentlicht jedes Event genau einmal, auch mit zwei parallelen Relays
+      - kind: unit
+        file: packages/node-red-nodes/test/nodes.test.mjs
+        test: wms-event filtert nach Typ und Feld und verwirft Duplikate
+      - kind: scenario
+        id: system-ping
+
+  - id: integration.live-stream
+    title: Live-Ereignisse für Browser (Server-Sent Events)
+    group: integration.ereignisse
+    summary: Liefert dieselben Ereignisse ohne MQTT direkt an Browser und Werkzeuge, gefiltert nach Typ.
+    description: Die API abonniert `wms/#` und reicht Ereignisse als Server-Sent Events weiter, optional gefiltert nach Typ-Mustern; alle 20 Sekunden kommt ein Lebenszeichen.
+    usage:
+      - channel: api
+        text: "`GET /v1/events/stream?types=stock.*,transport-order.*` (`text/event-stream`)."
+    dependsOn: [integration.ereignisse]
+    technical:
+      components:
+        - apps/api/src/infrastructure/live/event-stream.service.ts
+        - apps/api/src/infrastructure/live/events.controller.ts
+      endpoints:
+        - GET /v1/events/stream
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/live.integration.test.ts
+        test: liefert Ereignisse als Server-Sent Events, gefiltert nach Typ
+
+  - id: integration.openapi
+    title: Beschriebene und geprüfte REST-API (OpenAPI 3.1)
+    group: integration.schnittstellen
+    summary: Beschreibt alle Endpunkte maschinenlesbar und lehnt ungültige Anfragen mit genauer Feldangabe ab.
+    description: |
+      Die API liefert unter `/openapi.json` eine OpenAPI-3.1-Beschreibung mit Schemas, Berechtigungen und
+      Fehlerantworten. Eingaben werden gegen dieselben Schemas geprüft; Fehler nennen Pfad und Grund. Die Oberfläche
+      erzeugt ihre Typen daraus, ein Test hält beide deckungsgleich.
+    usage:
+      - channel: api
+        text: "`GET /openapi.json` (ohne Anmeldung)."
+    technical:
+      components:
+        - apps/api/src/http/openapi/api-documentation.ts
+        - apps/api/src/http/zod-validation.pipe.ts
+        - apps/web/src/api/openapi.json
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/api.integration.test.ts
+        test: beschreibt die Endpunkte als OpenAPI 3.1
+      - kind: integration
+        file: apps/api/test/integration/api.integration.test.ts
+        test: lehnt ungültige Anfragen mit Feldangaben ab
+      - kind: integration
+        file: apps/api/test/integration/live.integration.test.ts
+        test: stimmt mit der OpenAPI-Beschreibung der Oberfläche überein
+
+  - id: integration.node-red-nodes
+    title: WMS-Bausteine für Node-RED
+    group: integration.node-red
+    summary: Bindet das WMS ohne Programmierung an – Verbindung, beliebiger API-Aufruf, Ereignisse empfangen und auf Ereignisse warten.
+    description: |
+      Das Paket `@wms/node-red-nodes` enthält die Verbindung (`wms-config`, mit Service-Token), einen allgemeinen
+      API-Aufruf (`wms-api`) mit Platzhaltern und Fehlerausgang, `wms-event` und `wms-wait-event` sowie fachliche
+      Nodes (TU bewegen, Wareneingang, Geräte-Ereignis). Fachliche Fehler kommen mit Code als Node-RED-Fehler oder am
+      Fehlerausgang an.
+    usage:
+      - channel: node-red
+        text: Palette „WMS“ im Editor; Verbindung mit `${WMS_API_URL}` und Token aus `WMS_API_TOKEN`.
+    technical:
+      components:
+        - packages/node-red-nodes/nodes/wms-config.js
+        - packages/node-red-nodes/nodes/wms-api.js
+        - packages/node-red-nodes/nodes/wms-wait-event.js
+      nodeRedNodes: [wms-config, wms-api, wms-wait-event]
+    evidence:
+      - kind: unit
+        file: packages/node-red-nodes/test/nodes.test.mjs
+        test: wms-api füllt Platzhalter und gibt die Antwort aus
+      - kind: unit
+        file: packages/node-red-nodes/test/nodes.test.mjs
+        test: meldet fachliche Fehler als Node-RED-Fehler mit Code (Catch-Node)
+      - kind: unit
+        file: packages/node-red-nodes/test/nodes.test.mjs
+        test: gibt Fehler mit Fehlerausgang an Ausgang 2
+      - kind: unit
+        file: packages/node-red-nodes/test/nodes.test.mjs
+        test: meldet sich mit dem Service-Token aus der Umgebung an
+      - kind: unit
+        file: packages/node-red-nodes/test/nodes.test.mjs
+        test: wms-wait-event wartet auf das passende Ereignis (Bedingung aus der Nachricht)
+      - kind: scenario
+        id: nodes-selftest
+
+  - id: integration.beispiel-flows
+    title: Beispiel-Flows für typische Anbindungen
+    group: integration.node-red
+    summary: Zeigt fertige Muster – ERP-Datei in den Wareneingang und Scanner-Meldung als TU-Bewegung mit Regelprüfung.
+    description: |
+      Der Tab „Beispiele“ enthält zwei lauffähige Flows: `POST /examples/erp-receipts` liest eine CSV-Datei und legt
+      daraus Wareneingänge an (fehlerhafte Zeilen werden gemeldet), `POST /examples/scan` bucht eine gescannte TU auf
+      einen Platz und meldet Regelverletzungen als 409.
+    usage:
+      - channel: node-red
+        text: "Tab „Beispiele“; Endpunkte `/examples/erp-receipts` und `/examples/scan` (Basic Auth `wms`)."
+    dependsOn: [integration.node-red-nodes]
+    technical:
+      components:
+        - flows/scripts/build-flows.mjs
+    evidence:
+      - kind: scenario
+        id: node-red-examples
+
+  - id: integration.szenario-tests
+    title: Automatisierte End-to-End-Szenarien in Node-RED
+    group: integration.tests
+    summary: Prüft ganze Lagerabläufe gegen die laufende Umgebung – als Schritte formuliert, in der CI automatisch ausgeführt.
+    description: |
+      Schritt-Szenarien beschreiben Anfragen, erwartete Antworten und Ereignisse; die Schritt-Engine in Node-RED führt
+      sie aus und räumt danach auf. Eigene Szenario-Tabs nutzen die Test-Nodes `wms-test-start`, `wms-assert` und
+      `wms-test-result`. Der Szenario-Runner startet alle Szenarien über `/test/scenarios` und schreibt einen
+      JUnit-Bericht. Im Testprofil erzeugt die API auf Anforderung ein Prüf-Ereignis; im Betrieb fehlt dieser Endpunkt.
+    usage:
+      - channel: node-red
+        text: "`flows/scenarios/*.js` bzw. eigene Tabs; ausführen mit `pnpm test:e2e`."
+      - channel: api
+        text: "Nur Testprofil: `POST /test/events/ping`."
+    technical:
+      components:
+        - flows/scenarios
+        - packages/scenario-runner/test/scenarios.test.ts
+        - packages/node-red-nodes/nodes/wms-assert.js
+        - apps/api/src/modules/test-support/test-support.controller.ts
+      endpoints:
+        - POST /test/events/ping
+      events:
+        emits: [system.ping]
+      nodeRedNodes: [wms-test-start, wms-assert, wms-test-result]
+    evidence:
+      - kind: unit
+        file: packages/node-red-nodes/test/nodes.test.mjs
+        test: prüft, notiert Schritte und überträgt das Ergebnis ins Testframework
+      - kind: integration
+        file: apps/api/test/integration/api.integration.test.ts
+        test: bietet im Profil production keine Test-Endpunkte an
+      - kind: scenario
+        id: system-ping
+      - kind: scenario
+        id: nodes-selftest

@@ -1,0 +1,186 @@
+# Feature-Katalog – Bereich Wareneingang.
+area: wareneingang
+
+features:
+  - id: wareneingang.avis
+    title: Wareneingang avisieren
+    group: wareneingang.avis
+    summary: Kündigt erwartete Lieferungen als Auftrag an – mit Mengen je Produkt oder ganzen, vorab bekannten Paletten.
+    description: |
+      Ein Wareneingangsauftrag (Avis) hat eine Auftragsnummer, einen Lieferanten und Positionen. Mengenpositionen
+      erwarten eine Menge eines Produkts, TU-Positionen eine ganze TU eines Typs, optional mit erwartetem Barcode
+      (z. B. SSCC). Positionsnummern werden vergeben, wenn sie fehlen. Auftrag und Positionen lassen sich lesen.
+    usage:
+      - channel: api
+        text: '`POST /v1/receiving-orders` mit `orderId`, `supplier`, `positions`; lesen `GET /v1/receiving-orders/{orderId}`.'
+    rules:
+      - Auftragsnummer eindeutig; Produkte und Einheiten müssen existieren und passen.
+    dependsOn: [bestand.produktstamm]
+    technical:
+      components:
+        - apps/api/src/modules/receiving/application/receiving.service.ts
+        - apps/api/src/modules/receiving/http/receiving.controller.ts
+      endpoints:
+        - POST /v1/receiving-orders
+        - GET /v1/receiving-orders/{orderId}
+      events:
+        emits: [receiving-order.created]
+      notes:
+        - Tabellen `receiving_order` und `receiving_position`.
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/receiving.integration.test.ts
+        test: legt einen Auftrag mit Mengen- und TU-Positionen an
+      - kind: integration
+        file: apps/api/test/integration/receiving.integration.test.ts
+        test: prüft Auftragsnummer, Produkte und Einheiten
+      - kind: scenario
+        id: receiving-flow
+
+  - id: wareneingang.erfassung
+    title: Ware gegen ein Avis erfassen
+    group: wareneingang.erfassung
+    summary: Bucht angelieferte Ware als Bestand auf eine Palette und ordnet sie automatisch der passenden Position zu.
+    description: |
+      Eine Mengenerfassung bucht ein Produkt auf eine vorhandene oder neue TU (Barcode wird vergeben) mit Charge und
+      MHD; das WMS wählt die erste offene Position mit ausreichender Restmenge. Eine TU-Erfassung bucht eine
+      avisierte TU per Barcode auf den Platz. Auf Wunsch entsteht gleich die Einlagerbewegung. Erfassungen lassen sich
+      je Auftrag abrufen; parallele Erfassungen verlieren keine Menge.
+    usage:
+      - channel: api
+        text: "`POST /v1/receiving-orders/{orderId}/captures` (`kind: quantity` oder `unit`), Liste `GET …/captures`."
+      - channel: node-red
+        text: Node `wms-receive` erfasst gegen einen Auftrag oder ohne Avis; Beispiel-Flow ERP-CSV → Wareneingang.
+    rules:
+      - Überlieferung nur, wenn das Produkt sie erlaubt (`OVERDELIVERY_NOT_ALLOWED` mit Restmengen).
+      - Keine Erfassung auf abgeschlossene Aufträge (`ORDER_CLOSED`).
+      - Bestand erhält den Bezug `receiving:<orderId>/<posNo>`.
+    settings:
+      - name: Überlieferung je Produkt
+        description: "`overdeliveryAllowed` am Produkt."
+        where: "PATCH /v1/products/{sku}"
+      - name: Direkte Einlagerung
+        description: "`putawayGroup` legt gleich eine Einlagerbewegung in diese Gruppe an."
+        where: Erfassung
+    dependsOn: [wareneingang.avis, bestand.bestand-je-tu]
+    technical:
+      components:
+        - apps/api/src/modules/receiving/application/receiving.service.ts
+        - apps/api/src/modules/receiving/domain/receiving-rules.ts
+        - packages/node-red-nodes/nodes/wms-receive.js
+      endpoints:
+        - POST /v1/receiving-orders/{orderId}/captures
+        - GET /v1/receiving-orders/{orderId}/captures
+      events:
+        emits: [receiving.captured, receiving-position.state-changed, receiving-order.state-changed, stock.received]
+      nodeRedNodes: [wms-receive]
+      notes:
+        - Zeilensperre des Auftrags serialisiert parallele Erfassungen.
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/receiving.integration.test.ts
+        test: erfasst eine Teilmenge auf eine neue TU und bucht Bestand
+      - kind: integration
+        file: apps/api/test/integration/receiving.integration.test.ts
+        test: nimmt die Position, deren Restmenge reicht, und führt Bestand zusammen
+      - kind: integration
+        file: apps/api/test/integration/receiving.integration.test.ts
+        test: lehnt Überlieferung ab, wenn das Produkt sie nicht erlaubt, und ändert nichts
+      - kind: integration
+        file: apps/api/test/integration/receiving.integration.test.ts
+        test: bucht erlaubte Überlieferung und schließt die Position
+      - kind: integration
+        file: apps/api/test/integration/receiving.integration.test.ts
+        test: erfasst eine avisierte TU per Barcode
+      - kind: integration
+        file: apps/api/test/integration/receiving.integration.test.ts
+        test: legt auf Wunsch direkt die Einlagerbewegung an
+      - kind: integration
+        file: apps/api/test/integration/receiving.integration.test.ts
+        test: listet die Erfassungen eines Auftrags
+      - kind: integration
+        file: apps/api/test/integration/receiving.integration.test.ts
+        test: verliert bei gleichzeitigen Erfassungen auf einen Auftrag keine Menge
+      - kind: unit
+        file: packages/node-red-nodes/test/nodes.test.mjs
+        test: wms-receive erfasst blind oder gegen einen Auftrag
+      - kind: scenario
+        id: receiving-flow
+
+  - id: wareneingang.abschluss
+    title: Positionen und Aufträge abschließen oder stornieren
+    group: wareneingang.avis
+    summary: Schließt Lieferungen mit Fehlmenge ab oder storniert, was nicht kommt – der Auftragszustand folgt automatisch.
+    description: |
+      Unberührte Positionen lassen sich stornieren, teilweise erfasste mit Fehlmenge schließen (`SHORT`). Der
+      Auftrag folgt aus seinen Positionen (`OPEN`, `IN_PROGRESS`, `COMPLETED`, `PARTIALLY_COMPLETED`,
+      `CANCELLED`). Ein Auftrag ohne Erfassungen kann storniert werden; der Abschluss schließt teilweise erfasste und
+      storniert unberührte Positionen.
+    usage:
+      - channel: api
+        text: "`POST …/positions/{posNo}/cancel`, `…/positions/{posNo}/close`, `POST …/{orderId}/cancel`, `…/complete`."
+    rules:
+      - Position stornieren nur unberührt (`POSITION_NOT_OPEN`), schließen nur teilweise erfasst (`POSITION_NOT_IN_PROGRESS`).
+      - Auftrag stornieren nur ohne Erfassungen (`CANCELLATION_DENIED`).
+    dependsOn: [wareneingang.avis]
+    technical:
+      components:
+        - apps/api/src/modules/receiving/application/receiving.service.ts
+        - apps/api/src/modules/receiving/domain/receiving-rules.ts
+      endpoints:
+        - POST /v1/receiving-orders/{orderId}/positions/{posNo}/cancel
+        - POST /v1/receiving-orders/{orderId}/positions/{posNo}/close
+        - POST /v1/receiving-orders/{orderId}/cancel
+        - POST /v1/receiving-orders/{orderId}/complete
+      events:
+        emits: [receiving-position.state-changed, receiving-order.state-changed]
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/receiving.integration.test.ts
+        test: storniert nur unberührte Positionen und schließt teilweise erfasste mit Fehlmenge
+      - kind: integration
+        file: apps/api/test/integration/receiving.integration.test.ts
+        test: storniert keinen Auftrag mit Erfassungen; Abschluss schließt die restlichen Positionen
+      - kind: integration
+        file: apps/api/test/integration/receiving.integration.test.ts
+        test: storniert einen Auftrag ohne Erfassungen vollständig
+      - kind: unit
+        file: apps/api/test/unit/receiving/receiving-rules.test.ts
+        test: setzt Positionen erst bei voller Menge auf erledigt
+      - kind: scenario
+        id: receiving-flow
+
+  - id: wareneingang.ohne-avis
+    title: Wareneingang ohne Avis
+    group: wareneingang.erfassung
+    summary: Bucht Ware, die ohne Ankündigung kommt, direkt als Bestand – am Scanner oder per Schnittstelle.
+    description: |
+      Die Blind-Erfassung bucht ein Produkt mit Menge, Charge und MHD auf eine vorhandene oder neue TU auf einem Platz,
+      ohne Bezug zu einem Auftrag. Der Bestand erhält den Bezug `receiving:blind`.
+    usage:
+      - channel: scanner
+        text: Ansicht **Wareneingang** – Produkt, Menge, TU und Platz scannen.
+      - channel: api
+        text: "`POST /v1/receiving-blind-captures` mit `sku`, `quantity`, `unit`, `location`, `lot?`, `bestBefore?`."
+      - channel: node-red
+        text: Node `wms-receive` ohne Auftragsnummer.
+    dependsOn: [bestand.bestand-je-tu]
+    technical:
+      components:
+        - apps/api/src/modules/receiving/application/receiving.service.ts
+        - apps/web/src/pages/ScannerPage.tsx
+      endpoints:
+        - POST /v1/receiving-blind-captures
+      events:
+        emits: [receiving.captured, stock.received]
+      uiRoutes: [/scanner/*]
+      nodeRedNodes: [wms-receive]
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/receiving.integration.test.ts
+        test: bucht Ware ohne Avis
+      - kind: web-e2e
+        file: apps/web/e2e/scanner.spec.ts
+        test: "Scanner: Wareneingang ohne Avis"
+      - kind: scenario
+        id: stock-flow

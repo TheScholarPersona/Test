@@ -1,0 +1,290 @@
+# Feature-Katalog – Bereich Transporteinheiten.
+area: transporteinheiten
+
+features:
+  - id: transporteinheiten.typen
+    title: TU-Typen mit Maßen und Gewichten
+    group: transporteinheiten.typen
+    summary: Beschreibt Ladungsträger wie Europalette oder Behälter mit Maßen, Leergewicht und zulässiger Zuladung.
+    description: |
+      Ein TU-Typ legt Maße, Leergewicht und zulässige Zuladung fest. Jede Transporteinheit gehört zu genau einem Typ;
+      ohne eigenes Gewicht rechnet das WMS mit dem Leergewicht des Typs. Typen lassen sich löschen, solange keine TU
+      und keine Stapelregel eines anderen Typs sie nutzt.
+    usage:
+      - channel: api
+        text: "`POST /v1/transport-unit-types` (`code`, `tareWeight`, `maxPayload`, Maße), lesen `GET …/{code}`, löschen `DELETE …/{code}`."
+    rules:
+      - Kennung eindeutig; löschen nur ohne Verwendung (`TU_TYPE_IN_USE`).
+    technical:
+      components:
+        - apps/api/src/modules/transport/application/transport-unit-type.service.ts
+        - apps/api/src/modules/transport/http/transport-unit-types.controller.ts
+      endpoints:
+        - POST /v1/transport-unit-types
+        - GET /v1/transport-unit-types/{code}
+        - DELETE /v1/transport-unit-types/{code}
+      events:
+        emits: [transport-unit-type.created, transport-unit-type.deleted]
+      notes:
+        - Tabelle `transport_unit_type`.
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/transport.integration.test.ts
+        test: legt Typen mit Gewichten an
+      - kind: integration
+        file: apps/api/test/integration/transport.integration.test.ts
+        test: schützt Lagerplätze mit TUs und benutzte Typen vor dem Löschen
+      - kind: scenario
+        id: tu-placement
+
+  - id: transporteinheiten.regeln
+    title: Platzierungs- und Stapelregeln je TU-Typ
+    group: transporteinheiten.typen
+    summary: Legt fest, auf welchen Platztypen ein TU-Typ stehen darf und was wie oft darauf gestapelt werden darf.
+    description: |
+      Platzierungsregeln listen die erlaubten Platztypen eines TU-Typs, jeweils mit einer Vorrangstufe, die die
+      gewichtete Einlagerstrategie nutzt. Eine leere Liste erlaubt alle Platztypen. Stapelregeln nennen, welche
+      TU-Typen bis zu welcher Anzahl auf diesen Typ gestapelt werden dürfen; ohne Regel ist der Typ nicht stapelbar.
+    usage:
+      - channel: api
+        text: "`PUT /v1/transport-unit-types/{code}/placement-rules` und `…/stacking-rules` ersetzen die jeweilige Liste."
+    settings:
+      - name: Erlaubte Platztypen mit Vorrang
+        description: "`locationTypeCode` und `privilegeLevel` (0–1000) je Regel."
+        where: "PUT /v1/transport-unit-types/{code}/placement-rules"
+      - name: Stapelbare Typen
+        description: "`allowedTypeCode` und `maxCount` (1–100) je Regel."
+        where: "PUT /v1/transport-unit-types/{code}/stacking-rules"
+    dependsOn: [transporteinheiten.typen, lagerstruktur.platztypen]
+    technical:
+      components:
+        - apps/api/src/modules/transport/application/transport-unit-type.service.ts
+        - apps/api/src/modules/transport/domain/stacking.ts
+      endpoints:
+        - PUT /v1/transport-unit-types/{code}/placement-rules
+        - PUT /v1/transport-unit-types/{code}/stacking-rules
+      events:
+        emits: [transport-unit-type.updated]
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/transport.integration.test.ts
+        test: ersetzt Platzierungs- und Stapelregeln
+      - kind: integration
+        file: apps/api/test/integration/transport.integration.test.ts
+        test: setzt Platzierungsregeln durch
+
+  - id: transporteinheiten.anlegen
+    title: Transporteinheiten anlegen und pflegen
+    group: transporteinheiten.fuehrung
+    summary: Führt jede Palette und jeden Behälter mit Barcode, Platz, Gewicht und geplantem Ziel.
+    description: |
+      Eine Transporteinheit (TU) wird auf einem Lagerplatz angelegt; ohne Barcode vergibt das WMS einen
+      (`TU0000000001` …). Gewicht und geplantes Ziel sind änderbar; das Ziel wird gelöscht, sobald die TU es erreicht.
+      Beim Löschen dürfen andere Module widersprechen (Bestand, offene Bewegungen, laufende Transporte, aufgestapelte TUs).
+    usage:
+      - channel: api
+        text: "`POST /v1/transport-units` (`barcode?`, `typeCode`, `location`), lesen `GET …/{barcode}`, ändern `PATCH`, löschen `DELETE`."
+    rules:
+      - Barcode eindeutig; Zuladung des Typs wird geprüft (`TU_OVERWEIGHT`).
+      - Beim Anlegen gelten die Platzierungsregeln wie beim Bewegen.
+      - Löschen nicht mit aufgestapelten TUs (`TU_HAS_CHILDREN`) oder bei Einwänden anderer Module.
+    dependsOn: [transporteinheiten.typen, lagerstruktur.plaetze]
+    technical:
+      components:
+        - apps/api/src/modules/transport/application/transport-unit.service.ts
+        - apps/api/src/modules/transport/application/transport-unit-removal-policy.ts
+        - apps/api/src/modules/transport/http/transport-units.controller.ts
+      endpoints:
+        - POST /v1/transport-units
+        - GET /v1/transport-units/{barcode}
+        - PATCH /v1/transport-units/{barcode}
+        - DELETE /v1/transport-units/{barcode}
+      events:
+        emits: [transport-unit.created, transport-unit.updated, transport-unit.deleted]
+      notes:
+        - Tabelle `transport_unit`; Barcode aus einer Datenbanksequenz.
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/transport.integration.test.ts
+        test: erzeugt einen Barcode und rechnet mit dem Leergewicht
+      - kind: integration
+        file: apps/api/test/integration/transport.integration.test.ts
+        test: verhindert doppelte Barcodes
+      - kind: integration
+        file: apps/api/test/integration/transport.integration.test.ts
+        test: löscht das geplante Ziel, sobald es erreicht ist
+      - kind: scenario
+        id: tu-placement
+
+  - id: transporteinheiten.platzierungspruefung
+    title: Platzierungsprüfung mit allen Verstößen auf einmal
+    group: transporteinheiten.fuehrung
+    summary: Verhindert, dass TUs auf gesperrte, volle, zu schwach belastbare oder unpassende Plätze kommen – und nennt alle Gründe.
+    description: |
+      Beim Anlegen, Bewegen und Abstapeln prüft das WMS Sperren von Quelle und Ziel (auch geerbt), die Höchstzahl
+      der TUs, das Höchstgewicht inklusive Stapel und die Platzierungsregeln. Im Modus `checked` wird bei einem
+      Verstoß abgelehnt; im Modus `physical` (gemeldete Ist-Position von Scanner oder Anlage) wird trotzdem gebucht
+      und die Verstöße stehen in Antwort und Ereignis. Parallele Buchungen auf denselben Platz überbelegen ihn nicht.
+    usage:
+      - channel: api
+        text: "Feld `mode` (`checked` | `physical`) beim Anlegen und Bewegen; Ablehnung `409 PLACEMENT_REJECTED` mit `details.violations`."
+      - channel: scanner
+        text: Regelverstöße erscheinen als verständliche Meldung.
+    rules:
+      - Regeln `SOURCE_OUTBOUND_BLOCKED`, `TARGET_INBOUND_BLOCKED`, `LOCATION_FULL`, `WEIGHT_EXCEEDED`, `PLACEMENT_NOT_ALLOWED`.
+      - Gewicht exakt dezimal; gestapelte TUs zählen nicht zur Höchstzahl, aber zum Gewicht.
+      - Zielplatz wird während der Prüfung in der Datenbank gesperrt.
+    dependsOn: [transporteinheiten.regeln, lagerstruktur.sperren]
+    technical:
+      components:
+        - apps/api/src/modules/transport/domain/placement.ts
+        - apps/api/src/modules/transport/application/placement-checker.ts
+      notes:
+        - Zeilensperre (`SELECT … FOR UPDATE`) auf dem Zielplatz.
+    evidence:
+      - kind: unit
+        file: apps/api/test/unit/transport/placement.test.ts
+        test: meldet alle Verstöße auf einmal
+      - kind: unit
+        file: apps/api/test/unit/transport/placement.test.ts
+        test: rechnet das Gewicht exakt dezimal und erlaubt genau das Höchstgewicht
+      - kind: integration
+        file: apps/api/test/integration/transport.integration.test.ts
+        test: lehnt einen vollen Platz ab und nennt die Regel
+      - kind: integration
+        file: apps/api/test/integration/transport.integration.test.ts
+        test: prüft Platzgewicht und Zuladung
+      - kind: integration
+        file: apps/api/test/integration/transport.integration.test.ts
+        test: belegt einen Platz mit Höchstzahl 1 bei gleichzeitigen Anfragen genau einmal
+      - kind: scenario
+        id: tu-placement
+
+  - id: transporteinheiten.bewegen
+    title: Transporteinheiten bewegen
+    group: transporteinheiten.fuehrung
+    summary: Bucht eine TU samt Stapel auf einen anderen Platz – am Scanner, über die API oder aus Node-RED.
+    description: |
+      Eine Bewegung bucht die TU (und alles, was darauf gestapelt ist) auf den Zielplatz und meldet Quelle und Ziel
+      als Ereignis. Bewegen auf den aktuellen Platz ist ein Leerlauf. Gemeldete Ist-Positionen (`physical`) werden
+      auch bei Regelverstößen gebucht, damit das WMS die Wirklichkeit abbildet.
+    usage:
+      - channel: scanner
+        text: TU scannen, Zielplatz scannen, bestätigen.
+      - channel: api
+        text: "`POST /v1/transport-units/{barcode}/move` mit `to` (id, Koordinate, ERP- oder SPS-Code) und `mode`."
+      - channel: node-red
+        text: Node `wms-move-tu` – Platz und Modus aus der Nachricht oder fest.
+    rules:
+      - Gestapelte TUs lassen sich nicht einzeln bewegen (`TU_STACKED`).
+    dependsOn: [transporteinheiten.platzierungspruefung]
+    technical:
+      components:
+        - apps/api/src/modules/transport/application/transport-unit.service.ts
+        - apps/web/src/pages/ScannerPage.tsx
+        - packages/node-red-nodes/nodes/wms-move-tu.js
+      endpoints:
+        - POST /v1/transport-units/{barcode}/move
+      events:
+        emits: [transport-unit.moved]
+      uiRoutes: [/scanner/*]
+      nodeRedNodes: [wms-move-tu]
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/transport.integration.test.ts
+        test: bewegt regelkonform und veröffentlicht Quelle und Ziel
+      - kind: integration
+        file: apps/api/test/integration/transport.integration.test.ts
+        test: beachtet geerbte Sperren und bucht gemeldete Ist-Positionen trotzdem
+      - kind: integration
+        file: apps/api/test/integration/transport.integration.test.ts
+        test: behandelt Bewegen auf den aktuellen Platz als Leerlauf
+      - kind: web-e2e
+        file: apps/web/e2e/scanner.spec.ts
+        test: "Scanner: TU bewegen, Regelverletzung als verständliche Meldung"
+      - kind: unit
+        file: packages/node-red-nodes/test/nodes.test.mjs
+        test: wms-move-tu baut den Platzverweis und den Modus
+      - kind: scenario
+        id: node-red-examples
+        note: Beispiel-Flow Scan → TU bewegen
+
+  - id: transporteinheiten.stapeln
+    title: Stapeln und Abstapeln
+    group: transporteinheiten.fuehrung
+    summary: Stellt TUs aufeinander (z. B. Boxen auf eine Palette) – der Stapel bewegt sich als Ganzes.
+    description: |
+      Eine TU kann auf eine andere desselben Platzes gestapelt werden, sofern eine Stapelregel das erlaubt und die
+      Höchstzahl nicht erreicht ist. Wird die Basis bewegt, wandert der ganze Stapel mit; das Gewicht des Stapels
+      zählt am Platz. Abstapeln stellt die TU als eigene Einheit auf denselben Platz, wenn dort Raum ist.
+    usage:
+      - channel: api
+        text: '`POST /v1/transport-units/{barcode}/stack` mit `{ "onto": "<barcode>" }`, `POST …/unstack`.'
+    rules:
+      - Nur mit Stapelregel, bis zur Höchstzahl (`STACK_FULL`), nur auf demselben Platz, ohne Zyklen (`STACKING_REJECTED`).
+    dependsOn: [transporteinheiten.regeln]
+    technical:
+      components:
+        - apps/api/src/modules/transport/domain/stacking.ts
+        - apps/api/src/modules/transport/application/transport-unit.service.ts
+      endpoints:
+        - POST /v1/transport-units/{barcode}/stack
+        - POST /v1/transport-units/{barcode}/unstack
+      events:
+        emits: [transport-unit.stacked, transport-unit.unstacked]
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/transport.integration.test.ts
+        test: stapelt BOX auf EURO bis zur Höchstzahl
+      - kind: integration
+        file: apps/api/test/integration/transport.integration.test.ts
+        test: verhindert unzulässige Stapel
+      - kind: integration
+        file: apps/api/test/integration/transport.integration.test.ts
+        test: bewegt den ganzen Stapel und zählt das Gewicht des Stapels
+      - kind: integration
+        file: apps/api/test/integration/transport.integration.test.ts
+        test: nimmt vom Stapel nur, wenn auf dem Platz Raum ist
+
+  - id: transporteinheiten.zustand
+    title: TU-Zustand (verfügbar, gesperrt, Qualitätsprüfung)
+    group: transporteinheiten.fuehrung
+    summary: Nimmt eine Palette aus dem Verkehr, z. B. für eine Qualitätsprüfung – die Auslagerung greift dann nicht darauf zu.
+    description: |
+      Eine TU ist `AVAILABLE`, `BLOCKED` oder `QUALITY_CHECK`. Nur verfügbare TUs werden bei der Auslagerung
+      berücksichtigt. Jede Änderung wird mit Vorher/Nachher als Ereignis gemeldet.
+    usage:
+      - channel: api
+        text: "`POST /v1/transport-units/{barcode}/state` mit `state`."
+    technical:
+      components:
+        - apps/api/src/modules/transport/application/transport-unit.service.ts
+      endpoints:
+        - POST /v1/transport-units/{barcode}/state
+      events:
+        emits: [transport-unit.state-changed]
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/transport.integration.test.ts
+        test: ändert den Zustand und veröffentlicht vorher/nachher
+      - kind: integration
+        file: apps/api/test/integration/outbound.integration.test.ts
+        test: nimmt keinen Bestand von gesperrten Plätzen, gesperrten TUs oder aus laufender Inventur
+
+  - id: transporteinheiten.suche
+    title: Transporteinheiten finden
+    group: transporteinheiten.fuehrung
+    summary: Listet TUs nach Platz, Typ oder Zustand.
+    description: Die Suche filtert TUs nach Platz, TU-Typ und Zustand und liefert Gewicht, Stapel und geplantes Ziel mit.
+    usage:
+      - channel: api
+        text: "`GET /v1/transport-units?location=…&typeCode=…&state=…`"
+    technical:
+      components:
+        - apps/api/src/modules/transport/http/transport-units.controller.ts
+      endpoints:
+        - GET /v1/transport-units
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/transport.integration.test.ts
+        test: findet TUs nach Platz, Typ und Zustand

@@ -1,0 +1,97 @@
+# Feature-Katalog – Bereich Bedienoberfläche.
+area: oberflaeche
+
+features:
+  - id: oberflaeche.auslieferung
+    title: Oberfläche ohne eigenen Server
+    group: oberflaeche.rahmen
+    summary: Die API liefert die Weboberfläche gleich mit aus – kein zusätzlicher Webserver nötig.
+    description: Die gebaute Oberfläche liegt im API-Image und wird unter `/ui/` ausgeliefert; `/` leitet dorthin. Die API-Pfade bleiben unberührt.
+    usage:
+      - channel: leitstand
+        text: "`http://localhost:3000/ui/`"
+    technical:
+      components:
+        - apps/api/src/app.factory.ts
+        - apps/api/Dockerfile
+      notes:
+        - Verzeichnis über `WEB_DIST_DIR`.
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/live.integration.test.ts
+        test: liefert die Oberfläche unter /ui/ aus, ohne die API zu verdecken
+
+  - id: oberflaeche.uebersicht
+    title: Übersicht mit Systemzustand
+    group: oberflaeche.leitstand
+    summary: Startseite mit Zustand von Datenbank und MQTT, Live-Verbindung und Kennzahlen offener Arbeit.
+    description: Die Übersicht zeigt den Betriebszustand, ob die Live-Verbindung steht, offene Aufträge und Bewegungen sowie die letzten Ereignisse.
+    usage:
+      - channel: leitstand
+        text: Menü **Übersicht**.
+    technical:
+      components:
+        - apps/web/src/pages/OverviewPage.tsx
+      uiRoutes: [/]
+    evidence:
+      - kind: web-e2e
+        file: apps/web/e2e/leitstand.spec.ts
+        test: Übersicht zeigt Systemzustand und Live-Verbindung
+
+  - id: oberflaeche.live-aktualisierung
+    title: Live-Aktualisierung aller Seiten
+    group: oberflaeche.rahmen
+    summary: Seiten aktualisieren sich von selbst, sobald irgendwo gebucht wird – ohne Neuladen.
+    description: Die Oberfläche hört auf die Live-Ereignisse und lädt genau die betroffenen Daten nach (z. B. Bestand nach einem Abgang durch Scanner oder Anlage).
+    usage:
+      - channel: leitstand
+        text: Wirkt automatisch; die Übersicht zeigt den Verbindungszustand.
+    dependsOn: [integration.live-stream]
+    technical:
+      components:
+        - apps/web/src/live/events.tsx
+    evidence:
+      - kind: web-e2e
+        file: apps/web/e2e/leitstand.spec.ts
+        test: Bestand zeigt Posten und aktualisiert sich live nach einem Abgang
+      - kind: web-e2e
+        file: apps/web/e2e/leitstand.spec.ts
+        test: Übersicht zeigt Systemzustand und Live-Verbindung
+
+  - id: oberflaeche.scanner
+    title: Scanner-Ansicht im Handyformat
+    group: oberflaeche.scanner
+    summary: Eine Oberfläche für Handscanner und Smartphones mit großen Feldern und verständlichen Meldungen.
+    description: Die Scanner-Ansicht bündelt die Arbeit im Lager (TU bewegen, Wareneingang ohne Avis) und übersetzt Regelverstöße in verständliche Meldungen.
+    usage:
+      - channel: scanner
+        text: "`/ui/scanner` auf dem Gerät öffnen."
+    technical:
+      components:
+        - apps/web/src/pages/ScannerPage.tsx
+      uiRoutes: [/scanner/*]
+    evidence:
+      - kind: web-e2e
+        file: apps/web/e2e/scanner.spec.ts
+        test: "Scanner: TU bewegen, Regelverletzung als verständliche Meldung"
+      - kind: web-e2e
+        file: apps/web/e2e/scanner.spec.ts
+        test: "Scanner: Wareneingang ohne Avis"
+
+  - id: oberflaeche.rollenabhaengig
+    title: Bedienung je Rolle
+    group: oberflaeche.rahmen
+    summary: Zeigt nur die Schaltflächen, die die eigene Rolle ausführen darf – die API prüft zusätzlich selbst.
+    description: Menüpunkte und Aktionen erscheinen abhängig von den Rollen des angemeldeten Benutzers (z. B. keine Benutzerverwaltung und kein Anlegen von Auslageraufträgen für die Rolle lager).
+    usage:
+      - channel: leitstand
+        text: Wirkt automatisch nach der Anmeldung.
+    dependsOn: [sicherheit.anmeldung, sicherheit.rollen]
+    technical:
+      components:
+        - apps/web/src/auth/session.tsx
+        - apps/web/src/App.tsx
+    evidence:
+      - kind: web-e2e
+        file: apps/web/e2e/auth.spec.ts
+        test: "Rolle lager: keine Benutzerverwaltung, kein Anlegen von Auslageraufträgen"

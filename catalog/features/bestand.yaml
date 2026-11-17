@@ -398,7 +398,7 @@ features:
       bucht die Differenzen als Korrektur und hebt die Sperre auf; ein Abbruch hebt die Sperre ohne Buchung auf.
     usage:
       - channel: api
-        text: "Öffnen `POST /v1/stock-counts` (`barcode`), zählen `POST …/{number}/result` (`lines`), abschließen `…/close` oder abbrechen `…/cancel`."
+        text: "Öffnen `POST /v1/stock-counts` (`barcode`), zählen `POST …/{number}/result` (`lines`), abschließen `…/close` oder abbrechen `…/cancel`; Liste `GET /v1/stock-counts?barcode=…&state=…`."
     rules:
       - Während der Inventur sind alle anderen Buchungen auf der TU gesperrt (`COUNT_IN_PROGRESS`); auch die Auslagerung nimmt diesen Bestand nicht.
       - Je TU höchstens eine offene Inventur.
@@ -410,6 +410,7 @@ features:
         - apps/api/src/modules/inventory/http/stock-counts.controller.ts
       endpoints:
         - POST /v1/stock-counts
+        - GET /v1/stock-counts
         - POST /v1/stock-counts/{number}/result
         - POST /v1/stock-counts/{number}/close
         - POST /v1/stock-counts/{number}/cancel

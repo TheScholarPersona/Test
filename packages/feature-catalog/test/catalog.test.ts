@@ -149,10 +149,14 @@ describe('Hilfsfunktionen', () => {
       { path: 'b.js', text: "{ method: 'GET', path: `/v1/stock/summary?by=location` }" },
       { path: 'c.ts', text: "expect(paths).toEqual(['/v1/stock/{id}/issues'])" },
       { path: 'd.ts', text: "await api.get('/v1/stock-counts')" },
+      { path: 'e.ts', text: "await api.post(`/v1/movements/${mv['P1']}/release`)" },
+      { path: 'f.ts', text: 'await fetch(`${baseUrl}/v1/events/stream?types=x`, { headers })' },
     ];
     expect(filesCalling({ method: 'POST', path: '/v1/stock/{id}/issues' }, files)).toEqual(['a.ts']);
     expect(filesCalling({ method: 'GET', path: '/v1/stock/summary' }, files)).toEqual(['b.js']);
     expect(filesCalling({ method: 'GET', path: '/v1/stock' }, files)).toEqual([]);
+    expect(filesCalling({ method: 'POST', path: '/v1/movements/{number}/release' }, files)).toEqual(['e.ts']);
+    expect(filesCalling({ method: 'GET', path: '/v1/events/stream' }, files)).toEqual(['f.ts']);
   });
 
   it('findet Testtitel als String-Literal', () => {

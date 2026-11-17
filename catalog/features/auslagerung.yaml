@@ -1,0 +1,169 @@
+# Feature-Katalog – Bereich Auslagerung.
+area: auslagerung
+
+features:
+  - id: auslagerung.auftrag
+    title: Auslageraufträge anlegen
+    group: auslagerung.auftraege
+    summary: Erfasst Kundenaufträge mit Positionen in beliebigen Einheiten, Kunde, Priorität und Zielplatz für die Ware.
+    description: |
+      Ein Auslagerauftrag hat eine Auftragsnummer, optional Kunde und Priorität, ein Ziel (z. B. Versandplatz) und
+      Positionen mit Produkt, Menge und optional Charge. Mengen werden in die Basiseinheit umgerechnet. Der
+      Auftragszustand ergibt sich aus den Positionen.
+    usage:
+      - channel: leitstand
+        text: Seite **Auslagerung** – Auftrag anlegen (Rolle leitstand).
+      - channel: api
+        text: '`POST /v1/outbound-orders` mit `orderId`, `customer?`, `priority?`, `target`, `lines`; lesen `GET …/{orderId}`.'
+    rules:
+      - Auftragsnummer eindeutig, Produkte und Einheiten müssen existieren.
+      - Zustände Auftrag `CREATED` → `PARTIALLY_ALLOCATED` → `ALLOCATED` → `IN_PICKING` → `COMPLETED` (`CANCELLED`).
+    dependsOn: [bestand.produktstamm, bestand.einheiten-umrechnung]
+    technical:
+      components:
+        - apps/api/src/modules/outbound/application/outbound.service.ts
+        - apps/api/src/modules/outbound/http/outbound.controller.ts
+        - apps/web/src/pages/OutboundPage.tsx
+      endpoints:
+        - POST /v1/outbound-orders
+        - GET /v1/outbound-orders/{orderId}
+      events:
+        emits: [outbound-order.created]
+      uiRoutes: [/auslagerung]
+      notes:
+        - Tabellen `outbound_order`, `outbound_line`, `outbound_pick`.
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/outbound.integration.test.ts
+        test: legt einen Auftrag an und prüft Produkt und Nummer
+      - kind: web-e2e
+        file: apps/web/e2e/leitstand.spec.ts
+        test: "Auslagerauftrag: anlegen, zuteilen, quittieren"
+      - kind: scenario
+        id: outbound-flow
+
+  - id: auslagerung.zuteilung
+    title: Bestand zuteilen und reservieren
+    group: auslagerung.auftraege
+    summary: Wählt den passenden Bestand per Auslagerstrategie, reserviert ihn als Picks und meldet, was fehlt.
+    description: |
+      Die Zuteilung plant den offenen Bedarf jeder Position mit dem aktiven Auslager-Regelsatz (z. B. FEFO mit
+      Mindestrestlaufzeit) und reserviert jede Entnahme als Pick. Sie ist mehrfach aufrufbar (Nachzuteilung). Auf
+      Wunsch entsteht je TU eine Lagerbewegung oder ein Transportauftrag zum Ziel. Bei zu wenig Bestand wird zugeteilt,
+      was geht, und die Fehlmenge gemeldet.
+    usage:
+      - channel: leitstand
+        text: Seite **Auslagerung** – „Zuteilen“ am Auftrag.
+      - channel: api
+        text: '`POST /v1/outbound-orders/{orderId}/allocate` mit `transport`: `none` | `movement` | `transport-order`.'
+    rules:
+      - Kein Bestand von gesperrten Plätzen, gesperrten TUs oder aus laufender Inventur.
+      - Gleichzeitige Zuteilungen vergeben nie mehr als verfügbar.
+      - Ist eine TU schon belegt, wird das vermerkt statt doppelt beauftragt.
+    dependsOn: [auslagerung.auftrag, strategien.auslagerstrategien, bestand.reservierung]
+    technical:
+      components:
+        - apps/api/src/modules/outbound/application/outbound.service.ts
+        - apps/api/src/modules/outbound/domain/outbound-rules.ts
+      endpoints:
+        - POST /v1/outbound-orders/{orderId}/allocate
+      events:
+        emits: [outbound-order.allocated, outbound-order.state-changed, allocation.decided, stock.reserved, movement.created, transport-order.created]
+      uiRoutes: [/auslagerung]
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/outbound.integration.test.ts
+        test: teilt per FEFO mit Mindestrestlaufzeit zu und reserviert
+      - kind: integration
+        file: apps/api/test/integration/outbound.integration.test.ts
+        test: teilt per FIFO über mehrere Posten zu
+      - kind: integration
+        file: apps/api/test/integration/outbound.integration.test.ts
+        test: teilt bei zu wenig Bestand zu, was geht, und meldet die Fehlmenge
+      - kind: integration
+        file: apps/api/test/integration/outbound.integration.test.ts
+        test: nimmt keinen Bestand von gesperrten Plätzen, gesperrten TUs oder aus laufender Inventur
+      - kind: integration
+        file: apps/api/test/integration/outbound.integration.test.ts
+        test: legt je TU eine Lagerbewegung zum Ziel an
+      - kind: integration
+        file: apps/api/test/integration/outbound.integration.test.ts
+        test: legt Transportaufträge an und vermerkt belegte TUs
+      - kind: integration
+        file: apps/api/test/integration/outbound.integration.test.ts
+        test: vergibt bei gleichzeitigen Zuteilungen nie mehr als verfügbar
+      - kind: web-e2e
+        file: apps/web/e2e/leitstand.spec.ts
+        test: "Auslagerauftrag: anlegen, zuteilen, quittieren"
+      - kind: scenario
+        id: outbound-flow
+
+  - id: auslagerung.kommissionierung
+    title: Picks quittieren und Fehlmengen behandeln
+    group: auslagerung.kommissionierung
+    summary: Bucht die Entnahme gegen die Reservierung; wird weniger gefunden, wird der Rest freigegeben und neu zuteilbar.
+    description: |
+      Die Quittung eines Picks bucht den Abgang gegen seine Reservierung. Wird weniger entnommen als zugeteilt, ist das
+      eine Fehlmenge: der Rest wird freigegeben und kann neu zugeteilt werden. Sind alle Positionen entnommen, schließt
+      der Auftrag automatisch. Die Pick-Arbeitsliste ist nach Platz sortiert.
+    usage:
+      - channel: leitstand
+        text: Seite **Auslagerung** – Picks am Auftrag quittieren.
+      - channel: api
+        text: "`POST /v1/outbound-orders/{orderId}/picks/{pickId}/confirm` (`quantity?`, `pickedBy?`), Arbeitsliste `GET /v1/outbound-picks?state=OPEN`."
+    rules:
+      - Buchungen tragen den Bezug `outbound:<orderId>/<Position>`.
+    dependsOn: [auslagerung.zuteilung, bestand.abgang]
+    technical:
+      components:
+        - apps/api/src/modules/outbound/application/outbound.service.ts
+      endpoints:
+        - POST /v1/outbound-orders/{orderId}/picks/{pickId}/confirm
+        - GET /v1/outbound-picks
+      events:
+        emits: [outbound-pick.confirmed, stock.issued, outbound-order.state-changed]
+      uiRoutes: [/auslagerung]
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/outbound.integration.test.ts
+        test: bucht bei der Quittung den Abgang und schließt den Auftrag
+      - kind: integration
+        file: apps/api/test/integration/outbound.integration.test.ts
+        test: gibt bei einer Fehlmenge den Rest frei und teilt ihn neu zu
+      - kind: web-e2e
+        file: apps/web/e2e/leitstand.spec.ts
+        test: "Auslagerauftrag: anlegen, zuteilen, quittieren"
+      - kind: scenario
+        id: outbound-flow
+
+  - id: auslagerung.abschluss
+    title: Auslageraufträge abschließen oder stornieren
+    group: auslagerung.auftraege
+    summary: Schließt Aufträge mit Fehlmengen ab oder storniert sie – offene Reservierungen werden freigegeben.
+    description: |
+      Der Abschluss ist nur ohne offene Picks möglich; nicht gedeckte Positionen werden `SHORT`. Ein Storno gibt
+      offene Picks frei; bereits Entnommenes bleibt gebucht. Beides ist endgültig.
+    usage:
+      - channel: leitstand
+        text: Seite **Auslagerung** – Abschließen bzw. Stornieren.
+      - channel: api
+        text: "`POST /v1/outbound-orders/{orderId}/complete`, `…/cancel` (`reason?`)."
+    dependsOn: [auslagerung.zuteilung]
+    technical:
+      components:
+        - apps/api/src/modules/outbound/application/outbound.service.ts
+        - apps/api/src/modules/outbound/domain/outbound-rules.ts
+      endpoints:
+        - POST /v1/outbound-orders/{orderId}/complete
+        - POST /v1/outbound-orders/{orderId}/cancel
+      events:
+        emits: [outbound-order.state-changed, stock.reservation-released]
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/outbound.integration.test.ts
+        test: verlangt vor dem Abschluss quittierte Picks und gibt beim Storno alles frei
+      - kind: unit
+        file: apps/api/test/unit/outbound/outbound-rules.test.ts
+        test: Storno und Abschluss sind endgültig
+      - kind: scenario
+        id: outbound-flow

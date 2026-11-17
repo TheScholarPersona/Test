@@ -22,21 +22,195 @@ items:
         - GET /v1/products
         - GET /v1/products/{sku}
 
-  - id: bestand.inventuren-abfragen
-    title: Inventuren abfragen
+  - id: bestand.inventur-lesen
+    title: Einzelne Inventur lesen
     group: bestand.inventur
-    summary: Liste der Inventuren und einzelne Inventur mit Soll, Ist und Differenzen lesen.
-    description: Die API liefert die Inventuren (neueste zuerst) und eine einzelne Inventur mit ihren Zeilen.
+    summary: Eine Inventur mit Soll, Ist und Differenzen abrufen.
+    description: Die API liefert eine einzelne Inventur mit ihren Zeilen.
     usage:
       - channel: api
-        text: "`GET /v1/stock-counts`, `GET /v1/stock-counts/{number}`"
+        text: "`GET /v1/stock-counts/{number}`"
     state: nicht-nachgewiesen
-    reason: Kein Test ruft die Leseendpunkte auf (Ergebnisse werden nur aus den Antworten der Schreibendpunkte geprüft); keine Ansicht in der Oberfläche.
+    reason: Kein Test ruft den Einzelabruf auf (Ergebnisse werden nur aus den Antworten der Schreibendpunkte geprüft); keine Ansicht in der Oberfläche.
     technical:
       components:
         - apps/api/src/modules/inventory/http/stock-counts.controller.ts
       endpoints:
-        - GET /v1/stock-counts
         - GET /v1/stock-counts/{number}
+
+  - id: lagerstruktur.platztypen-auflisten
+    title: Alle Platztypen auflisten
+    group: lagerstruktur.stammdaten
+    summary: Liste aller Lagerplatztypen.
+    description: Die API liefert alle Platztypen.
+    usage:
+      - channel: api
+        text: "`GET /v1/location-types`"
+    state: nicht-nachgewiesen
+    reason: Kein Test ruft die Liste auf (nur Einzelabruf und Anlegen sind geprüft).
+    technical:
+      components: [apps/api/src/modules/layout/http/location-types.controller.ts]
+      endpoints: ["GET /v1/location-types"]
+
+  - id: lagerstruktur.gruppe-aendern
+    title: Lagerplatzgruppe ändern
+    group: lagerstruktur.stammdaten
+    summary: Beschreibung oder Gruppentyp einer Gruppe ändern.
+    description: Die API ändert Beschreibung und Gruppentyp einer Lagerplatzgruppe und meldet das als Ereignis.
+    usage:
+      - channel: api
+        text: "`PATCH /v1/location-groups/{name}`"
+    state: nicht-nachgewiesen
+    reason: Kein Test ruft den Endpunkt auf; das Ereignis `location-group.updated` wird nur hier erzeugt.
+    technical:
+      components: [apps/api/src/modules/layout/application/location-group.service.ts]
+      endpoints: ["PATCH /v1/location-groups/{name}"]
       events:
-        emits: []
+        emits: [location-group.updated]
+
+  - id: transporteinheiten.typen-auflisten-aendern
+    title: TU-Typen auflisten und ändern
+    group: transporteinheiten.typen
+    summary: Liste aller TU-Typen mit Regeln; Maße und Gewichte eines Typs ändern.
+    description: Die API liefert alle TU-Typen mit Platzierungs- und Stapelregeln und ändert Maße, Leergewicht und Zuladung.
+    usage:
+      - channel: api
+        text: "`GET /v1/transport-unit-types`, `PATCH /v1/transport-unit-types/{code}`"
+    state: nicht-nachgewiesen
+    reason: Kein Test ruft die beiden Endpunkte auf.
+    technical:
+      components: [apps/api/src/modules/transport/http/transport-unit-types.controller.ts]
+      endpoints: ["GET /v1/transport-unit-types", "PATCH /v1/transport-unit-types/{code}"]
+
+  - id: strategien.regelsatz-lesen
+    title: Einzelnen Regelsatz lesen
+    group: strategien.regelsaetze
+    summary: Einen Regelsatz mit allen Regeln abrufen.
+    description: Die API liefert einen Regelsatz mit Status, Version und Regeln.
+    usage:
+      - channel: api
+        text: "`GET /v1/strategy-rule-sets/{id}`"
+    state: nicht-nachgewiesen
+    reason: Kein Test ruft den Einzelabruf auf (Inhalte werden nur aus Liste und Schreibantworten geprüft).
+    technical:
+      components: [apps/api/src/modules/strategy/http/strategies.controller.ts]
+      endpoints: ["GET /v1/strategy-rule-sets/{id}"]
+
+  - id: wareneingang.leitstand
+    title: Wareneingang im Leitstand
+    group: wareneingang.avis
+    summary: Auftragsliste, Avis anlegen, Erfassen, Stornieren und Abschließen auf der Seite Wareneingang.
+    description: Die Seite **Wareneingang** listet Aufträge (neueste zuerst) und bietet je nach Rolle Avis anlegen, Erfassen, Stornieren und Abschließen.
+    usage:
+      - channel: leitstand
+        text: Menü **Wareneingang**.
+      - channel: api
+        text: "Auftragsliste `GET /v1/receiving-orders`"
+    state: nicht-nachgewiesen
+    reason: Kein Browser-Test deckt die Seite ab, und kein Test ruft die Auftragsliste auf. Die Fachfunktionen selbst sind über die API nachgewiesen.
+    technical:
+      components: [apps/web/src/pages/ReceivingPage.tsx]
+      endpoints: ["GET /v1/receiving-orders"]
+      uiRoutes: [/wareneingang]
+
+  - id: transportauftraege.leitstand
+    title: Transport-Seite im Leitstand
+    group: transportauftraege.steuerung
+    summary: Offene Lagerbewegungen und Transportaufträge mit Aktionen je Rolle.
+    description: Die Seite **Transport** zeigt offene Lagerbewegungen (dringendste zuerst) und Transportaufträge und bietet Starten, Abschließen, Fortsetzen, Stornieren und „wartende starten“.
+    usage:
+      - channel: leitstand
+        text: Menü **Transport**.
+    state: nicht-nachgewiesen
+    reason: Kein Browser-Test deckt die Seite ab; die Fachfunktionen sind über die API nachgewiesen.
+    technical:
+      components: [apps/web/src/pages/TransportPage.tsx]
+      uiRoutes: [/transport]
+
+  - id: materialfluss.leitstand
+    title: Materialfluss-Seite und Konfiguration lesen
+    group: materialfluss.konfiguration
+    summary: Routen, Action-Matrix und Entscheidungen ansehen, Geräte-Ereignisse von Hand senden; Actions ändern.
+    description: Die Seite **Materialfluss** zeigt Routen, Action-Matrix und Entscheidungen und kann Geräte-Ereignisse senden. Die API listet Routen und Actions und ändert Actions.
+    usage:
+      - channel: leitstand
+        text: Menü **Materialfluss**.
+      - channel: api
+        text: "`GET /v1/flow/routes`, `GET /v1/flow/actions`, `PATCH /v1/flow/actions/{name}`"
+    state: nicht-nachgewiesen
+    reason: Kein Browser-Test deckt die Seite ab, und kein Test ruft die Listen von Routen und Actions oder das Ändern einer Action auf.
+    technical:
+      components: [apps/web/src/pages/FlowPage.tsx, apps/api/src/modules/flow/http/flow.controller.ts]
+      endpoints: ["GET /v1/flow/routes", "GET /v1/flow/actions", "PATCH /v1/flow/actions/{name}"]
+      uiRoutes: [/materialfluss]
+
+  - id: auslagerung.auftragsliste
+    title: Liste der Auslageraufträge
+    group: auslagerung.auftraege
+    summary: Alle Auslageraufträge, neueste zuerst.
+    description: Die API listet Auslageraufträge; die Seite Auslagerung und die Übersicht nutzen die Liste.
+    usage:
+      - channel: api
+        text: "`GET /v1/outbound-orders`"
+    state: nicht-nachgewiesen
+    reason: Kein Test ruft den Endpunkt erkennbar auf. Der Browser-Test der Seite Auslagerung nutzt ihn indirekt, prüft ihn aber nicht.
+    technical:
+      components: [apps/api/src/modules/outbound/http/outbound.controller.ts]
+      endpoints: ["GET /v1/outbound-orders"]
+
+  - id: auslagerung.scanner-picks
+    title: Picks am Scanner quittieren
+    group: auslagerung.kommissionierung
+    summary: Pick-Liste und Quittung in der Scanner-Ansicht.
+    description: Die Scanner-Ansicht zeigt offene Picks und quittiert sie.
+    usage:
+      - channel: scanner
+        text: Ansicht **Picks**.
+    state: nicht-nachgewiesen
+    reason: Kein Browser-Test deckt das Quittieren am Scanner ab; Quittung über Leitstand und API ist nachgewiesen.
+    technical:
+      components: [apps/web/src/pages/ScannerPage.tsx]
+
+  - id: integration.ereignis-monitor
+    title: Ereignis-Monitor im Leitstand
+    group: integration.ereignisse
+    summary: Zeigt die Live-Ereignisse im Browser mit Filter.
+    description: Die Seite **Ereignisse** zeigt eingehende Live-Ereignisse.
+    usage:
+      - channel: leitstand
+        text: Menü **Ereignisse**.
+    state: nicht-nachgewiesen
+    reason: Kein Browser-Test deckt die Seite ab.
+    technical:
+      components: [apps/web/src/pages/EventsPage.tsx]
+      uiRoutes: [/ereignisse]
+
+  - id: sicherheit.konto-und-benutzer-seiten
+    title: Seiten Konto und Benutzer
+    group: sicherheit.benutzer
+    summary: Eigenes Passwort ändern und Benutzerverwaltung in der Oberfläche; Rollen mit Beschreibung abrufen.
+    description: Die Seite **Konto** ändert das eigene Passwort, die Seite **Benutzer** (nur admin) legt Benutzer an, vergibt Rollen, sperrt und setzt Passwörter. Die Rollenliste mit Beschreibungen liefert die API.
+    usage:
+      - channel: leitstand
+        text: Menü **Benutzer**, Link **Konto** beim Anmeldenamen.
+      - channel: api
+        text: "`GET /v1/auth/roles`"
+    state: nicht-nachgewiesen
+    reason: Kein Browser-Test bedient die beiden Seiten, und kein Test ruft die Rollenliste auf. Die zugrunde liegenden API-Funktionen sind nachgewiesen.
+    technical:
+      components: [apps/web/src/pages/AccountPage.tsx, apps/web/src/pages/UsersPage.tsx]
+      endpoints: ["GET /v1/auth/roles"]
+      uiRoutes: [/konto, /benutzer]
+
+  - id: sicherheit.mqtt-tls
+    title: MQTT nur mit TLS und Benutzern
+    group: sicherheit.infrastruktur
+    summary: Der Broker nimmt nur verschlüsselte Verbindungen mit Benutzer und Passwort an; Rechte je Topic.
+    description: Mosquitto lauscht nur auf 8883 (TLS) ohne anonyme Zugriffe; Benutzer `wms-api`, `node-red`, `health` mit Rechten je Topic. Zertifikate erzeugt der Dienst `certs`.
+    usage:
+      - channel: mqtt
+        text: "`mqtts://localhost:8883` mit `--cafile ca.crt` und Benutzer."
+    state: nicht-nachgewiesen
+    reason: Nur von Hand geprüft (anonym, falsches Passwort, ohne TLS und Port 1883 werden abgelehnt). Kein automatisierter Test – die CI startet die Umgebung zwar mit TLS, prüft aber die Ablehnungen nicht.
+    technical:
+      components: [docker/mosquitto/mosquitto.conf, docker/mosquitto/acl, docker/certs/generate.sh]

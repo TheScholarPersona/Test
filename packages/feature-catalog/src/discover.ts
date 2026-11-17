@@ -110,7 +110,8 @@ export function discover(root = REPO_ROOT): Discovery {
 export function pathPattern(path: string): RegExp {
   const source = path
     .split(/(\{[^}]+\})/)
-    .map((part) => (part.startsWith('{') ? '[^/?#\'"`\\s]+' : part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+    // Parameter: Template-Ausdruck (`${mv['P1']}`) oder ein Segment ohne Trennzeichen.
+    .map((part) => (part.startsWith('{') ? '(?:\\$\\{[^}]*\\}|[^/?#\'"`\\s])+' : part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
     .join('');
   // Danach endet der Pfad: Anführungszeichen, Query-String oder Ende eines Template-Literals.
   return new RegExp(`${source}(?=[?#'"\`]|$)`, 'gm');
@@ -126,8 +127,9 @@ export function filesCalling(endpoint: { method: string; path: string }, files: 
   for (const file of files) {
     for (const match of file.text.matchAll(pattern)) {
       const before = file.text.slice(Math.max(0, match.index - 80), match.index);
-      const methods = [...before.matchAll(/\b(get|post|put|patch|delete)\b/gi)];
-      const method = methods.at(-1)?.[1]?.toUpperCase();
+      const methods = [...before.matchAll(/\b(get|post|put|patch|delete|fetch)\b/gi)];
+      // `fetch(url)` ohne Methode ist ein GET.
+      const method = methods.at(-1)?.[1]?.toUpperCase().replace('FETCH', 'GET');
       if (method === endpoint.method) {
         hits.push(file.path);
         break;

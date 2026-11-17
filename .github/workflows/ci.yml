@@ -31,8 +31,11 @@ jobs:
       - run: pnpm build
       - run: pnpm typecheck
       - run: pnpm lint:deps
-      - name: Unit-Tests
-        run: pnpm test
+      - name: Unit-Tests (API und Node-RED-Nodes mit JUnit-Bericht für den Feature-Katalog)
+        run: |
+          pnpm --filter @wms/api test --reporter=default --reporter=junit --outputFile.junit=../../reports/api-unit-junit.xml
+          pnpm --filter @wms/node-red-nodes test --reporter=default --reporter=junit --outputFile.junit=../../reports/nodes-unit-junit.xml
+          pnpm -r --filter '!@wms/api' --filter '!@wms/node-red-nodes' test
       - name: Integrationstests (Testcontainers mit PostgreSQL und Mosquitto)
         run: pnpm test:integration --reporter=default --reporter=junit --outputFile.junit=../../reports/api-integration-junit.xml
       - name: Feature-Katalog statisch prüfen
@@ -42,7 +45,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: verify-junit
-          path: reports/api-integration-junit.xml
+          path: |
+            reports/api-integration-junit.xml
+            reports/api-unit-junit.xml
+            reports/nodes-unit-junit.xml
           if-no-files-found: warn
 
   e2e:

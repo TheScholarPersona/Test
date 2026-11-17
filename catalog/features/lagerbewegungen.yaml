@@ -1,0 +1,122 @@
+# Feature-Katalog – Bereich Lagerbewegungen.
+area: lagerbewegungen
+
+features:
+  - id: lagerbewegungen.anlegen
+    title: Lagerbewegung mit festem Ziel oder Zielbereich anlegen
+    group: lagerbewegungen.planung
+    summary: Beauftragt, eine Palette an einen Platz oder in einen Bereich zu bringen – im Bereich wählt die Einlagerstrategie den Platz.
+    description: |
+      Eine Lagerbewegung (Nummer `MV00000001` …) bringt eine TU samt Stapel zu einem Ziel. Ein fester Zielplatz wird
+      gegen die Platzregeln geprüft; bei einer Zielgruppe wählt der aktive Einlager-Regelsatz den Platz, der
+      Bewegungstyp steht dort als Fakt zur Verfügung (z. B. Leergut in die Leergutzone). Das Ziel wird reserviert.
+    usage:
+      - channel: api
+        text: '`POST /v1/movements` mit `barcode`, `type`, `target` (`{ "location": … }` oder `{ "group": … }`), `priority`.'
+    rules:
+      - Je TU höchstens eine offene Bewegung (`MOVEMENT_EXISTS`, per Datenbank abgesichert).
+      - Bereits reservierte Ziele werden abgelehnt; findet die Strategie keinen Platz, wird nichts angelegt (`NO_TARGET_LOCATION`).
+      - Typen `INBOUND`, `RELOCATION`, `REPLENISHMENT`, `OUTBOUND`, `EMPTIES`, `CLEARING`, `MANUAL`.
+    dependsOn: [transporteinheiten.anlegen, strategien.einlagerplatz]
+    technical:
+      components:
+        - apps/api/src/modules/movement/application/movement.service.ts
+        - apps/api/src/modules/movement/http/movements.controller.ts
+      endpoints:
+        - POST /v1/movements
+        - GET /v1/movements/{number}
+      events:
+        emits: [movement.created]
+      notes:
+        - Tabelle `movement`; Bewegungen werden nie gelöscht, Barcode und Koordinaten bleiben als Historie erhalten.
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/movement.integration.test.ts
+        test: legt eine Bewegung mit festem Ziel an und reserviert es
+      - kind: integration
+        file: apps/api/test/integration/movement.integration.test.ts
+        test: erlaubt je TU nur eine offene Bewegung
+      - kind: integration
+        file: apps/api/test/integration/movement.integration.test.ts
+        test: lehnt ein bereits reserviertes Ziel ab
+      - kind: integration
+        file: apps/api/test/integration/movement.integration.test.ts
+        test: bestimmt das Ziel aus einer Gruppe über die Einlagerstrategie
+      - kind: integration
+        file: apps/api/test/integration/movement.integration.test.ts
+        test: nutzt den Bewegungstyp in Regelsätzen (Leergut in die Leergutzone)
+      - kind: integration
+        file: apps/api/test/integration/movement.integration.test.ts
+        test: legt nichts an, wenn kein Zielplatz frei ist
+      - kind: integration
+        file: apps/api/test/integration/movement.integration.test.ts
+        test: legt für eine TU auch bei gleichzeitigen Anfragen nur eine offene Bewegung an
+      - kind: scenario
+        id: movement-flow
+
+  - id: lagerbewegungen.arbeitsliste
+    title: Arbeitsliste der Lagerbewegungen
+    group: lagerbewegungen.planung
+    summary: Zeigt Bedienern die dringendsten Bewegungen zuerst, filterbar nach Zustand, Typ, TU und Bearbeiter.
+    description: Die Arbeitsliste sortiert nach Priorität, dann nach Alter und filtert nach Zustand, Bewegungstyp, Barcode und Bearbeiter.
+    usage:
+      - channel: api
+        text: "`GET /v1/movements?state=OPEN,IN_PROGRESS&type=INBOUND&assignedTo=…`"
+    technical:
+      components:
+        - apps/api/src/modules/movement/application/movement.service.ts
+      endpoints:
+        - GET /v1/movements
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/movement.integration.test.ts
+        test: sortiert nach Priorität, dann nach Alter, und filtert nach Zustand und Typ
+
+  - id: lagerbewegungen.ausfuehren
+    title: Lagerbewegung ausführen, abschließen oder stornieren
+    group: lagerbewegungen.ausfuehrung
+    summary: Führt eine Bewegung vom Beginn bis zur Buchung am Ziel – Abweichungen vom geplanten Ziel werden vermerkt.
+    description: |
+      Ein Bediener beginnt eine Bewegung, kann sie zurückgeben und schließt sie ab. Der Abschluss bucht die TU mit allen
+      Platzregeln (`checked` oder `physical`); ohne Platzangabe gilt das Ziel, ein anderer Platz ist eine
+      Abweichung und gibt das ursprüngliche Ziel frei. Ein Storno hebt die Zielreservierung auf. Andere Übergänge
+      werden abgelehnt; jede Antwort nennt die erlaubten Aktionen.
+    usage:
+      - channel: api
+        text: "`POST /v1/movements/{number}/start`, `…/release`, `…/complete` (`location?`, `mode?`), `…/cancel`."
+    rules:
+      - Zustände `OPEN` → `IN_PROGRESS` → `DONE`, Storno nach `CANCELLED`; sonst `INVALID_STATE_TRANSITION`.
+      - TUs mit offener Bewegung und Plätze, die Ziel einer offenen Bewegung sind, können nicht gelöscht werden.
+    dependsOn: [lagerbewegungen.anlegen, transporteinheiten.platzierungspruefung]
+    technical:
+      components:
+        - apps/api/src/modules/movement/application/movement.service.ts
+        - apps/api/src/modules/movement/domain/movement-state.ts
+      endpoints:
+        - POST /v1/movements/{number}/start
+        - POST /v1/movements/{number}/release
+        - POST /v1/movements/{number}/complete
+        - POST /v1/movements/{number}/cancel
+      events:
+        emits: [movement.started, movement.released, movement.completed, movement.cancelled]
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/movement.integration.test.ts
+        test: beginnt, gibt zurück und beginnt erneut
+      - kind: integration
+        file: apps/api/test/integration/movement.integration.test.ts
+        test: schließt ab, bucht die TU und meldet Quelle und Ziel
+      - kind: integration
+        file: apps/api/test/integration/movement.integration.test.ts
+        test: prüft beim Abschluss die Platzregeln und vermerkt Abweichungen vom Ziel
+      - kind: integration
+        file: apps/api/test/integration/movement.integration.test.ts
+        test: storniert und gibt die Reservierung frei
+      - kind: integration
+        file: apps/api/test/integration/movement.integration.test.ts
+        test: schützt TUs mit offener Bewegung und Plätze, die Ziel einer offenen Bewegung sind
+      - kind: unit
+        file: apps/api/test/unit/movement/movement-state.test.ts
+        test: kennt Endzustände und erlaubte Aktionen
+      - kind: scenario
+        id: movement-flow
