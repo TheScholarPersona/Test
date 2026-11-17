@@ -15,7 +15,10 @@
     "test:e2e": "pnpm --filter @wms/scenario-runner test:e2e",
     "verify": "pnpm build && pnpm typecheck && pnpm lint:deps && pnpm test",
     "stack:up": "docker compose up -d --build --wait",
-    "stack:down": "docker compose down -v"
+    "stack:down": "docker compose down -v",
+    "demo:data": "node scripts/demo-data.mjs",
+    "web:dev": "pnpm --filter @wms/web dev",
+    "test:web": "pnpm --filter @wms/web test:e2e"
   },
   "devDependencies": {
     "dependency-cruiser": "18.7.2",

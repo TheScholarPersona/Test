@@ -22,6 +22,8 @@ const EnvSchema = z.object({
   OUTBOX_RELAY_ENABLED: booleanString(true),
   OUTBOX_POLL_INTERVAL_MS: z.coerce.number().int().min(50).max(60_000).default(500),
   OUTBOX_BATCH_SIZE: z.coerce.number().int().min(1).max(1000).default(50),
+  /** Verzeichnis mit der gebauten Oberfläche (apps/web/dist); ohne Angabe liefert die API keine Oberfläche aus. */
+  WEB_DIST_DIR: z.string().min(1).optional(),
   OUTBOX_PUBLISH_TIMEOUT_MS: z.coerce.number().int().min(100).max(60_000).default(5000),
 });
 
@@ -35,6 +37,8 @@ export interface AppConfig {
   databaseUrl: string;
   dbMigrateOnStart: boolean;
   mqttUrl: string;
+  /** Gebaute Oberfläche, ausgeliefert unter /ui/. */
+  webDistDir: string | null;
   outbox: {
     relayEnabled: boolean;
     pollIntervalMs: number;
@@ -65,6 +69,7 @@ export function loadConfig(env: Record<string, string | undefined>): AppConfig {
     databaseUrl: e.DATABASE_URL,
     dbMigrateOnStart: e.DB_MIGRATE_ON_START,
     mqttUrl: e.MQTT_URL,
+    webDistDir: e.WEB_DIST_DIR ?? null,
     outbox: {
       relayEnabled: e.OUTBOX_RELAY_ENABLED,
       pollIntervalMs: e.OUTBOX_POLL_INTERVAL_MS,

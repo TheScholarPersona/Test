@@ -13,3 +13,8 @@ flows/node-red/.flows*.backup
 flows/node-red/flows_cred.json
 flows/node-red/node_modules/
 flows/node-red/lib/
+
+# Oberfläche: aus src/api/openapi.json erzeugte Typen
+apps/web/src/api/schema.d.ts
+apps/web/test-results/
+apps/web/playwright-report/

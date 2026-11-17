@@ -55,6 +55,10 @@ jobs:
         run: pnpm test:e2e
         env:
           NODE_RED_URL: http://localhost:1880
+      - name: Browser für die Oberflächen-Tests
+        run: pnpm --filter @wms/web exec playwright install --with-deps chromium
+      - name: Oberfläche im Browser testen (Playwright)
+        run: pnpm --filter @wms/web test:e2e
       - name: Container-Protokolle bei Fehler
         if: failure()
         run: docker compose logs --no-color
@@ -63,7 +67,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: e2e-junit
-          path: reports/e2e-junit.xml
+          path: |
+            reports/e2e-junit.xml
+            reports/web-e2e-junit.xml
           if-no-files-found: warn
       - name: Umgebung abbauen
         if: always()
