@@ -4,7 +4,7 @@ import { api, unwrap } from '../api/client';
 import { useCan } from '../auth/session';
 import { Feedback, latest } from '../components/Feedback';
 import { addressLine, PartnerSelect } from '../components/PartnerSelect';
-import { Empty, ErrorMessage, Panel, Quantity, StateBadge, dateTime } from '../components/ui';
+import { Empty, ErrorMessage, Panel, PdfLink, Quantity, StateBadge, dateTime } from '../components/ui';
 import { useAction } from '../components/useAction';
 
 const list = (v: string) => v.split(/[\s,;]+/).map((x) => x.trim()).filter(Boolean);
@@ -109,6 +109,11 @@ export function ShippingPage() {
             {shipment.shippedAt && <span className="muted">ausgeliefert {dateTime(shipment.shippedAt)}</span>}
             {shipment.cancelReason && <span className="muted">{shipment.cancelReason}</span>}
           </div>
+          <div className="row" style={{ marginBottom: 12 }} aria-label="Dokumente">
+            <PdfLink href={`/v1/documents/delivery-note/${shipment.number}`}>Lieferschein</PdfLink>
+            <PdfLink href={`/v1/documents/loading-list/${shipment.number}`}>Ladeliste</PdfLink>
+            {shipment.units.length > 0 && <PdfLink href={`/v1/documents/shipping-labels/${shipment.number}`}>Versandetiketten</PdfLink>}
+          </div>
           {open && (
             <div className="toolbar" style={{ marginBottom: 12 }}>
               {can('lager', 'leitstand') && (
@@ -158,7 +163,10 @@ export function ShippingPage() {
                             ))
                           : '–'}
                       </td>
-                      <td>{active && can('leitstand') && <button className="secondary" onClick={() => removeUnit.run(u.barcode)}>Herausnehmen</button>}</td>
+                      <td className="row">
+                        {shipment.state !== 'SHIPPED' && <PdfLink href={`/v1/documents/unit-label/${encodeURIComponent(u.barcode)}`}>Palettenetikett</PdfLink>}
+                        {active && can('leitstand') && <button className="secondary" onClick={() => removeUnit.run(u.barcode)}>Herausnehmen</button>}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

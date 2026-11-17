@@ -4,7 +4,7 @@ import { api, unwrap } from '../api/client';
 import { Feedback, latest } from '../components/Feedback';
 import { LocationSelect } from '../components/LocationSelect';
 import { addressLine, PartnerSelect } from '../components/PartnerSelect';
-import { Empty, ErrorMessage, Panel, Quantity, StateBadge, dateTime } from '../components/ui';
+import { Empty, ErrorMessage, Panel, PdfLink, Quantity, StateBadge, dateTime } from '../components/ui';
 import { useAction } from '../components/useAction';
 import { useCan } from '../auth/session';
 
@@ -140,6 +140,7 @@ export function OutboundPage() {
             <StateBadge state={order.state} />
             {order.target && <span className="muted">Ziel {order.target.locationId}</span>}
             {order.shipTo && <span className="muted">Lieferadresse: {addressLine(order.shipTo)}</span>}
+            {order.picks.some((p) => p.state === 'OPEN') && <PdfLink href={`/v1/documents/pick-list/${encodeURIComponent(order.orderId)}`}>Pickliste</PdfLink>}
             {order.closeReason && <span className="muted">{order.closeReason}</span>}
           </div>
           <div className="table-wrap">

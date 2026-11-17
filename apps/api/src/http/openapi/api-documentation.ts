@@ -33,7 +33,8 @@ export interface RouteDoc {
   params?: ZodObjectLike;
   query?: ZodObjectLike;
   body?: z.ZodType;
-  response: { status: number; description: string; schema?: z.ZodType };
+  /** `binary`: Antwort ist eine Datei dieses Typs (z. B. `application/pdf`) statt JSON. */
+  response: { status: number; description: string; schema?: z.ZodType; binary?: string };
   errors?: (400 | 404 | 409)[];
   /** Ohne Anmeldung erreichbar (z. B. Login). Sonst: Bearer-Token oder Sitzungs-Cookie, Antworten 401/403. */
   public?: boolean;
@@ -69,9 +70,11 @@ export class ApiDocumentation {
 
   route(doc: RouteDoc): void {
     const responses: RouteConfig['responses'] = {
-      [doc.response.status]: doc.response.schema
-        ? { description: doc.response.description, content: { 'application/json': { schema: doc.response.schema } } }
-        : { description: doc.response.description },
+      [doc.response.status]: doc.response.binary
+        ? { description: doc.response.description, content: { [doc.response.binary]: { schema: { type: 'string', format: 'binary' } } } }
+        : doc.response.schema
+          ? { description: doc.response.description, content: { 'application/json': { schema: doc.response.schema } } }
+          : { description: doc.response.description },
     };
     const errors: number[] = [...(doc.errors ?? []), ...(doc.public ? [] : [401, 403])];
     for (const status of errors) {

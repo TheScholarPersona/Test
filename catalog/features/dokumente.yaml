@@ -1,0 +1,121 @@
+# Feature-Katalog – Bereich Dokumente und Druck.
+area: dokumente
+
+features:
+  - id: dokumente.etiketten
+    title: Paletten- und Versandetiketten
+    group: dokumente.etiketten
+    summary: Druckt Etiketten im Format A6 als PDF – für jede TU mit Inhalt, für jedes Packstück einer Sendung mit Empfänger und Spediteur.
+    description: |
+      Das Palettenetikett zeigt den TU-Barcode groß als Code 128, TU-Typ, Platz und den aktuellen Inhalt (Produkt,
+      Charge/MHD, Menge). Versandetiketten gibt es je TU einer Sendung: Empfängeranschrift, Auftrag, Spediteur,
+      „Packstück n von m“ sowie Barcodes der Sendung und der TU. Barcodes sind interne Kennungen des WMS, keine SSCC.
+    usage:
+      - channel: leitstand
+        text: Seite **Versand** – „Versandetiketten“ und je TU „Palettenetikett“; Seite **Bestand** – bei gewählter TU „Palettenetikett“.
+      - channel: api
+        text: "`GET /v1/documents/unit-label/{barcode}`, `GET /v1/documents/shipping-labels/{number}?unit=…` (Antwort `application/pdf`)."
+    rules:
+      - Nur lesend; drucken darf jeder Angemeldete.
+      - Etikett für eine TU, die nicht zur Sendung gehört → 404 `UNIT_NOT_IN_SHIPMENT`.
+    dependsOn: [transporteinheiten.anlegen, versand.sendungen]
+    technical:
+      components:
+        - apps/api/src/modules/documents/application/document.service.ts
+        - apps/api/src/modules/documents/application/pdf.ts
+        - apps/api/src/modules/documents/http/documents.controller.ts
+        - apps/web/src/pages/ShippingPage.tsx
+        - apps/web/src/pages/StockPage.tsx
+      endpoints:
+        - GET /v1/documents/unit-label/{barcode}
+        - GET /v1/documents/shipping-labels/{number}
+      uiRoutes: [/versand, /bestand]
+      notes:
+        - PDF mit PDFKit (MIT), Barcodes mit bwip-js (MIT); Schrift Helvetica (WinAnsi, Umlaute).
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/shipping.integration.test.ts
+        test: druckt ein Palettenetikett mit Inhalt
+      - kind: integration
+        file: apps/api/test/integration/shipping.integration.test.ts
+        test: druckt Lieferschein, Ladeliste und Versandetiketten einer versendeten Sendung aus der Historie
+      - kind: integration
+        file: apps/api/test/integration/shipping.integration.test.ts
+        test: nimmt für offene Sendungen den aktuellen Bestand
+    comparisons:
+      openwms:
+        status: nicht-einsehbar
+        note: Druck liegt in OpenWMS im privaten Dienst Printing.
+        refs:
+          - Analyse 1.1
+
+  - id: dokumente.pickliste
+    title: Pickliste
+    group: dokumente.belege
+    summary: Druckt die offenen Picks eines Auslagerauftrags in Platzreihenfolge mit TU, Produkt, Menge und Feld zum Abhaken.
+    description: |
+      Die Pickliste (A4) enthält Auftragsnummer als Barcode, Kunde, Packplatz und Priorität sowie alle offenen Picks
+      sortiert nach Platz – für Bediener ohne Scanner.
+    usage:
+      - channel: leitstand
+        text: Seite **Auslagerung** – im Auftrag „Pickliste“, solange offene Picks bestehen.
+      - channel: api
+        text: "`GET /v1/documents/pick-list/{orderId}` (Antwort `application/pdf`)."
+    dependsOn: [auslagerung.zuteilung]
+    technical:
+      components:
+        - apps/api/src/modules/documents/application/document.service.ts
+        - apps/web/src/pages/OutboundPage.tsx
+      endpoints:
+        - GET /v1/documents/pick-list/{orderId}
+      uiRoutes: [/auslagerung]
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/shipping.integration.test.ts
+        test: druckt die Pickliste mit offenen Picks in Platzreihenfolge
+    comparisons:
+      openwms:
+        status: nicht-einsehbar
+        note: Kommissionierung und Druck liegen in OpenWMS in privaten Diensten.
+        refs:
+          - Analyse 1.1
+
+  - id: dokumente.versandpapiere
+    title: Lieferschein und Ladeliste
+    group: dokumente.belege
+    summary: Druckt zu einer Sendung den Lieferschein mit Positionen je Produkt und Charge sowie die Ladeliste mit Ladekontrolle und Unterschriftsfeld.
+    description: |
+      Der Lieferschein (A4) zeigt Empfänger, Lieferschein-Nr. (Sendungsnummer, auch als Barcode), Auftrag, Kundennummer,
+      Spediteur und Datum, darunter die Positionen zusammengefasst je Produkt, Charge und MHD sowie die Packstücke. Die
+      Ladeliste zeigt alle TUs mit Inhalt, Verladezeit und Bediener sowie ein Kontrollfeld. Nach dem Warenausgang stammen
+      die Inhalte aus der Historie der Sendung, vorher aus dem aktuellen Bestand (mit Hinweis).
+    usage:
+      - channel: leitstand
+        text: Seite **Versand** – in der Sendung „Lieferschein“ und „Ladeliste“.
+      - channel: api
+        text: "`GET /v1/documents/delivery-note/{number}`, `GET /v1/documents/loading-list/{number}` (Antwort `application/pdf`)."
+    dependsOn: [versand.warenausgang, partner.lieferadresse]
+    technical:
+      components:
+        - apps/api/src/modules/documents/application/document.service.ts
+        - apps/web/src/pages/ShippingPage.tsx
+      endpoints:
+        - GET /v1/documents/delivery-note/{number}
+        - GET /v1/documents/loading-list/{number}
+      uiRoutes: [/versand]
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/shipping.integration.test.ts
+        test: druckt Lieferschein, Ladeliste und Versandetiketten einer versendeten Sendung aus der Historie
+      - kind: integration
+        file: apps/api/test/integration/shipping.integration.test.ts
+        test: nimmt für offene Sendungen den aktuellen Bestand
+      - kind: web-e2e
+        file: apps/web/e2e/seiten.spec.ts
+        test: "Versand: am Packplatz packen, mit Ladekontrolle verladen, Warenausgang buchen"
+    comparisons:
+      openwms:
+        status: nicht-einsehbar
+        note: Versandpapiere liegen in OpenWMS in den privaten Diensten Shipping und Printing.
+        refs:
+          - Analyse 1.1

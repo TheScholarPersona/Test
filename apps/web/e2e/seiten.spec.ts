@@ -270,4 +270,9 @@ test('Versand: am Packplatz packen, mit Ladekontrolle verladen, Warenausgang buc
   await expect(row).toContainText('SHIPPED');
   await expect(shipment.getByRole('table', { name: 'TUs der Sendung' })).toContainText(`3 PCS ${w.sku}`);
   expect((await fx.request.get(fx.url(`/v1/transport-units/${box}`))).status()).toBe(404);
+
+  const note = shipment.getByRole('link', { name: 'Lieferschein' });
+  const pdf = await fx.request.get(fx.url((await note.getAttribute('href'))!));
+  expect(pdf.headers()['content-type']).toBe('application/pdf');
+  expect((await pdf.body()).subarray(0, 5).toString()).toBe('%PDF-');
 });

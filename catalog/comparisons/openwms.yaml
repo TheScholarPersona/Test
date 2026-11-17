@@ -63,23 +63,15 @@ gaps:
     refs: ["Analyse 1.3 (Micrometer/Prometheus, OpenTelemetry)"]
     related: [sicherheit.betriebszustand]
 
-  - id: openwms.versand
-    title: Versand (Shipping)
-    area: auslagerung
-    summary: Packen, Versandeinheiten, Versandpapiere.
-    status: teilweise
-    source: privat
-    note: Packen am Packplatz, Sendungen mit Ladekontrolle und Warenausgang sind vorhanden; Versandpapiere fehlen noch.
-    refs: [Analyse 1.1 private Repositories]
-    related: [auslagerung.packen, versand.sendungen, versand.ladekontrolle, versand.warenausgang]
-
   - id: openwms.druck
     title: Druck (Printing)
     area: integration
     summary: Etiketten und Belege drucken.
-    status: fehlt
+    status: teilweise
     source: privat
+    note: Etiketten und Belege gibt es als PDF mit internen Barcodes; direkter Druck auf Etikettendrucker (z. B. ZPL) und eine Druckerverwaltung fehlen.
     refs: [Analyse 1.1 private Repositories]
+    related: [dokumente.etiketten, dokumente.pickliste, dokumente.versandpapiere]
 
   - id: openwms.erp-adapter
     title: ERP-Adapter (SAP, Dynamics)

@@ -183,6 +183,20 @@ areas:
         title: Warenausgang
         summary: Bestand ausbuchen und die Historie behalten.
 
+  - id: dokumente
+    title: Dokumente und Druck
+    summary: Etiketten, Pickliste, Lieferschein und Ladeliste als PDF mit internen Barcodes.
+    status: katalogisiert
+    owns:
+      endpoints: [/v1/documents]
+    groups:
+      - id: dokumente.etiketten
+        title: Etiketten
+        summary: Paletten- und Versandetiketten zum Aufkleben.
+      - id: dokumente.belege
+        title: Listen und Belege
+        summary: Pickliste, Lieferschein und Ladeliste.
+
   - id: partner
     title: Geschäftspartner
     summary: Kunden, Lieferanten und Spediteure als Stammdaten mit Anschrift – Grundlage für Avis, Auslagerauftrag und Lieferadresse.

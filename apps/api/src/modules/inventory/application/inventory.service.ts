@@ -368,6 +368,24 @@ export class InventoryService implements OnModuleInit {
     }
   }
 
+  /** Aktueller Inhalt je TU (z. B. für Etiketten und Lieferscheine), mit Produktbeschreibung. */
+  async contentsOf(em: EntityManager, barcodes: string[]): Promise<Map<string, (ShippedContent & { description: string })[]>> {
+    const result = new Map<string, (ShippedContent & { description: string })[]>(barcodes.map((b) => [b, []]));
+    if (!barcodes.length) return result;
+    const items = await em.find(StockItem, { unit: { barcode: { $in: barcodes } } }, { populate: ['product', 'unit'], orderBy: { createdAt: 'asc', id: 'asc' } });
+    for (const item of items) {
+      const product = item.product as Product;
+      result.get((item.unit as TransportUnit).barcode)?.push({ sku: product.sku, description: product.description, quantity: onHandOf(item).toDto(), lot: item.lot ?? null, bestBefore: isoDate(item.bestBefore) });
+    }
+    return result;
+  }
+
+  /** Produktbeschreibungen zu SKUs. */
+  async descriptionsOf(em: EntityManager, skus: string[]): Promise<Map<string, string>> {
+    const products = skus.length ? await em.find(Product, { sku: { $in: [...new Set(skus)] } }) : [];
+    return new Map(products.map((p) => [p.sku, p.description]));
+  }
+
   /** Liegt Bestand auf der TU? */
   async hasStockIn(em: EntityManager, unitId: string): Promise<boolean> {
     return (await em.count(StockItem, { unit: unitId })) > 0;

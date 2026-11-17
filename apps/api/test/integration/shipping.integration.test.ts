@@ -4,6 +4,7 @@ import { databaseOptions } from '../../src/database.js';
 import { runMigrations } from '../../src/infrastructure/database/migrate.js';
 import { configFor, httpClient, startApp } from './support/app.js';
 import { MessageCollector, startEnvironment, type TestEnvironment } from './support/environment.js';
+import { fetchPdf, pdfText } from './support/pdf.js';
 
 /**
  * Packen am Packplatz, Sendungen mit Ladekontrolle und Warenausgang. Alle Daten sind erfunden.
@@ -18,6 +19,7 @@ describe('Versand', () => {
   let collector: MessageCollector;
   const picks: Record<string, string> = {};
   let sh1 = '';
+  let baseUrl = '';
 
   const stock = async (barcode: string) => ((await api.get(`/v1/stock?barcode=${barcode}`)).body.items as { sku: string; quantity: { amount: string }; reserved: { amount: string } }[]).map((i) => `${i.sku}:${i.quantity.amount}/${i.reserved.amount}`);
   const confirm = (orderId: string, body: Record<string, unknown>) => api.post(`/v1/outbound-orders/${orderId}/picks/${picks[orderId]}/confirm`, body);
@@ -30,6 +32,7 @@ describe('Versand', () => {
     const started = await startApp(config);
     app = started.app;
     api = httpClient(started.baseUrl);
+    baseUrl = started.baseUrl;
 
     await api.post('/v1/location-types', { code: 'REGAL' });
     for (const name of ['LAGER', 'PACK']) await api.post('/v1/location-groups', { name });
@@ -37,7 +40,7 @@ describe('Versand', () => {
       await api.post('/v1/locations', { locationId: `S${name}/0001/0001/0001/0000`, erpCode: name, groupName, typeCode: 'REGAL', maxTransportUnits: 20 });
     }
     await api.post('/v1/transport-unit-types', { code: 'EURO' });
-    for (const sku of ['ART', 'ART2']) await api.post('/v1/products', { sku, baseUnit: 'PCS' });
+    for (const sku of ['ART', 'ART2']) await api.post('/v1/products', { sku, baseUnit: 'PCS', description: `Musterartikel ${sku}` });
     for (const [barcode, sku, amount, at] of [['S1', 'ART', '10', 'A1'], ['S3', 'ART2', '6', 'P1']] as const) {
       expect((await api.post('/v1/receiving-blind-captures', { sku, quantity: { amount, unit: 'PCS' }, unit: { barcode, typeCode: 'EURO' }, location: { erpCode: at } })).status).toBe(201);
     }
@@ -151,6 +154,55 @@ describe('Versand', () => {
       expect(again.status).toBe(201);
       expect(((await api.get('/v1/shipments?state=OPEN')).body.items as { number: string }[]).map((s) => s.number)).toEqual([again.body.number]);
       expect((await api.delete(`/v1/shipments/${again.body.number}/units/S3`)).body.units).toEqual([]);
+    });
+  });
+  describe('Dokumente', () => {
+    const documents = { get: (path: string) => fetchPdf(baseUrl, path) };
+    const text = async (response: ReturnType<typeof fetchPdf>) => {
+      const pdf = await response;
+      expect(pdf.status, pdf.body.toString('utf8').slice(0, 300)).toBe(200);
+      expect(pdf.type).toBe('application/pdf');
+      expect(pdf.body.subarray(0, 5).toString()).toBe('%PDF-');
+      return pdfText(pdf.body).join('\n');
+    };
+
+    it('druckt ein Palettenetikett mit Inhalt', async () => {
+      const pdf = await documents.get('/v1/documents/unit-label/S1');
+      expect(pdf.disposition).toBe('inline; filename="palettenetikett-S1.pdf"');
+      const t = pdfText(pdf.body).join('\n');
+      expect(t).toContain('Palettenetikett');
+      expect(t).toContain('EURO');
+      expect(t).toContain('A1');
+      expect(t).toContain('6 PCS');
+      expect((await documents.get('/v1/documents/unit-label/GIBTSNICHT')).status).toBe(404);
+    });
+
+    it('druckt die Pickliste mit offenen Picks in Platzreihenfolge', async () => {
+      const t = await text(documents.get('/v1/documents/pick-list/AUF-3'));
+      expect(t).toContain('Pickliste AUF-3');
+      expect(t).toContain('SA1/0001/0001/0001/0000');
+      expect(t).toContain('Musterartikel ART');
+      expect(t).toContain('1 PCS');
+    });
+
+    it('druckt Lieferschein, Ladeliste und Versandetiketten einer versendeten Sendung aus der Historie', async () => {
+      const note = await text(documents.get(`/v1/documents/delivery-note/${sh1}`));
+      for (const expected of ['Lieferschein', 'Musterkunde GmbH', 'Musterstraße 1', '12345 Musterstadt', 'AUF-1', 'Musterspedition KG (SP-1)', 'Musterartikel ART', '4 PCS', 'V-1']) expect(note).toContain(expected);
+      expect(note).not.toContain('Hinweis');
+      const list = await text(documents.get(`/v1/documents/loading-list/${sh1}`));
+      for (const expected of [`Ladeliste ${sh1}`, 'V-1', '(tor-3)', 'SHIPPED']) expect(list).toContain(expected);
+      const labels = await text(documents.get(`/v1/documents/shipping-labels/${sh1}`));
+      for (const expected of ['Versandetikett', 'Musterkunde GmbH', '1 von 1']) expect(labels).toContain(expected);
+      expect((await documents.get(`/v1/documents/shipping-labels/${sh1}?unit=S3`)).status).toBe(404);
+    });
+
+    it('nimmt für offene Sendungen den aktuellen Bestand', async () => {
+      const open = await api.post('/v1/shipments', { orderId: 'AUF-2', units: ['S3'] });
+      const note = await text(documents.get(`/v1/documents/delivery-note/${open.body.number}`));
+      expect(note).toContain('6 PCS');
+      expect(note).toContain('Inhalt nach aktuellem Bestand');
+      expect(await text(documents.get(`/v1/documents/shipping-labels/${open.body.number}?unit=S3`))).toContain('Spediteur: \n–');
+      await api.post(`/v1/shipments/${open.body.number}/cancel`, {});
     });
   });
 });

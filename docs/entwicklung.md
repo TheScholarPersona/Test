@@ -503,6 +503,22 @@ Sendungen bündeln gepackte TUs eines Auslagerauftrags (`apps/api/src/modules/sh
 
 Zustände `OPEN → LOADED → SHIPPED` (`CANCELLED`). Der Warenausgang läuft in einer Transaktion; die Löschprüfungen der TUs (laufende Bewegungen, Transportaufträge, Inventur, Bestand) sehen dabei die Buchungen derselben Transaktion. Events: `shipment.created`, `shipment.changed` (`change`: `unit-added`, `unit-removed`, `unit-loaded`, `loaded`, `cancelled`), `shipment.shipped` mit Inhalt (`packages/shared/src/shipping-events.ts`).
 
+## Modul Dokumente (`/v1/documents`)
+
+PDF-Dokumente mit internen Barcodes (Code 128 der eigenen Kennungen, keine SSCC); nur lesend, jeder Angemeldete darf sie abrufen. Antwort `application/pdf`, `Content-Disposition: inline`.
+
+| Dokument | Endpunkt | Format |
+|---|---|---|
+| Palettenetikett | `GET /v1/documents/unit-label/{barcode}` | A6: TU-Barcode, Typ, Platz, Inhalt |
+| Versandetiketten | `GET /v1/documents/shipping-labels/{number}?unit=…` | A6, eine Seite je TU: Empfänger, Auftrag, Spediteur, Packstück n von m, Barcodes von Sendung und TU |
+| Pickliste | `GET /v1/documents/pick-list/{orderId}` | A4: offene Picks in Platzreihenfolge, Kontrollfeld |
+| Lieferschein | `GET /v1/documents/delivery-note/{number}` | A4: Empfänger, Positionen je Produkt/Charge/MHD, Packstücke |
+| Ladeliste | `GET /v1/documents/loading-list/{number}` | A4: TUs mit Inhalt, Ladekontrolle, Unterschriftsfeld |
+
+Nach dem Warenausgang stammen die Inhalte aus der Historie der Sendung, vorher aus dem aktuellen Bestand. Erzeugt mit PDFKit 0.20.2 und bwip-js 4.11.4 (beide MIT; Abhängigkeiten MIT bzw. Apache-2.0 für `@swc/helpers`), Schrift Helvetica aus den PDF-Standardschriften. In der Oberfläche: Links in **Versand** (Lieferschein, Ladeliste, Versandetiketten, Palettenetikett je TU), **Auslagerung** (Pickliste) und **Bestand** (Palettenetikett bei gewählter TU).
+
+Zum Ansehen in Tests: `PDF_DUMP_DIR=/pfad pnpm --filter @wms/api test:integration` schreibt die in den Tests abgerufenen PDFs dorthin; `test/integration/support/pdf.ts` liest den Text für Prüfungen aus.
+
 ## Events
 
 1. Event im Katalog definieren (`packages/shared/src/events.ts`): `defineEvent('bereich.ereignis', 1, payloadSchema)`.

@@ -47,3 +47,12 @@ export function Empty({ children }: { children: ReactNode }) {
 
 export const time = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleTimeString('de-DE') : '–');
 export const dateTime = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleString('de-DE') : '–');
+
+/** Link auf ein PDF-Dokument der API; öffnet im neuen Tab (Anmeldung per Sitzungs-Cookie). */
+export function PdfLink({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <a className="button secondary" href={href} target="_blank" rel="noreferrer">
+      {children}
+    </a>
+  );
+}

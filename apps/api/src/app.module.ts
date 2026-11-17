@@ -13,6 +13,7 @@ import { ReceivingModule } from './modules/receiving/index.js';
 import { AuthModule } from './modules/auth/index.js';
 import { FlowModule } from './modules/flow/index.js';
 import { PartnerModule } from './modules/partner/index.js';
+import { DocumentsModule } from './modules/documents/index.js';
 import { ShippingModule } from './modules/shipping/index.js';
 import { OutboundModule } from './modules/outbound/index.js';
 import { TransportOrderModule } from './modules/transport-order/index.js';
@@ -60,6 +61,7 @@ export class AppModule {
         FlowModule,
         OutboundModule,
         ShippingModule,
+        DocumentsModule,
         AuthModule,
         ...testModules,
       ],

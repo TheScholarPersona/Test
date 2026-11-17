@@ -94,6 +94,8 @@ input, select, textarea { font: inherit; padding: 8px 10px; border: 1px solid va
 input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 0; }
 button { font: inherit; padding: 8px 14px; border-radius: var(--radius); border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer; font-weight: 600; }
 button.secondary { background: transparent; color: var(--accent); }
+a.button { display: inline-block; font-weight: 600; padding: 8px 14px; border-radius: var(--radius); border: 1px solid var(--accent); text-decoration: none; }
+a.button.secondary { background: transparent; color: var(--accent); }
 button.danger { background: var(--bad); border-color: var(--bad); }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
 .toolbar { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; margin-bottom: 12px; }
