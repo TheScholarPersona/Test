@@ -1,0 +1,42 @@
+# Feature-Katalog – Prüfbestand.
+# Funktionen, die im Code vorhanden sind, deren Verfügbarkeit aber (noch) nicht belegt ist:
+#   unvollstaendig        Funktion fehlt in Teilen (z. B. nur API, keine Bedienung, wo sie nötig wäre)
+#   deaktiviert           abgeschaltet oder nur in einem Profil verfügbar
+#   nicht-nachgewiesen    kein Test oder Szenario prüft sie
+# Ein Eintrag wechselt in features/<bereich>.yaml, sobald ein Nachweis existiert (siehe docs/feature-katalog.md).
+items:
+  - id: bestand.produkte-abfragen
+    title: Produkte abfragen
+    group: bestand.stammdaten
+    summary: Liste aller Produkte und einzelnes Produkt mit Einheiten lesen.
+    description: Die API liefert die Produktliste (seitenweise) und ein einzelnes Produkt mit seinen Einheiten.
+    usage:
+      - channel: api
+        text: "`GET /v1/products?limit=…&offset=…`, `GET /v1/products/{sku}`"
+    state: nicht-nachgewiesen
+    reason: Kein Integrationstest, Browser-Test oder Szenario ruft die beiden Leseendpunkte auf; die Oberfläche nutzt sie nicht.
+    technical:
+      components:
+        - apps/api/src/modules/inventory/http/inventory.controller.ts
+      endpoints:
+        - GET /v1/products
+        - GET /v1/products/{sku}
+
+  - id: bestand.inventuren-abfragen
+    title: Inventuren abfragen
+    group: bestand.inventur
+    summary: Liste der Inventuren und einzelne Inventur mit Soll, Ist und Differenzen lesen.
+    description: Die API liefert die Inventuren (neueste zuerst) und eine einzelne Inventur mit ihren Zeilen.
+    usage:
+      - channel: api
+        text: "`GET /v1/stock-counts`, `GET /v1/stock-counts/{number}`"
+    state: nicht-nachgewiesen
+    reason: Kein Test ruft die Leseendpunkte auf (Ergebnisse werden nur aus den Antworten der Schreibendpunkte geprüft); keine Ansicht in der Oberfläche.
+    technical:
+      components:
+        - apps/api/src/modules/inventory/http/stock-counts.controller.ts
+      endpoints:
+        - GET /v1/stock-counts
+        - GET /v1/stock-counts/{number}
+      events:
+        emits: []

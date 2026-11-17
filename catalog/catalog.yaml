@@ -1,0 +1,138 @@
+# Feature-Katalog – Taxonomie (Single Source of Truth zusammen mit features/ und review.yaml).
+# Aufbau, Regeln und Pflege: docs/feature-katalog.md
+#
+# Jeder Funktionsbereich legt unter `owns` fest, welche automatisch erkannten Bestandteile zu ihm
+# gehören (Endpunkte als Pfad-Präfix, Ereignisse als Typ-Präfix, Routen, Node-RED-Nodes).
+# `status: katalogisiert` heißt: Bestandsaufnahme abgeschlossen – jeder Bestandteil muss einem Feature,
+# einem Prüfbestand-Eintrag oder einer Ausnahme zugeordnet sein, sonst schlägt die Prüfung fehl.
+schemaVersion: 1
+
+areas:
+  - id: lagerstruktur
+    title: Lagerstruktur
+    summary: Lagerplätze mit Koordinaten, Platztypen und Gruppen abbilden und Plätze oder ganze Bereiche sperren.
+    status: offen
+    owns:
+      endpoints: [/v1/location-types, /v1/location-groups, /v1/locations]
+      events: [location-type, location-group, location]
+      uiRoutes: [/lagerplaetze]
+
+  - id: transporteinheiten
+    title: Transporteinheiten
+    summary: Paletten, Behälter und andere Ladeeinheiten führen, bewegen und stapeln – mit Regeln, wohin sie dürfen.
+    status: offen
+    owns:
+      endpoints: [/v1/transport-unit-types, /v1/transport-units]
+      events: [transport-unit-type, transport-unit]
+      nodeRedNodes: [wms-move-tu]
+
+  - id: strategien
+    title: Strategien und Regeln
+    summary: Konfigurierbare Regelsätze entscheiden über Einlagerplätze und die Auswahl des Bestands bei der Auslagerung.
+    status: offen
+    owns:
+      endpoints: [/v1/strategies, /v1/strategy-rule-sets, /v1/putaway, /v1/allocation, /v1/strategy-decisions]
+      events: [strategy-rule-set, putaway, allocation]
+
+  - id: bestand
+    title: Bestand
+    summary: Bestand je Transporteinheit führen, buchen, reservieren, auswerten und per Inventur prüfen.
+    status: katalogisiert
+    owns:
+      endpoints: [/v1/products, /v1/stock, /v1/stock-reservations, /v1/stock-bookings, /v1/stock-counts]
+      events: [product, stock, stock-count]
+      uiRoutes: [/bestand]
+    groups:
+      - id: bestand.stammdaten
+        title: Produkte und Einheiten
+        summary: Artikelstamm mit Basiseinheit und alternativen Einheiten als Grundlage aller Mengen.
+      - id: bestand.bestandsfuehrung
+        title: Bestand je Transporteinheit
+        summary: Wie Bestand geführt, unterschieden und abgefragt wird.
+      - id: bestand.buchungen
+        title: Buchungen
+        summary: Bestand verändern – Abgang, Umbuchung und Korrektur, sicher auch bei gleichzeitigen Zugriffen.
+      - id: bestand.reservierung
+        title: Reservierung
+        summary: Bestand für einen Zweck zurückhalten, bevor er entnommen wird.
+      - id: bestand.auswertung
+        title: Auswertung und Nachvollziehbarkeit
+        summary: Summen, Journal und die Bestandsansicht im Leitstand.
+      - id: bestand.inventur
+        title: Inventur
+        summary: Bestand einer Transporteinheit zählen und Differenzen nachvollziehbar buchen.
+
+  - id: wareneingang
+    title: Wareneingang
+    summary: Avisierte und nicht avisierte Ware erfassen und als Bestand auf Transporteinheiten buchen.
+    status: offen
+    owns:
+      endpoints: [/v1/receiving-orders, /v1/receiving-blind-captures]
+      events: [receiving-order, receiving-position, receiving]
+      uiRoutes: [/wareneingang]
+      nodeRedNodes: [wms-receive]
+
+  - id: lagerbewegungen
+    title: Lagerbewegungen
+    summary: Bewegungen von Transporteinheiten planen, ausführen und mit Abweichungen abschließen.
+    status: offen
+    owns:
+      endpoints: [/v1/movements]
+      events: [movement]
+
+  - id: transportauftraege
+    title: Transportaufträge
+    summary: Transporte für die Anlage steuern – mit Startregeln, Unterbrechung, Umleitung und Abschluss.
+    status: offen
+    owns:
+      endpoints: [/v1/transport-orders]
+      events: [transport-order]
+      uiRoutes: [/transport]
+
+  - id: materialfluss
+    title: Materialfluss und Anlagen
+    summary: Routen und Entscheidungspunkte der Fördertechnik, Geräte-Ereignisse und Fahrbefehle, Anlagensimulator.
+    status: offen
+    owns:
+      endpoints: [/v1/flow]
+      events: [flow]
+      uiRoutes: [/materialfluss]
+      nodeRedNodes: [wms-device-event]
+
+  - id: auslagerung
+    title: Auslagerung
+    summary: Auslageraufträge zuteilen, Bestand reservieren, kommissionieren und abschließen.
+    status: offen
+    owns:
+      endpoints: [/v1/outbound-orders, /v1/outbound-picks]
+      events: [outbound-order, outbound-pick]
+      uiRoutes: [/auslagerung]
+
+  - id: integration
+    title: Integration und Automatisierung
+    summary: Ereignisse über MQTT und Live-Stream, Node-RED-Bausteine und automatisierte Szenario-Tests.
+    status: offen
+    owns:
+      endpoints: [/v1/events, /test]
+      events: [system]
+      uiRoutes: [/ereignisse]
+      nodeRedNodes: [wms-config, wms-api, wms-event, wms-wait-event, wms-test-start, wms-assert, wms-test-result]
+
+  - id: oberflaeche
+    title: Bedienoberfläche
+    summary: Leitstand am Desktop und Scanner-Ansicht im Handyformat als gemeinsamer Rahmen der Fachfunktionen.
+    status: offen
+    owns:
+      uiRoutes: [/, /scanner/*]
+
+  - id: sicherheit
+    title: Sicherheit und Betrieb
+    summary: Anmeldung, Rollen, Benutzerverwaltung, Service-Tokens und Betriebszustand.
+    status: offen
+    owns:
+      endpoints: [/v1/auth, /v1/users, /health]
+      uiRoutes: [/konto, /benutzer]
+
+# Technische Bestandteile, die bewusst kein eigenes Feature sind (mit Begründung).
+exclusions:
+  endpoints: []

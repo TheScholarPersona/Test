@@ -38,4 +38,4 @@ Nach `pnpm stack:up`:
 
 Die Compose-Umgebung läuft im Testprofil. Alle Zugänge sind angemeldet; Details und Rollen: [docs/entwicklung.md#absicherung](docs/entwicklung.md#absicherung).
 
-Weitere Details: [docs/entwicklung.md](docs/entwicklung.md).
+Weitere Details: [docs/entwicklung.md](docs/entwicklung.md). Was das WMS nachweislich kann: [Feature-Katalog](docs/feature-katalog.md) (`pnpm catalog:build`, dann `catalog/dist/index.html` öffnen).

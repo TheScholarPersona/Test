@@ -19,3 +19,6 @@ apps/web/src/api/schema.d.ts
 apps/web/test-results/
 apps/web/playwright-report/
 apps/web/.auth/
+
+# Feature-Katalog: erzeugte Ansicht (Quelle sind catalog/*.yaml)
+catalog/dist/

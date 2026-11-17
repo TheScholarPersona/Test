@@ -1,0 +1,434 @@
+# Feature-Katalog – Bereich Bestand (Pilot).
+# Nur nachweislich verfügbare Features; Unvollständiges steht in ../review.yaml.
+# Rollen je Endpunkt und die Beschreibung der Endpunkte kommen beim Prüfen aus dem Code.
+area: bestand
+
+features:
+  - id: bestand.produktstamm
+    title: Produkte mit Einheiten anlegen
+    group: bestand.stammdaten
+    summary: Legt Artikel mit Basiseinheit und alternativen Einheiten (z. B. Karton = 12 Stück) an, damit Mengen überall einheitlich gerechnet werden.
+    description: |
+      Ein Produkt wird über seine SKU identifiziert und hat genau eine Basiseinheit, in der der Bestand geführt wird.
+      Zusätzlich können bis zu 20 alternative Einheiten mit Umrechnungsfaktor hinterlegt werden; sie lassen sich
+      später als Ganzes ersetzen. Beschreibung und die Erlaubnis zur Überlieferung im Wareneingang sind änderbar.
+    usage:
+      - channel: api
+        text: "`POST /v1/products` mit `sku`, `baseUnit` und optional `units`; Einheiten ersetzen mit `PUT /v1/products/{sku}/units`."
+      - channel: node-red
+        text: Szenarien und eigene Flows legen Produkte über den Node `wms-api` oder HTTP-Requests an.
+    rules:
+      - Die SKU ist eindeutig; ein zweites Anlegen wird mit `PRODUCT_EXISTS` abgelehnt.
+      - Eine alternative Einheit darf nicht wie die Basiseinheit heißen (`UNIT_CONFLICT`); der Faktor muss größer als 0 sein.
+      - Die Basiseinheit ist nur änderbar, solange kein Bestand des Produkts existiert (`PRODUCT_UNIT_IN_USE`).
+    settings:
+      - name: Alternative Einheiten
+        description: Einheit und Faktor zur Basiseinheit, z. B. `KAR` = 12, `PAL` = 480.
+        where: "PUT /v1/products/{sku}/units"
+      - name: Überlieferung erlaubt
+        description: Ob der Wareneingang mehr als die avisierte Menge annimmt.
+        where: "PATCH /v1/products/{sku} (overdeliveryAllowed)"
+    technical:
+      components:
+        - apps/api/src/modules/inventory/application/inventory.service.ts
+        - apps/api/src/modules/inventory/http/inventory.controller.ts
+        - apps/api/src/modules/inventory/entities/inventory.entities.ts
+      endpoints:
+        - POST /v1/products
+        - PATCH /v1/products/{sku}
+        - PUT /v1/products/{sku}/units
+      events:
+        emits: [product.created, product.updated]
+      notes:
+        - Tabellen `product` und `product_unit`.
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/stock.integration.test.ts
+        test: legt Produkte mit alternativen Einheiten an und prüft sie
+      - kind: integration
+        file: apps/api/test/integration/receiving.integration.test.ts
+        test: schützt TUs mit Bestand vor dem Löschen und Produkte mit Bestand vor Einheitenwechsel
+        note: Basiseinheit bei vorhandenem Bestand nicht änderbar
+      - kind: scenario
+        id: stock-flow
+
+  - id: bestand.bestand-je-tu
+    title: Bestand je Transporteinheit führen und abfragen
+    group: bestand.bestandsfuehrung
+    summary: Zeigt genau, welche Menge welches Produkts auf welcher Palette liegt – getrennt nach Charge und Mindesthaltbarkeit.
+    description: |
+      Bestand gehört immer zu einer Transporteinheit (TU), nicht direkt zu einem Platz; der Platzbestand ergibt sich
+      aus den TUs auf dem Platz. Ein Bestandsposten ist die Menge eines Produkts auf einer TU mit gleicher Charge und
+      gleichem MHD – gleiche Merkmale werden zusammengeführt. Jeder Posten zeigt Gesamtmenge, reservierte und verfügbare
+      Menge. Abfragen filtern nach Barcode, SKU, Charge, Platz oder Lagergruppe (einschließlich Untergruppen).
+    usage:
+      - channel: leitstand
+        text: Seite **Bestand** – Filter nach SKU oder Barcode, Liste der Bestandsposten.
+      - channel: api
+        text: "`GET /v1/stock?barcode=…&sku=…&lot=…&location=…&group=…`"
+    rules:
+      - Kein negativer Bestand; ein Posten mit Menge 0 wird entfernt.
+      - Die Datenbank sichert zusätzlich `0 ≤ reserviert ≤ Menge` ab.
+      - Eine TU mit Bestand oder laufender Inventur kann nicht gelöscht werden.
+      - Zugänge entstehen über den Wareneingang (Ereignis `stock.received`).
+    dependsOn: [bestand.produktstamm]
+    technical:
+      components:
+        - apps/api/src/modules/inventory/application/inventory.service.ts
+        - apps/api/src/modules/inventory/entities/inventory.entities.ts
+        - apps/web/src/pages/StockPage.tsx
+      endpoints:
+        - GET /v1/stock
+      events:
+        emits: [stock.received]
+      uiRoutes: [/bestand]
+      notes:
+        - Tabelle `stock_item` (Spalten `quantity`, `reserved`, Merkmale `lot`, `best_before`).
+        - Keine Mandanten; Bestand ausschließlich je TU.
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/stock.integration.test.ts
+        test: filtert nach Gruppe (mit Untergruppen), Platz und Charge
+      - kind: integration
+        file: apps/api/test/integration/receiving.integration.test.ts
+        test: schützt TUs mit Bestand vor dem Löschen und Produkte mit Bestand vor Einheitenwechsel
+        note: Löschschutz für TUs mit Bestand
+      - kind: web-e2e
+        file: apps/web/e2e/leitstand.spec.ts
+        test: Bestand zeigt Posten und aktualisiert sich live nach einem Abgang
+
+  - id: bestand.einheiten-umrechnung
+    title: In alternativen Einheiten buchen
+    group: bestand.bestandsfuehrung
+    summary: Abgang, Umbuchung, Reservierung, Korrektur und Inventur nehmen auch Kartons oder Paletten an und rechnen exakt in die Basiseinheit um.
+    description: |
+      Bestand bleibt immer in der Basiseinheit. Wird in einer alternativen Einheit gebucht, rechnet das WMS mit dem
+      hinterlegten Faktor exakt um (Dezimalarithmetik, keine Rundungsfehler). Unbekannte Einheiten und Mengen mit mehr
+      als drei Nachkommastellen werden abgelehnt.
+    usage:
+      - channel: api
+        text: 'Mengen als `{ "amount": "2", "unit": "KAR" }` in allen Bestandsbuchungen.'
+    rules:
+      - Höchstens 3 Nachkommastellen nach der Umrechnung, sonst `INVALID_QUANTITY`.
+      - Nur Basiseinheit oder hinterlegte alternative Einheiten sind zulässig.
+      - Der Wareneingang bucht in der Basiseinheit.
+    dependsOn: [bestand.produktstamm]
+    technical:
+      components:
+        - apps/api/src/modules/inventory/application/inventory.service.ts
+      notes:
+        - Fehlercodes `INVALID_QUANTITY` (Genauigkeit, Menge ≤ 0) und `UNIT_MISMATCH` (Einheit nicht am Produkt).
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/stock.integration.test.ts
+        test: bucht einen Abgang in einer alternativen Einheit um
+      - kind: integration
+        file: apps/api/test/integration/stock.integration.test.ts
+        test: lehnt unbekannte Einheiten, zu viel und unzulässige Genauigkeit ab
+      - kind: integration
+        file: apps/api/test/integration/stock.integration.test.ts
+        test: korrigiert in alternativer Einheit, negativ und positiv
+
+  - id: bestand.abgang
+    title: Bestand abbuchen (Abgang)
+    group: bestand.buchungen
+    summary: Bucht entnommene Ware von einer Transporteinheit ab, auf Wunsch gegen eine bestehende Reservierung.
+    description: |
+      Ein Abgang verringert einen Bestandsposten um die angegebene Menge mit einem Bezug (z. B. Auftragsnummer).
+      Mit Angabe einer Reservierung wird diese gleichzeitig verbraucht. Verbraucht der Abgang den gesamten Posten,
+      wird er entfernt. Die Leitstand-Ansicht aktualisiert sich sofort über das Ereignis.
+    usage:
+      - channel: api
+        text: "`POST /v1/stock/{id}/issues` mit `quantity`, `reference` und optional `reservationId`."
+      - channel: leitstand
+        text: Die Bestandsseite zeigt den neuen Stand ohne Neuladen (Live-Ereignis).
+    rules:
+      - Höchstens die verfügbare Menge (`STOCK_INSUFFICIENT`, bei Reservierungen `STOCK_RESERVED`).
+      - Mit `reservationId` höchstens die reservierte Menge (`EXCEEDS_RESERVATION`).
+      - Während einer Inventur der TU gesperrt (`COUNT_IN_PROGRESS`).
+    dependsOn: [bestand.bestand-je-tu]
+    technical:
+      components:
+        - apps/api/src/modules/inventory/application/inventory.service.ts
+        - apps/api/src/modules/inventory/http/inventory.controller.ts
+      endpoints:
+        - POST /v1/stock/{id}/issues
+      events:
+        emits: [stock.issued]
+      notes:
+        - Journal-Typ `ISSUE` in `stock_booking`.
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/stock.integration.test.ts
+        test: bucht einen Abgang in einer alternativen Einheit um
+      - kind: integration
+        file: apps/api/test/integration/stock.integration.test.ts
+        test: entfernt den Posten, wenn der Abgang alles verbraucht
+      - kind: web-e2e
+        file: apps/web/e2e/leitstand.spec.ts
+        test: Bestand zeigt Posten und aktualisiert sich live nach einem Abgang
+      - kind: scenario
+        id: stock-flow
+
+  - id: bestand.umbuchung
+    title: Bestand auf eine andere Transporteinheit umbuchen
+    group: bestand.buchungen
+    summary: Verschiebt eine Teilmenge auf eine andere Palette, etwa beim Umpacken – Charge und MHD bleiben erhalten.
+    description: |
+      Eine Umbuchung nimmt eine Menge von einem Posten und bucht sie auf eine Ziel-TU. Dort wird sie mit einem Posten
+      gleicher Merkmale zusammengeführt oder als neuer Posten angelegt; ein leerer Ausgangsposten wird entfernt.
+      Im Journal entstehen zwei zusammengehörige Buchungen.
+    usage:
+      - channel: api
+        text: "`POST /v1/stock/{id}/transfers` mit `to` (Barcode der Ziel-TU), `quantity` und optional `reference`."
+    rules:
+      - Nur verfügbare (nicht reservierte) Menge.
+      - Weder Ausgangs- noch Ziel-TU dürfen in einer laufenden Inventur sein.
+    dependsOn: [bestand.bestand-je-tu]
+    technical:
+      components:
+        - apps/api/src/modules/inventory/application/inventory.service.ts
+      endpoints:
+        - POST /v1/stock/{id}/transfers
+      events:
+        emits: [stock.transferred]
+      notes:
+        - Journal-Typen `TRANSFER_OUT` und `TRANSFER_IN`.
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/stock.integration.test.ts
+        test: bucht eine Teilmenge mit Charge und MHD auf eine andere TU und führt dort zusammen
+      - kind: integration
+        file: apps/api/test/integration/stock.integration.test.ts
+        test: legt auf einer leeren TU einen neuen Posten an und entfernt den leeren
+      - kind: scenario
+        id: stock-flow
+
+  - id: bestand.korrektur
+    title: Bestand korrigieren
+    group: bestand.buchungen
+    summary: Gleicht Bestand nach oben oder unten an, wenn die Wirklichkeit abweicht – immer mit Begründung.
+    description: |
+      Eine Korrektur ist eine vorzeichenbehaftete Buchung auf einen Posten mit Pflichtangabe eines Grundes. Sie ist für
+      Leitstand und Verwaltung gedacht; Inventurdifferenzen werden ebenfalls als Korrektur gebucht.
+    usage:
+      - channel: api
+        text: "`POST /v1/stock/{id}/corrections` mit `delta` (z. B. `-2 KAR`) und `reason`."
+    rules:
+      - Nie unter 0 und nie unter die reservierte Menge.
+      - Grund ist Pflicht und steht im Journal.
+    dependsOn: [bestand.bestand-je-tu]
+    technical:
+      components:
+        - apps/api/src/modules/inventory/application/inventory.service.ts
+      endpoints:
+        - POST /v1/stock/{id}/corrections
+      events:
+        emits: [stock.corrected]
+      notes:
+        - Journal-Typ `CORRECTION`.
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/stock.integration.test.ts
+        test: korrigiert in alternativer Einheit, negativ und positiv
+      - kind: scenario
+        id: stock-flow
+
+  - id: bestand.parallele-buchungen
+    title: Sichere Buchungen bei gleichzeitigem Zugriff
+    group: bestand.buchungen
+    summary: Auch wenn Scanner, Leitstand und Anlage gleichzeitig buchen, wird nie mehr Bestand vergeben als vorhanden.
+    description: |
+      Jede Buchung sperrt zuerst die betroffenen TUs in fester Reihenfolge. Gleichzeitige Buchungen auf dieselbe TU
+      laufen dadurch nacheinander, gegenläufige Umbuchungen verklemmen sich nicht, und die Inventursperre wird an
+      genau dieser Stelle geprüft.
+    usage:
+      - channel: api
+        text: Wirkt automatisch bei allen Bestandsbuchungen; keine Bedienung nötig.
+    rules:
+      - Sperren in fester Reihenfolge (nach TU-id) – keine Verklemmung.
+    technical:
+      components:
+        - apps/api/src/modules/inventory/application/inventory.service.ts
+      notes:
+        - Zeilensperren (`SELECT … FOR UPDATE`) auf den TU-Zeilen, Prüfbedingung `0 ≤ reserved ≤ quantity` in der Datenbank.
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/stock.integration.test.ts
+        test: vergibt bei gleichzeitigen Abgängen und Reservierungen nie mehr als vorhanden
+      - kind: integration
+        file: apps/api/test/integration/stock.integration.test.ts
+        test: verklemmt sich bei gegenläufigen Umbuchungen nicht
+
+  - id: bestand.reservierung
+    title: Bestand reservieren und freigeben
+    group: bestand.reservierung
+    summary: Hält Bestand für einen Auftrag zurück, sodass ihn niemand anderes entnehmen, umbuchen oder wegkorrigieren kann.
+    description: |
+      Eine Reservierung bindet eine Menge eines Postens an einen Bezug (z. B. Kommissionierauftrag). Reservierter
+      Bestand ist nicht mehr verfügbar; ein Abgang mit Angabe der Reservierung verbraucht sie. Reservierungen lassen
+      sich nach Bezug abfragen und aufheben. Die Auslagerung nutzt diese Funktion bei der Zuteilung.
+    usage:
+      - channel: api
+        text: "Reservieren `POST /v1/stock/{id}/reservations`, abfragen `GET /v1/stock-reservations?reference=…`, aufheben `DELETE /v1/stock-reservations/{id}`."
+    rules:
+      - Nur verfügbarer Bestand (`STOCK_NOT_AVAILABLE` mit Angabe der verfügbaren Menge).
+      - Reservierter Bestand ist vor Abgang, Umbuchung und Korrektur geschützt.
+    dependsOn: [bestand.bestand-je-tu]
+    technical:
+      components:
+        - apps/api/src/modules/inventory/application/inventory.service.ts
+        - apps/api/src/modules/inventory/http/inventory.controller.ts
+      endpoints:
+        - POST /v1/stock/{id}/reservations
+        - GET /v1/stock-reservations
+        - DELETE /v1/stock-reservations/{id}
+      events:
+        emits: [stock.reserved, stock.reservation-released]
+      notes:
+        - Tabelle `stock_reservation`; Summe je Posten in `stock_item.reserved`.
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/stock.integration.test.ts
+        test: reserviert verfügbaren Bestand und schützt ihn vor Abgang, Umbuchung und Korrektur
+      - kind: integration
+        file: apps/api/test/integration/stock.integration.test.ts
+        test: verbraucht die Reservierung mit einem Abgang
+      - kind: integration
+        file: apps/api/test/integration/stock.integration.test.ts
+        test: hebt eine Reservierung auf
+      - kind: scenario
+        id: stock-flow
+
+  - id: bestand.summen
+    title: Bestandssummen je Produkt oder Platz
+    group: bestand.auswertung
+    summary: Beantwortet „Wie viel haben wir?“ – je Produkt oder je Platz, mit reservierter und verfügbarer Menge.
+    description: |
+      Die Summen fassen alle Posten zusammen, wahlweise je Produkt oder je Platz und Produkt, gefiltert nach SKU oder
+      Lagergruppe. Sie zeigen Gesamtmenge, reservierte und verfügbare Menge sowie die Anzahl der Posten und TUs.
+    usage:
+      - channel: leitstand
+        text: Seite **Bestand** – Umschalter „je Produkt“ / „je Platz“.
+      - channel: api
+        text: "`GET /v1/stock/summary?by=product|location&sku=…&group=…`"
+    dependsOn: [bestand.bestand-je-tu]
+    technical:
+      components:
+        - apps/api/src/modules/inventory/application/inventory.service.ts
+        - apps/web/src/pages/StockPage.tsx
+      endpoints:
+        - GET /v1/stock/summary
+      uiRoutes: [/bestand]
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/stock.integration.test.ts
+        test: summiert je Produkt und je Platz
+      - kind: scenario
+        id: stock-flow
+
+  - id: bestand.buchungsjournal
+    title: Buchungsjournal
+    group: bestand.auswertung
+    summary: Macht jede Bestandsveränderung nachvollziehbar – wer, was, wann, mit welchem Bezug.
+    description: |
+      Jede Buchung (Zugang, Abgang, Umbuchung, Korrektur, Inventurdifferenz) wird mit Typ, Menge, TU, Produkt, Bezug
+      und Zeitpunkt protokolliert. Das Journal ist nach Barcode, SKU oder Bezug filterbar, neueste Einträge zuerst.
+    usage:
+      - channel: leitstand
+        text: Seite **Bestand** – Abschnitt Journal (letzte 30 Buchungen zum Filter).
+      - channel: api
+        text: "`GET /v1/stock-bookings?barcode=…&sku=…&reference=…`"
+    rules:
+      - Journal-Typen `RECEIPT`, `ISSUE`, `TRANSFER_OUT`, `TRANSFER_IN`, `CORRECTION`.
+    dependsOn: [bestand.bestand-je-tu]
+    technical:
+      components:
+        - apps/api/src/modules/inventory/entities/inventory.entities.ts
+        - apps/web/src/pages/StockPage.tsx
+      endpoints:
+        - GET /v1/stock-bookings
+      uiRoutes: [/bestand]
+      notes:
+        - Tabelle `stock_booking`; Inventurdifferenzen mit Bezug `count:<Nummer>`.
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/stock.integration.test.ts
+        test: bucht einen Abgang in einer alternativen Einheit um
+        note: Journaleintrag des Abgangs
+      - kind: integration
+        file: apps/api/test/integration/stock.integration.test.ts
+        test: bucht eine Teilmenge mit Charge und MHD auf eine andere TU und führt dort zusammen
+        note: zusammengehörige Umbuchungs-Einträge
+      - kind: scenario
+        id: stock-flow
+
+  - id: bestand.leitstand-ansicht
+    title: Bestandsansicht im Leitstand mit Live-Aktualisierung
+    group: bestand.auswertung
+    summary: Zeigt Summen, Posten und Journal auf einer Seite und aktualisiert sich bei jeder Buchung von selbst.
+    description: |
+      Die Seite **Bestand** fasst Summen, Bestandsposten und Journal zusammen. Sie hört auf die Live-Ereignisse des WMS
+      und lädt betroffene Daten nach, sobald irgendwo gebucht wird – auch durch Scanner, Anlage oder Node-RED.
+    usage:
+      - channel: leitstand
+        text: Menü **Bestand**; Filter nach SKU und Barcode, Umschalter je Produkt / je Platz.
+    dependsOn: [bestand.bestand-je-tu, bestand.summen, bestand.buchungsjournal]
+    technical:
+      components:
+        - apps/web/src/pages/StockPage.tsx
+        - apps/web/src/live/events.tsx
+      uiRoutes: [/bestand]
+      events:
+        consumes: [stock.issued, stock.received, stock.transferred, stock.corrected, stock.reserved, stock.reservation-released, stock-count.changed]
+      notes:
+        - Lesend für jede angemeldete Rolle; Live-Ereignisse über `GET /v1/events/stream` (Server-Sent Events).
+    evidence:
+      - kind: web-e2e
+        file: apps/web/e2e/leitstand.spec.ts
+        test: Bestand zeigt Posten und aktualisiert sich live nach einem Abgang
+
+  - id: bestand.inventur
+    title: Inventur je Transporteinheit
+    group: bestand.inventur
+    summary: Zählt den Bestand einer Palette gegen den Soll-Bestand und bucht Differenzen nachvollziehbar – während der Zählung ist die TU gesperrt.
+    description: |
+      Beim Öffnen wird der Soll-Bestand der TU festgehalten und die TU für andere Buchungen gesperrt. Das Zählergebnis
+      kann mehrfach erfasst werden; nicht genannte Soll-Zeilen gelten als 0, unbekannte Zeilen als Fund. Der Abschluss
+      bucht die Differenzen als Korrektur und hebt die Sperre auf; ein Abbruch hebt die Sperre ohne Buchung auf.
+    usage:
+      - channel: api
+        text: "Öffnen `POST /v1/stock-counts` (`barcode`), zählen `POST …/{number}/result` (`lines`), abschließen `…/close` oder abbrechen `…/cancel`."
+    rules:
+      - Während der Inventur sind alle anderen Buchungen auf der TU gesperrt (`COUNT_IN_PROGRESS`); auch die Auslagerung nimmt diesen Bestand nicht.
+      - Je TU höchstens eine offene Inventur.
+      - Zustände `OPEN` → `COUNTED` → `CLOSED`, Abbruch nach `CANCELLED`.
+    dependsOn: [bestand.bestand-je-tu, bestand.korrektur]
+    technical:
+      components:
+        - apps/api/src/modules/inventory/application/stock-count.service.ts
+        - apps/api/src/modules/inventory/http/stock-counts.controller.ts
+      endpoints:
+        - POST /v1/stock-counts
+        - POST /v1/stock-counts/{number}/result
+        - POST /v1/stock-counts/{number}/close
+        - POST /v1/stock-counts/{number}/cancel
+      events:
+        emits: [stock-count.changed, stock.corrected]
+      notes:
+        - Tabellen `stock_count` und `stock_count_line`; Differenzbuchungen mit Bezug `count:<Nummer>`.
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/stock.integration.test.ts
+        test: öffnet eine Inventur mit Soll-Bestand und sperrt die TU
+      - kind: integration
+        file: apps/api/test/integration/stock.integration.test.ts
+        test: erfasst das Zählergebnis mit Differenzen, nicht Gezähltem und Fund
+      - kind: integration
+        file: apps/api/test/integration/stock.integration.test.ts
+        test: bucht beim Abschluss die Differenzen und hebt die Sperre auf
+      - kind: integration
+        file: apps/api/test/integration/stock.integration.test.ts
+        test: bricht eine Inventur ohne Buchung ab
+      - kind: scenario
+        id: stock-flow

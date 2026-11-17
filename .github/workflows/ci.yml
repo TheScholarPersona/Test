@@ -34,7 +34,16 @@ jobs:
       - name: Unit-Tests
         run: pnpm test
       - name: Integrationstests (Testcontainers mit PostgreSQL und Mosquitto)
-        run: pnpm test:integration
+        run: pnpm test:integration --reporter=default --reporter=junit --outputFile.junit=../../reports/api-integration-junit.xml
+      - name: Feature-Katalog statisch prüfen
+        run: pnpm catalog:check
+      - name: Testbericht sichern
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verify-junit
+          path: reports/api-integration-junit.xml
+          if-no-files-found: warn
 
   e2e:
     name: Node-RED-Szenarien gegen die vollständige Umgebung
@@ -76,3 +85,35 @@ jobs:
       - name: Umgebung abbauen
         if: always()
         run: docker compose down -v
+
+  catalog:
+    name: Feature-Katalog gegen die Testergebnisse prüfen
+    needs: [verify, e2e]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Testberichte holen
+        uses: actions/download-artifact@v4
+        with:
+          pattern: '*-junit'
+          path: reports
+          merge-multiple: true
+      - name: Nachweise prüfen (jedes Katalog-Feature braucht bestandene Tests)
+        run: pnpm catalog:check --reports reports
+      - name: Katalogansicht erzeugen
+        if: always()
+        run: pnpm catalog:build --reports reports
+      - name: Katalogansicht sichern
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: feature-katalog
+          path: catalog/dist
+          if-no-files-found: warn
