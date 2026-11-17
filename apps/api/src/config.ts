@@ -37,6 +37,9 @@ const EnvSchema = z.object({
   MQTT_PASSWORD: z.string().min(1).optional(),
   MQTT_CA_FILE: z.string().min(1).optional(),
   OUTBOX_PUBLISH_TIMEOUT_MS: z.coerce.number().int().min(100).max(60_000).default(5000),
+  /** Veröffentlichte Outbox-Einträge so lange aufbewahren (Stunden), danach löschen. 0 = nie löschen. */
+  OUTBOX_RETENTION_HOURS: z.coerce.number().min(0).max(24 * 3650).default(168),
+  OUTBOX_CLEANUP_INTERVAL_MS: z.coerce.number().int().min(1000).max(86_400_000).default(3_600_000),
 });
 
 export type AppProfile = z.infer<typeof EnvSchema>['APP_PROFILE'];
@@ -63,6 +66,9 @@ export interface AppConfig {
     pollIntervalMs: number;
     batchSize: number;
     publishTimeoutMs: number;
+    /** 0 = veröffentlichte Einträge nie löschen. */
+    retentionHours: number;
+    cleanupIntervalMs: number;
   };
 }
 
@@ -130,6 +136,8 @@ export function loadConfig(env: Record<string, string | undefined>): AppConfig {
       pollIntervalMs: e.OUTBOX_POLL_INTERVAL_MS,
       batchSize: e.OUTBOX_BATCH_SIZE,
       publishTimeoutMs: e.OUTBOX_PUBLISH_TIMEOUT_MS,
+      retentionHours: e.OUTBOX_RETENTION_HOURS,
+      cleanupIntervalMs: e.OUTBOX_CLEANUP_INTERVAL_MS,
     },
   };
 }

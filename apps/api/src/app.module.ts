@@ -4,6 +4,7 @@ import { APP_CONFIG, type AppConfig } from './config.js';
 import { HttpModule } from './http/http.module.js';
 import { databaseOptions } from './database.js';
 import { LiveModule } from './infrastructure/live/live.module.js';
+import { MetricsModule } from './infrastructure/metrics/metrics.module.js';
 import { OutboxModule } from './infrastructure/outbox/outbox.module.js';
 import { HealthModule } from './modules/health/index.js';
 import { InventoryModule } from './modules/inventory/index.js';
@@ -47,6 +48,7 @@ export class AppModule {
         ConfigModule.forRoot(config),
         MikroOrmModule.forRoot(databaseOptions(config)),
         HttpModule,
+        MetricsModule,
         OutboxModule,
         LiveModule,
         HealthModule,

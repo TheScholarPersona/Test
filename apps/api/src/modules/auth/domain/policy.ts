@@ -49,6 +49,7 @@ export const RULES: readonly Rule[] = [
   { methods: '*', path: /^\/test(\/.*)?$/, access: roles('admin'), note: 'Test-Endpunkte (nur Testprofil)' },
   // Lesen: jede angemeldete Rolle
   { methods: ['GET'], path: /^\/v1\/.*/, access: anyone, note: 'Lesen' },
+  { methods: ['GET'], path: /^\/metrics$/, access: anyone, note: 'Metriken (Prometheus, z. B. Service-Token mit Rolle lesen)' },
   // Sperren (vor den Stammdaten-Regeln, die sonst greifen)
   { methods: ['PATCH'], path: new RegExp(`^/v1/(locations|location-groups)/${ID}/locks$`), access: OPERATIONS, note: 'Platz- und Gruppensperren' },
   { methods: ['PATCH'], path: new RegExp(`^/v1/locations/${ID}/plc-state$`), access: PLANT, note: 'Zustand laut Anlage' },

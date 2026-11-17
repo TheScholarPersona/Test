@@ -258,7 +258,7 @@ areas:
     summary: Anmeldung, Rollen, Benutzerverwaltung, Service-Tokens und Betriebszustand.
     status: katalogisiert
     owns:
-      endpoints: [/v1/auth, /v1/users, /health]
+      endpoints: [/v1/auth, /v1/users, /health, /metrics]
       uiRoutes: [/konto, /benutzer]
     groups:
       - id: sicherheit.zugang

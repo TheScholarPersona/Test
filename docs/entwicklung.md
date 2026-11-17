@@ -648,6 +648,29 @@ Die Oberfläche zeigt ohne Sitzung die Anmeldung; Schaltflächen erscheinen nur,
 
 Noch nicht enthalten: Bearbeiten von Stammdaten (Plätze, Produkte, Regelsätze) in der Oberfläche, Druck (Etiketten, Picklisten).
 
+## Metriken und Aufbewahrung
+
+`GET /metrics` liefert Kennzahlen im Prometheus-Format (Präfix `wms_`, prom-client 15.1.3, Apache-2.0). Abruf nur mit Anmeldung – am einfachsten ein eigenes Service-Token mit der Rolle `lesen` in `AUTH_SERVICE_TOKENS` (z. B. `prometheus:lesen:<geheimnis>`):
+
+```yaml
+scrape_configs:
+  - job_name: wms
+    metrics_path: /metrics
+    authorization: { type: Bearer, credentials_file: /etc/prometheus/wms-token }
+    static_configs: [{ targets: ['wms-api:3000'] }]
+```
+
+| Metrik | Inhalt |
+|---|---|
+| `wms_http_request_duration_seconds` | Histogramm je `method`, `route` (Muster, z. B. `/v1/shipments/:number`), `status` |
+| `wms_outbox_pending`, `wms_outbox_oldest_pending_seconds` | Rückstand der Outbox – steigt beides, ist MQTT nicht erreichbar |
+| `wms_outbox_published_total`, `wms_outbox_publish_failures_total` | je Event-Typ |
+| `wms_outbox_cleaned_total` | nach Ablauf der Frist gelöschte Einträge |
+| `wms_outbound_orders`, `wms_outbound_picks_open`, `wms_receiving_orders`, `wms_movements`, `wms_transport_orders`, `wms_shipments`, `wms_transport_unit_errors_open` | fachliche Zustände je `state`, beim Abruf aus der Datenbank gelesen |
+| `wms_process_*`, `wms_nodejs_*` | Prozesswerte (CPU, Speicher, Event-Loop) |
+
+**Aufbewahrung der Outbox:** Veröffentlichte Events werden nach `OUTBOX_RETENTION_HOURS` (Standard 168 = 7 Tage, `0` = nie) gelöscht; geprüft wird alle `OUTBOX_CLEANUP_INTERVAL_MS` (Standard 1 h), in Portionen zu 5000. Unveröffentlichte Events bleiben immer. Läuft nur, wenn das Relay aktiv ist.
+
 ## Absicherung
 
 Jeder Zugang braucht eine Anmeldung. Alle Geheimnisse stehen in der `.env` (nicht im Repository); `pnpm env:init` erzeugt sie.
@@ -728,4 +751,4 @@ docker compose up -d --wait --no-build
 
 - ESLint (Typprüfung und Architekturregeln laufen bereits)
 - Anmeldung über einen zentralen Identitätsdienst (OIDC/SSO); bisher eigene Benutzer im WMS
-- Aufräumen veröffentlichter Outbox-Einträge (Aufbewahrungsfrist)
+- Verteiltes Tracing (OpenTelemetry)

@@ -58,10 +58,11 @@ gaps:
     title: Metriken und verteiltes Tracing
     area: sicherheit
     summary: Kennzahlen für Prometheus und Ablaufverfolgung mit OpenTelemetry.
-    status: fehlt
+    status: teilweise
     source: oss
+    note: Prometheus-Metriken sind vorhanden (`sicherheit.metriken`); verteiltes Tracing mit OpenTelemetry fehlt.
     refs: ["Analyse 1.3 (Micrometer/Prometheus, OpenTelemetry)"]
-    related: [sicherheit.betriebszustand]
+    related: [sicherheit.betriebszustand, sicherheit.metriken]
 
   - id: openwms.druck
     title: Druck (Printing)

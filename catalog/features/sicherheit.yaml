@@ -262,6 +262,67 @@ features:
         refs:
           - Analyse 1.3
 
+  - id: sicherheit.metriken
+    title: Metriken für Prometheus
+    group: sicherheit.betrieb
+    summary: Liefert Kennzahlen zu Anfragen, Antwortzeiten, Event-Versand und offenen Aufträgen für Prometheus und Grafana.
+    description: |
+      `GET /metrics` liefert Prometheus-Text: Dauer und Anzahl der HTTP-Anfragen je Methode, Routenmuster und Status;
+      veröffentlichte und fehlgeschlagene Events je Typ, Outbox-Rückstand und Alter des ältesten offenen Events; offene
+      Auslageraufträge, Picks, Avise, Lagerbewegungen, Transportaufträge, Sendungen und TU-Fehlermeldungen je Zustand;
+      Prozesswerte von Node.js (CPU, Speicher, Event-Loop). Zustände werden beim Abruf aus der Datenbank gelesen.
+    usage:
+      - channel: api
+        text: "`GET /metrics` mit Anmeldung, z. B. Prometheus mit einem Service-Token der Rolle `lesen` (`authorization: Bearer …`)."
+    rules:
+      - Nur angemeldet (401 sonst); Routen werden als Muster erfasst (`/v1/shipments/:number`), damit die Zahl der Zeitreihen klein bleibt.
+    dependsOn: [sicherheit.service-tokens]
+    technical:
+      components:
+        - apps/api/src/infrastructure/metrics/metrics.service.ts
+        - apps/api/src/infrastructure/metrics/metrics.controller.ts
+        - apps/api/src/infrastructure/metrics/http-metrics.ts
+      endpoints:
+        - GET /metrics
+      notes:
+        - prom-client 15.1.3 (Apache-2.0); Präfix `wms_`.
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/api.integration.test.ts
+        test: liefert Metriken im Prometheus-Format nur mit Anmeldung
+    comparisons:
+      openwms:
+        status: gleichwertig
+        note: Entspricht Micrometer/Prometheus der Spring-Boot-Dienste; verteiltes Tracing (OpenTelemetry) fehlt noch.
+        refs:
+          - Analyse 1.3
+
+  - id: sicherheit.outbox-aufbewahrung
+    title: Aufbewahrungsfrist für versendete Events
+    group: sicherheit.betrieb
+    summary: Löscht veröffentlichte Events nach einer einstellbaren Frist, damit die Outbox-Tabelle nicht unbegrenzt wächst.
+    description: |
+      Ein Hintergrunddienst löscht veröffentlichte Outbox-Einträge, die älter als `OUTBOX_RETENTION_HOURS` sind (Standard
+      7 Tage, 0 = nie), stündlich in Portionen. Unveröffentlichte Events bleiben immer erhalten. Die Zahl der gelöschten
+      Einträge erscheint als Metrik.
+    usage:
+      - channel: api
+        text: Konfiguration `OUTBOX_RETENTION_HOURS` und `OUTBOX_CLEANUP_INTERVAL_MS`; Metrik `wms_outbox_cleaned_total`.
+    dependsOn: [integration.ereignisse]
+    technical:
+      components:
+        - apps/api/src/infrastructure/outbox/outbox-cleanup.service.ts
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/api.integration.test.ts
+        test: löscht veröffentlichte Einträge nach der Aufbewahrungsfrist, unveröffentlichte nie
+    comparisons:
+      openwms:
+        status: neu
+        note: OpenWMS nutzt AMQP ohne eigene Outbox-Tabelle; Aufbewahrung ist dort Sache des Brokers.
+        refs:
+          - Analyse 1.3
+
   - id: sicherheit.migrationen
     title: Datenbankschema automatisch aktuell halten
     group: sicherheit.betrieb

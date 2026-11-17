@@ -7570,6 +7570,55 @@
         }
       }
     },
+    "/metrics": {
+      "get": {
+        "summary": "Metriken im Prometheus-Format (Anfragen, Outbox, offene Aufträge, Prozess)",
+        "tags": [
+          "Betrieb"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Prometheus-Text",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/location-types": {
       "get": {
         "summary": "Alle Lagerplatztypen",
