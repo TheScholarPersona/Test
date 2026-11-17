@@ -258,3 +258,57 @@ features:
         refs:
           - Analyse 3.5 L-03, L-04
           - Analyse 3.3 /v1/targets
+
+  - id: lagerstruktur.anlagenzustand
+    title: Anlagenzustand je Platz
+    group: lagerstruktur.sperren
+    summary: Übernimmt Störungsmeldungen der Anlage je Platz – gestörte Plätze vergibt die Einlagerstrategie nicht, bis die Anlage sie wieder freimeldet.
+    description: |
+      Jeder Platz hat einen Zustand laut Anlage (SPS): 0 = in Ordnung, sonst ein Störungscode mit Klartext und Zeitpunkt.
+      Die Anlage meldet ihn über ein Geräte-Ereignis `location-status` mit `plcState`, der Leitstand kann ihn auch
+      direkt setzen. Jede Änderung wird als Ereignis gemeldet. Anders als eine Sperre beschreibt der Zustand, was die
+      Anlage sieht; die Einlagerstrategie meidet gestörte Plätze (harte Regel `PLC_FAULT`), gemeldete Ist-Positionen
+      werden weiter gebucht.
+    usage:
+      - channel: node-red
+        text: Node `wms-device-event` mit Ereignis `location-status` und Feld *Anlagenzustand*.
+      - channel: api
+        text: "Geräte-Ereignis `POST /v1/flow/events` mit `plcState` oder direkt `PATCH /v1/locations/{id}/plc-state` (`plcState`, `text`)."
+      - channel: leitstand
+        text: Seite **Übersicht** – Abschnitt **Störungen**; Seite **Lagerplätze** – Kennzeichen „Störung“ am Platz.
+    rules:
+      - Gemeldet wird nur eine echte Änderung (Zustand oder Text).
+      - Der Text gilt nur bei Störung; bei 0 wird er gelöscht.
+    dependsOn: [lagerstruktur.plaetze]
+    technical:
+      components:
+        - apps/api/src/modules/layout/application/location.service.ts
+        - apps/api/src/modules/flow/application/flow.service.ts
+        - apps/api/src/modules/transport/application/placement-checker.ts
+        - apps/web/src/pages/LocationsPage.tsx
+      endpoints:
+        - PATCH /v1/locations/{id}/plc-state
+      events:
+        emits: [location.plc-state-changed]
+      uiRoutes: [/lagerplaetze, /]
+      notes:
+        - Spalten `plc_state`, `plc_state_text`, `plc_state_at` in `location`.
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/flow.integration.test.ts
+        test: übernimmt den Anlagenzustand eines Platzes und gibt ihn wieder frei
+      - kind: integration
+        file: apps/api/test/integration/strategy.integration.test.ts
+        test: vergibt keinen Platz, für den die Anlage eine Störung meldet
+      - kind: unit
+        file: packages/node-red-nodes/test/nodes.test.mjs
+        test: wms-device-event meldet den Anlagenzustand eines Platzes
+      - kind: web-e2e
+        file: apps/web/e2e/seiten.spec.ts
+        test: "Störungen: Anlagenzustand eines Platzes und Fehlermeldung an einer TU"
+    comparisons:
+      openwms:
+        status: erweitert
+        note: Entspricht plcState am Platz in OpenWMS; zusätzlich Klartext, Zeitpunkt, Ereignis bei jeder Änderung und Berücksichtigung in der Einlagerstrategie.
+        refs:
+          - Analyse 2.1 Location (plcState)

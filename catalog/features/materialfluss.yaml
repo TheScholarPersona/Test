@@ -76,7 +76,7 @@ features:
     description: |
       Eine Action ordnet einem Ereignistyp – optional je Route und Platz oder Gruppe – ein Programm mit Parametern zu.
       Eingebaute Programme: `route-next`, `create-order`, `send-to`, `book`, `finish-order`, `lock-location`,
-      `interrupt-order`, `node-red`. Parameter werden gegen das Schema des Programms geprüft. Gesucht wird vom
+      `lock-group`, `interrupt-order`, `node-red`. Parameter werden gegen das Schema des Programms geprüft. Gesucht wird vom
       Spezifischen zum Allgemeinen (Platz vor Gruppe vor überall, Route vor routenunabhängig).
     usage:
       - channel: api
@@ -136,7 +136,9 @@ features:
       Geräte-Ereignisse (`request`, `arrived`, `location-status`, `error`) adressieren Plätze über ihren
       SPS-Code. Das WMS sucht Route und Action, führt das Programm aus, bucht die TU, schließt Aufträge am Ziel ab und
       sendet den Fahrbefehl als Antwort und als Ereignis. Platzmeldungen werden zu Sperren, Störungen unterbrechen den
-      laufenden Auftrag. Am I-Punkt entstehen unbekannte TUs und ihr Auftrag automatisch. Ein Probelauf entscheidet
+      laufenden Auftrag. Unabhängig von der Action-Matrix setzt `location-status` mit `plcState` den Anlagenzustand des
+      Platzes, und `error` mit Barcode erfasst eine Fehlermeldung an der TU. Am I-Punkt entstehen unbekannte TUs und ihr
+      Auftrag automatisch. Ein Probelauf entscheidet
       und begründet, ohne zu buchen oder zu senden.
     usage:
       - channel: api
@@ -198,7 +200,7 @@ features:
     comparisons:
       openwms:
         status: abweichend
-        note: Gleicher Zweck wie die OSIP-Telegramme (REQ_/RES_, LOCU, UPD_, ERR_), die in OpenWMS per AMQP oder REST ankommen; hier ein eigenes JSON-Format über REST. Zusätzlich Probelauf, Begründung und Meldung fehlender Routen statt stillem Verschlucken (R4). Systemstatus (SYSU) fehlt, siehe Lücken.
+        note: Gleicher Zweck wie die OSIP-Telegramme (REQ_/RES_, LOCU, UPD_, ERR_), die in OpenWMS per AMQP oder REST ankommen; hier ein eigenes JSON-Format über REST. Zusätzlich Probelauf, Begründung und Meldung fehlender Routen statt stillem Verschlucken (R4). Systemstatus (SYSU) siehe Programm lock-group.
         refs:
           - Analyse 3.7 Workflows und Telegramme, Schwachstelle R4
 
@@ -300,3 +302,39 @@ features:
         note: Kein Anlagensimulator im öffentlichen OpenWMS.
         refs:
           - Analyse 5.1d
+
+  - id: materialfluss.systemstatus
+    title: Systemstatus für ganze Bereiche
+    group: materialfluss.betrieb
+    summary: Meldet die Anlage den Ausfall eines Bereichs, sperrt das WMS den ganzen Bereich für Ein- oder Auslagerung – und gibt ihn mit der Freimeldung wieder frei.
+    description: |
+      Das Programm `lock-group` der Action-Matrix übernimmt Sperren aus einer Zustands- oder Störungsmeldung für einen
+      ganzen Lagerbereich: standardmäßig die Gruppe des meldenden Platzes, oder eine fest konfigurierte Gruppe. Die
+      Sperre wirkt auf alle Untergruppen und Plätze und trägt Gerät, Code und Text als Grund.
+    usage:
+      - channel: api
+        text: 'Action anlegen: `{ "eventType": "location-status", "place": { "group": "HRL" }, "program": "lock-group" }`; Meldung `{ "type": "location-status", "state": { "inbound": true }, "code": "SYSU" }`.'
+      - channel: node-red
+        text: Node `wms-device-event` mit Ereignis `location-status` oder `error`.
+    settings:
+      - name: Bereich und feste Sperren
+        description: "`group` (sonst Gruppe des meldenden Platzes), `inbound`/`outbound` (sonst aus der Meldung)."
+        where: Parameter der Action
+    dependsOn: [materialfluss.action-matrix, lagerstruktur.sperren]
+    technical:
+      components:
+        - apps/api/src/modules/flow/domain/programs.ts
+        - apps/api/src/modules/flow/application/flow.service.ts
+        - apps/api/src/modules/layout/application/location-group.service.ts
+      events:
+        emits: [location-group.lock-changed]
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/flow.integration.test.ts
+        test: sperrt per Systemstatus einen ganzen Bereich (Programm lock-group)
+    comparisons:
+      openwms:
+        status: gleichwertig
+        note: Entspricht dem Systemstatus-Telegramm SYSU, aus dessen Fehlercode OpenWMS den Gruppenstatus setzt (Workflow CP003); hier als Programm der Action-Matrix.
+        refs:
+          - Analyse 3.7 SYSU

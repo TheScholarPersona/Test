@@ -163,6 +163,14 @@ export const ChangeLocationLocksSchema = z
   .meta({ id: 'ChangeLocationLocks' });
 export type ChangeLocationLocks = z.infer<typeof ChangeLocationLocksSchema>;
 
+export const ChangePlcStateSchema = z
+  .strictObject({
+    plcState: z.number().int().min(0).max(65535).meta({ description: '0 = in Ordnung, sonst Störungscode der Anlage' }),
+    text: z.string().trim().min(1).max(200).optional().meta({ description: 'Klartext zur Störung' }),
+  })
+  .meta({ id: 'ChangePlcState' });
+export type ChangePlcState = z.infer<typeof ChangePlcStateSchema>;
+
 export const LocationQuerySchema = z.object({
   locationId: LocationIdSchema.optional(),
   erpCode: ErpCodeSchema.optional(),
@@ -193,6 +201,9 @@ export const LocationDtoSchema = z
       outbound: LockStateSchema,
       allocation: z.object({ blocked: z.boolean() }),
     }),
+    plc: z
+      .object({ state: z.number().int(), text: z.string().nullable(), changedAt: z.iso.datetime().nullable() })
+      .meta({ description: 'Zustand laut Anlage: 0 = in Ordnung, sonst Störungscode' }),
     ...Timestamps,
   })
   .meta({ id: 'Location' });

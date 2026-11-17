@@ -65,17 +65,20 @@ export class LocationGroupService {
    * Untergruppen und Plätze (Sperren werden nicht kopiert, sondern geerbt).
    */
   changeLocks(name: string, input: ChangeGroupLocks): Promise<LocationGroup> {
-    return this.em.transactional(async (tx) => {
-      const group = (await GroupHierarchy.load(tx)).get(name);
-      const change = applyLockChanges(group, group.lockChain(), input);
-      if (change) {
-        this.outbox.record(tx, LocationGroupLockChangedEvent, {
-          ...locationGroupSnapshot(group),
-          change: input.reason === undefined ? change : { ...change, reason: input.reason },
-        });
-      }
-      return group;
-    });
+    return this.em.transactional((tx) => this.changeLocksIn(tx, name, input));
+  }
+
+  /** Wie `changeLocks`, innerhalb einer bestehenden Transaktion (z. B. Systemstatus einer Anlage). */
+  async changeLocksIn(tx: EntityManager, name: string, input: ChangeGroupLocks): Promise<LocationGroup> {
+    const group = (await GroupHierarchy.load(tx)).get(name);
+    const change = applyLockChanges(group, group.lockChain(), input);
+    if (change) {
+      this.outbox.record(tx, LocationGroupLockChangedEvent, {
+        ...locationGroupSnapshot(group),
+        change: input.reason === undefined ? change : { ...change, reason: input.reason },
+      });
+    }
+    return group;
   }
 
   /** Nur leere Gruppen (ohne Untergruppen und Plätze) können gelöscht werden. */

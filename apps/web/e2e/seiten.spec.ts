@@ -130,3 +130,26 @@ test('Benutzer: anlegen mit Rolle, Rollen ansehen, sperren', async ({ page, fx }
   await expect(row).toContainText('gesperrt');
   expect((await fx.api('GET', '/v1/users')).find((u: { username: string }) => u.username === username)).toMatchObject({ active: false, roles: ['lesen'] });
 });
+
+test('Störungen: Anlagenzustand eines Platzes und Fehlermeldung an einer TU', async ({ page, fx }) => {
+  const w = await fx.warehouse();
+  const barcode = `PW-${fx.s}-ST`;
+  await fx.api('POST', '/v1/transport-units', { barcode, typeCode: w.unitType, location: { erpCode: w.a } });
+  fx.onCleanup(() => fx.api('DELETE', `/v1/transport-units/${barcode}`));
+  fx.onCleanup(() => fx.api('PATCH', `/v1/locations/${w.ids['b']}/plc-state`, { plcState: 0 }));
+  await fx.api('PATCH', `/v1/locations/${w.ids['b']}/plc-state`, { plcState: 12, text: `Lichtschranke ${fx.s}` });
+  await fx.api('POST', `/v1/transport-units/${barcode}/errors`, { code: 'KONTUR', message: `Überstand ${fx.s}` });
+
+  await page.goto('./');
+  const faults = page.getByRole('table', { name: 'Störungen' });
+  await expect(faults.getByRole('row', { name: new RegExp(`Lichtschranke ${fx.s}`) })).toContainText('Anlage 12');
+  const row = faults.getByRole('row', { name: new RegExp(barcode) });
+  await expect(row).toContainText('KONTUR');
+  await row.getByRole('button', { name: 'Erledigt' }).click();
+  await expect(page.getByRole('status')).toHaveText(`Fehlermeldung an ${barcode} erledigt`);
+  await expect(row).toHaveCount(0);
+
+  await page.goto('./lagerplaetze');
+  await page.getByRole('button', { name: w.group }).click();
+  await expect(page.getByRole('row', { name: new RegExp(w.b) })).toContainText('Störung 12');
+});

@@ -21,15 +21,15 @@ areas:
         title: Plätze, Typen und Bereiche
         summary: Der räumliche Aufbau des Lagers.
       - id: lagerstruktur.sperren
-        title: Sperren
-        summary: Plätze und Bereiche für Ein- und Auslagerung sperren.
+        title: Sperren und Anlagenzustand
+        summary: Plätze und Bereiche für Ein- und Auslagerung sperren; Zustand laut Anlage.
 
   - id: transporteinheiten
     title: Transporteinheiten
     summary: Paletten, Behälter und andere Ladeeinheiten führen, bewegen und stapeln – mit Regeln, wohin sie dürfen.
     status: katalogisiert
     owns:
-      endpoints: [/v1/transport-unit-types, /v1/transport-units]
+      endpoints: [/v1/transport-unit-types, /v1/transport-units, /v1/transport-unit-errors]
       events: [transport-unit-type, transport-unit]
       nodeRedNodes: [wms-move-tu]
     groups:

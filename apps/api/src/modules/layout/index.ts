@@ -8,6 +8,7 @@ import { Location } from './entities/location.entity.js';
 
 export { LayoutModule } from './layout.module.js';
 export { LocationService } from './application/location.service.js';
+export { LocationGroupService } from './application/location-group.service.js';
 export { LocationRemovalPolicy, type LocationRemovalCheck, type LocationRef } from './application/location-removal-policy.js';
 export {
   LocationLookup,

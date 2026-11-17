@@ -6,15 +6,6 @@ system: openwms
 
 gaps:
   # --- fehlt ---------------------------------------------------------------------
-  - id: openwms.tu-fehler
-    title: Fehlermeldungen je Transporteinheit
-    area: transporteinheiten
-    summary: Fehlercodes an einer TU festhalten (z. B. „Kontur zu hoch“ von der Anlage) und abfragen.
-    status: fehlt
-    source: oss
-    refs: [Analyse 2.1 UnitError, "Analyse 3.3 POST /v1/transport-units/error"]
-    related: [transporteinheiten.zustand]
-
   - id: openwms.tu-reservierung
     title: Reservierung ganzer Transporteinheiten
     area: transporteinheiten
@@ -33,16 +24,6 @@ gaps:
     source: oss
     refs: ["Analyse 2.1 LocationGroup (operationMode, maxFillLevel)"]
     related: [lagerstruktur.gruppen]
-
-  - id: openwms.anlagenzustand-platz
-    title: Platzzustand der Anlage (plcState) und Systemstatus (SYSU)
-    area: materialfluss
-    summary: Zustandsmeldungen der Anlage je Platz und als Systemstatus für ganze Bereiche.
-    status: teilweise
-    source: oss
-    note: Platzmeldungen werden über das Programm lock-location zu Sperren; einen eigenen Anlagenzustand je Platz und Systemstatus-Meldungen gibt es nicht.
-    refs: ["Analyse 2.1 Location (plcState)", "Analyse 3.7 SYSU"]
-    related: [materialfluss.geraete-ereignisse, lagerstruktur.sperren]
 
   - id: openwms.zeitgesteuerte-programme
     title: Zeitgesteuerte Abläufe

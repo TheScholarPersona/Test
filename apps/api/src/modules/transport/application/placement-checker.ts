@@ -116,6 +116,9 @@ export class PlacementChecker {
       if (options.forAllocation && target.allocationBlocked) {
         violations.push({ rule: 'ALLOCATION_BLOCKED', message: `Platz ${target.locationId} ist für die Platzvergabe gesperrt` });
       }
+      if (options.forAllocation && target.plcState !== 0) {
+        violations.push({ rule: 'PLC_FAULT', message: `Anlage meldet Störung ${target.plcState} an Platz ${target.locationId}${target.plcStateText ? ` (${target.plcStateText})` : ''}` });
+      }
       result.set(target.id, { violations, occupiedSlots });
     }
     return result;

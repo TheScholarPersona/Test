@@ -143,6 +143,7 @@ features:
         text: Lagerbewegungen und Wareneingang nutzen die Entscheidung, wenn nur eine Zielgruppe angegeben ist.
     rules:
       - Ohne aktiven Regelsatz keine Entscheidung.
+      - Plätze mit Vergabesperre (`ALLOCATION_BLOCKED`) oder gemeldeter Anlagenstörung (`PLC_FAULT`) werden nicht vergeben.
       - Bei parallelen Entscheidungen wird jeder Platz nur einmal vergeben (`FOR UPDATE SKIP LOCKED`, bis zu 5 Versuche).
       - Wird kein Platz gefunden, erklärt die Begründung warum.
     settings:

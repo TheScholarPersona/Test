@@ -72,3 +72,20 @@ export const TransportUnitUnstackedEvent = defineEvent(
   TransportUnitSnapshotSchema.extend({ previousParentBarcode: z.string() }),
 );
 export const TransportUnitDeletedEvent = defineEvent('transport-unit.deleted', 1, z.object({ barcode: z.string(), locationId: z.string() }));
+
+/** Fehlermeldung an einer TU (z. B. „Kontur zu hoch“ von der Anlage oder vom Bediener). */
+export const TransportUnitErrorSnapshotSchema = z.object({
+  id: z.uuid(),
+  barcode: z.string(),
+  code: z.string(),
+  message: z.string().nullable(),
+  locationId: z.string().nullable(),
+  reportedBy: z.string().nullable(),
+});
+export const TransportUnitErrorReportedEvent = defineEvent('transport-unit.error-reported', 1, TransportUnitErrorSnapshotSchema);
+export const TransportUnitErrorResolvedEvent = defineEvent(
+  'transport-unit.error-resolved',
+  1,
+  TransportUnitErrorSnapshotSchema.extend({ resolvedBy: z.string().nullable(), resolution: z.string().nullable() }),
+);
+

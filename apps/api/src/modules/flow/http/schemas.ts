@@ -108,7 +108,8 @@ export const DeviceEventSchema = z
     barcode: BarcodeSchema.optional(),
     deviceId: z.string().trim().min(1).max(64).optional(),
     state: z.strictObject({ inbound: z.boolean().optional(), outbound: z.boolean().optional() }).optional().meta({ description: 'Bei location-status: gemeldete Sperren' }),
-    code: z.string().trim().min(1).max(60).optional().meta({ description: 'Bei error: Fehlercode der Anlage' }),
+    code: z.string().trim().min(1).max(60).optional().meta({ description: 'Bei error: Fehlercode der Anlage (mit Barcode wird er als Fehlermeldung an der TU erfasst)' }),
+    plcState: z.number().int().min(0).max(65535).optional().meta({ description: 'Bei location-status: Zustand des Platzes laut Anlage (0 = in Ordnung, sonst Störungscode)' }),
     message: z.string().trim().min(1).max(200).optional(),
     dryRun: z.boolean().default(false).meta({ description: 'Nur entscheiden und begründen, nichts buchen oder senden' }),
   })

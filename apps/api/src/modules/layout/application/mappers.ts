@@ -50,6 +50,7 @@ export function toLocationDto(location: Location): LocationDto {
       outbound: effectiveLock(chain, 'outbound'),
       allocation: { blocked: location.allocationBlocked },
     },
+    plc: { state: location.plcState, text: location.plcStateText ?? null, changedAt: location.plcStateAt?.toISOString() ?? null },
     ...timestamps(location),
   };
 }

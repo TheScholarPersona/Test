@@ -4,6 +4,10 @@ import { accessFor, allows, type Role, ROLES } from '../../../src/modules/auth/d
 /** Wer darf was – als Tabelle: [Methode, Pfad, Rollen, die dürfen]. `*` = jede angemeldete Rolle, `public` = ohne Anmeldung. */
 const MATRIX: [string, string, Role[] | '*' | 'public'][] = [
   ['GET', '/health', 'public'],
+  ['PATCH', '/v1/locations/abc/plc-state', ['admin', 'leitstand', 'anlage']],
+  ['POST', '/v1/transport-units/P1/errors', ['admin', 'leitstand', 'lager', 'anlage']],
+  ['POST', '/v1/transport-units/P1/errors/e1/resolve', ['admin', 'leitstand', 'lager']],
+  ['GET', '/v1/transport-unit-errors', '*'],
   ['GET', '/openapi.json', 'public'],
   ['POST', '/v1/auth/login', 'public'],
   ['POST', '/v1/auth/logout', '*'],

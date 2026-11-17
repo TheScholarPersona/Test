@@ -181,6 +181,18 @@ describe('Strategien: Einlagerung', () => {
     expect(a1).toMatchObject({ eligible: false, violations: [{ rule: 'LOCATION_FULL' }] });
   });
 
+  it('vergibt keinen Platz, für den die Anlage eine Störung meldet', async () => {
+    const before = (await api.post('/v1/putaway/simulations', { barcode: 'P3' })).body;
+    const label = before.chosen.label as string;
+    const id = (await api.get(`/v1/locations?locationId=${encodeURIComponent(label)}`)).body.items[0].id;
+    expect((await api.patch(`/v1/locations/${id}/plc-state`, { plcState: 3, text: 'Regalbediengerät gestört' })).body.plc).toMatchObject({ state: 3 });
+    const after = (await api.post('/v1/putaway/simulations', { barcode: 'P3' })).body;
+    expect(after.chosen?.label).not.toBe(label);
+    expect(after.candidates.find((c: { label: string }) => c.label === label)).toMatchObject({ eligible: false, violations: expect.arrayContaining([expect.objectContaining({ rule: 'PLC_FAULT' })]) });
+    expect((await api.patch(`/v1/locations/${id}/plc-state`, { plcState: 0 })).body.plc).toMatchObject({ state: 0, text: null });
+    expect((await api.post('/v1/putaway/simulations', { barcode: 'P3' })).body.chosen.label).toBe(label);
+  });
+
   it('wählt die Regel nach Bedingungen (schwere TU auf den Boden)', async () => {
     const decision = await api.post('/v1/putaway/decisions', { barcode: 'P3', assign: true });
     expect(decision.body).toMatchObject({ rule: { name: 'schwer-auf-boden' }, facts: { 'unit.weightKg': '600' }, assigned: true });

@@ -39,6 +39,9 @@
       "message": {
             "value": ""
       },
+      "plcState": {
+            "value": ""
+      },
       "dryRun": {
             "value": false
       }
@@ -68,6 +71,7 @@
     <div class="form-row"><label for="node-input-deviceId">Geräte-ID</label><input type="text" id="node-input-deviceId" placeholder="SPS1"></div>
     <div class="form-row"><label for="node-input-code">Fehlercode</label><input type="text" id="node-input-code" placeholder="msg.payload.code"></div>
     <div class="form-row"><label for="node-input-message">Meldung</label><input type="text" id="node-input-message" placeholder="msg.payload.message"></div>
+    <div class="form-row"><label for="node-input-plcState">Anlagenzustand</label><input type="text" id="node-input-plcState" placeholder="msg.payload.plcState (0 = in Ordnung)"></div>
     <div class="form-row"><label for="node-input-dryRun">Probelauf</label><input type="checkbox" id="node-input-dryRun" style="width:auto"></div>
     <div class="form-row"><label for="node-input-errorOutput">Fehlerausgang</label><input type="checkbox" id="node-input-errorOutput" style="width:auto"></div>
     <div class="form-row"><label for="node-input-name">Name</label><input type="text" id="node-input-name"></div>
@@ -76,6 +80,8 @@
 <script type="text/html" data-help-name="wms-device-event">
 <p>Meldet ein Geräte-Ereignis an den Materialfluss (Protokoll-Adapter einer Anlage). Die Antwort in <code>msg.payload</code>
 enthält die Entscheidung mit Begründung (<code>decision.trace</code>) und ggf. den Fahrbefehl (<code>command</code>).</p>
+<p>Bei <code>location-status</code> setzt <i>Anlagenzustand</i> den Zustand des Platzes (0 = in Ordnung, sonst Störungscode).
+Bei <code>error</code> mit Barcode wird die Störung als Fehlermeldung an der TU erfasst.</p>
 <h3>Fehler</h3>
 <p>Antwortet das WMS mit einem Fehler (z. B. <code>409 PLACEMENT_REJECTED</code>), steht er in <code>msg.wmsError</code>
 (<code>code</code>, <code>message</code>, <code>statusCode</code>, <code>details</code>). Ohne <i>Fehlerausgang</i> ist er ein

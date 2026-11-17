@@ -1683,6 +1683,57 @@
           "enumItems": [],
           "mappedType": "string"
         },
+        "plc_state": {
+          "name": "plc_state",
+          "type": "int",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": "0",
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "integer"
+        },
+        "plc_state_at": {
+          "name": "plc_state_at",
+          "type": "timestamptz(6)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": 6,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "datetime"
+        },
+        "plc_state_text": {
+          "name": "plc_state_text",
+          "type": "varchar(200)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": 200,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
         "sort_order": {
           "name": "sort_order",
           "type": "int",
@@ -2767,7 +2818,7 @@
           "keyName": "movement_one_active_per_unit",
           "primary": false,
           "unique": true,
-          "where": "\"state\" in ('OPEN', 'IN_PROGRESS')"
+          "where": "state = ANY (ARRAY['OPEN'::text, 'IN_PROGRESS'::text])"
         },
         {
           "columnNames": [
@@ -3960,7 +4011,7 @@
           "keyName": "outbox_message_pending_idx",
           "primary": false,
           "unique": false,
-          "where": "\"published_at\" is null"
+          "where": "published_at IS NULL"
         },
         {
           "columnNames": [
@@ -5589,7 +5640,7 @@
           "keyName": "stock_count_one_open_per_unit",
           "primary": false,
           "unique": true,
-          "where": "\"state\" in ('OPEN', 'COUNTED')"
+          "where": "state = ANY (ARRAY['OPEN'::text, 'COUNTED'::text])"
         },
         {
           "columnNames": [
@@ -6045,8 +6096,9 @@
       "checks": [
         {
           "name": "stock_item_reserved_check",
-          "expression": "reserved >= 0 and reserved <= quantity",
-          "definition": "check (reserved >= 0 and reserved <= quantity)"
+          "expression": "(reserved >= 0) AND (reserved <= quantity)",
+          "definition": "CHECK (((reserved >= (0)::numeric) AND (reserved <= quantity)))",
+          "columnName": "quantity"
         }
       ],
       "triggers": [],
@@ -6722,7 +6774,7 @@
           "keyName": "strategy_rule_set_one_active",
           "primary": false,
           "unique": true,
-          "where": "\"status\" = 'ACTIVE'"
+          "where": "status = 'ACTIVE'::text"
         },
         {
           "columnNames": [
@@ -7254,7 +7306,7 @@
           "keyName": "transport_order_one_active_per_unit",
           "primary": false,
           "unique": true,
-          "where": "\"state\" in ('STARTED', 'INTERRUPTED')"
+          "where": "state = ANY (ARRAY['STARTED'::text, 'INTERRUPTED'::text])"
         },
         {
           "columnNames": [
@@ -7679,6 +7731,275 @@
           ],
           "referencedTableName": "public.transport_unit_type",
           "deleteRule": "restrict"
+        }
+      },
+      "comment": null
+    },
+    {
+      "name": "transport_unit_error",
+      "schema": "public",
+      "columns": {
+        "barcode": {
+          "name": "barcode",
+          "type": "varchar(64)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 64,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "code": {
+          "name": "code",
+          "type": "varchar(60)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 60,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": true,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "location_id": {
+          "name": "location_id",
+          "type": "varchar(54)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": 54,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "message": {
+          "name": "message",
+          "type": "varchar(200)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": 200,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "reported_at": {
+          "name": "reported_at",
+          "type": "timestamptz(6)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 6,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "datetime"
+        },
+        "reported_by": {
+          "name": "reported_by",
+          "type": "varchar(100)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": 100,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "resolution": {
+          "name": "resolution",
+          "type": "varchar(200)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": 200,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "resolved_at": {
+          "name": "resolved_at",
+          "type": "timestamptz(6)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": 6,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "datetime"
+        },
+        "resolved_by": {
+          "name": "resolved_by",
+          "type": "varchar(100)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": 100,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "unit_id": {
+          "name": "unit_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "version": {
+          "name": "version",
+          "type": "int",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": "1",
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "integer"
+        }
+      },
+      "indexes": [
+        {
+          "columnNames": [
+            "barcode"
+          ],
+          "composite": false,
+          "constraint": false,
+          "keyName": "transport_unit_error_barcode_index",
+          "primary": false,
+          "unique": false
+        },
+        {
+          "columnNames": [
+            "id"
+          ],
+          "composite": false,
+          "constraint": true,
+          "keyName": "transport_unit_error_pkey",
+          "primary": true,
+          "unique": true
+        },
+        {
+          "columnNames": [
+            "reported_at"
+          ],
+          "composite": false,
+          "constraint": false,
+          "keyName": "transport_unit_error_reported_at_index",
+          "primary": false,
+          "unique": false
+        },
+        {
+          "columnNames": [
+            "unit_id"
+          ],
+          "composite": false,
+          "constraint": false,
+          "keyName": "transport_unit_error_unit_id_index",
+          "primary": false,
+          "unique": false
+        }
+      ],
+      "checks": [],
+      "triggers": [],
+      "foreignKeys": {
+        "transport_unit_error_unit_id_foreign": {
+          "columnNames": [
+            "unit_id"
+          ],
+          "constraintName": "transport_unit_error_unit_id_foreign",
+          "localTableName": "public.transport_unit_error",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.transport_unit",
+          "deleteRule": "set null"
         }
       },
       "comment": null

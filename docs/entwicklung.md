@@ -103,7 +103,9 @@ Fachliche Fehler haben ein einheitliches Format; `code` ist stabil und für Auto
 
 Sperren ändern: `PATCH /v1/location-groups/{name}/locks` bzw. `PATCH /v1/locations/{id}/locks` mit z. B. `{ "inbound": true, "reason": "Inventur" }`.
 
-Events: `location-type.*`, `location-group.created|updated|deleted|lock-changed`, `location.created|updated|deleted|lock-changed` (Payload-Schemas in `packages/shared/src/layout-events.ts`). Eine Sperränderung an einer Gruppe erzeugt nur ein Event für diese Gruppe; die Wirkung auf Untergruppen und Plätze ergibt sich aus der Hierarchie.
+**Anlagenzustand.** Jeder Platz hat einen Zustand laut Anlage (`plc.state`: 0 = in Ordnung, sonst Störungscode, dazu `text` und `changedAt`). Gesetzt wird er über ein Geräte-Ereignis `location-status` mit `plcState` oder direkt mit `PATCH /v1/locations/{id}/plc-state` `{ "plcState": 7, "text": "Antrieb überlastet" }` (Rollen admin, leitstand, anlage). Die Einlagerstrategie vergibt gestörte Plätze nicht (`PLC_FAULT`); gemeldete Ist-Positionen werden weiter gebucht. Änderungen melden `location.plc-state-changed`.
+
+Events: `location-type.*`, `location-group.created|updated|deleted|lock-changed`, `location.created|updated|deleted|lock-changed|plc-state-changed` (Payload-Schemas in `packages/shared/src/layout-events.ts`). Eine Sperränderung an einer Gruppe erzeugt nur ein Event für diese Gruppe; die Wirkung auf Untergruppen und Plätze ergibt sich aus der Hierarchie.
 
 ## Modul Transporteinheiten (`/v1/transport-unit-types`, `/v1/transport-units`)
 
@@ -132,7 +134,9 @@ Der Zielplatz wird während der Prüfung in der Datenbank gesperrt (`SELECT … 
 
 **Löschschutz.** Ein Lagerplatz mit TUs kann nicht gelöscht werden (`LOCATION_IN_USE`, Einwand `transport-units`). Eine TU mit aufgestapelten TUs ebenfalls nicht (`TU_HAS_CHILDREN`); weitere Einwände anderer Module über `TransportUnitRemovalPolicy` (ab Schritt 5: laufende Transportaufträge).
 
-Events: `transport-unit-type.created|updated|deleted`, `transport-unit.created|moved|updated|state-changed|stacked|unstacked|deleted` (Schemas in `packages/shared/src/transport-events.ts`).
+**Fehlermeldungen.** `POST /v1/transport-units/{barcode}/errors` `{ code, message? }` hält ein Problem an einer TU fest (Melder aus der Anmeldung, bei Anlagen `device:<Geräte-ID>`; ein Geräte-Ereignis `error` mit Barcode erzeugt die Meldung automatisch). `GET …/errors?state=open|resolved|all` liefert die Historie, `POST …/errors/{errorId}/resolve` `{ resolution? }` erledigt eine Meldung (`UNIT_ERROR_RESOLVED`, wenn schon erledigt), `GET /v1/transport-unit-errors` ist die Arbeitsliste (Standard: offene, älteste zuerst). Meldungen ändern Zustand und Platz der TU nicht; die Historie bleibt erhalten, wenn die TU gelöscht wird.
+
+Events: `transport-unit-type.created|updated|deleted`, `transport-unit.created|moved|updated|state-changed|stacked|unstacked|deleted|error-reported|error-resolved` (Schemas in `packages/shared/src/transport-events.ts`).
 
 ## Strategie-Kern (`/v1/strategies`, `/v1/strategy-rule-sets`, `/v1/putaway/…`, `/v1/allocation/…`, `/v1/strategy-decisions`)
 
@@ -174,7 +178,7 @@ Dezimalfelder (z. B. `unit.weightKg`) werden exakt verglichen. Beim Speichern we
 
 Ohne `group` in der Regel gilt die Suchgruppe aus der Anfrage (`NO_SEARCH_GROUP`, wenn beides fehlt).
 
-**Harte Regeln** prüft der Entscheidungspunkt, nicht die Strategie – keine Strategie kann sie abschalten: alle Platzierungsregeln aus dem TU-Modul, dabei zählen bereits zugewiesene, noch nicht angekommene TUs als belegt; zusätzlich `ALLOCATION_BLOCKED` (Vergabesperre des Platzes).
+**Harte Regeln** prüft der Entscheidungspunkt, nicht die Strategie – keine Strategie kann sie abschalten: alle Platzierungsregeln aus dem TU-Modul, dabei zählen bereits zugewiesene, noch nicht angekommene TUs als belegt; zusätzlich `ALLOCATION_BLOCKED` (Vergabesperre des Platzes) und `PLC_FAULT` (Anlage meldet eine Störung am Platz).
 
 **Endpunkte:**
 
@@ -391,7 +395,7 @@ Ersetzt das TMS-Routing von OpenWMS (Analyse Kap. 3.7, Plan 5.1c). Eine Anlage m
 { "type": "request", "location": { "plcCode": "CV01" }, "barcode": "P1", "deviceId": "SPS1" }
 ```
 
-`type`: `request` (Zielanfrage), `arrived` (angekommen), `location-status` (Platzzustand, `state: { inbound?, outbound? }`), `error` (Störung, `code`, `message`). Mit `dryRun: true` wird nur entschieden und begründet, nichts gebucht oder gesendet. Die Antwort enthält die Entscheidung mit Begründung (`trace`) und den Fahrbefehl; zusätzlich geht der Fahrbefehl als Event `flow.command` an die Anlage (Node-RED). Alle Entscheidungen: `GET /v1/flow/decisions?barcode=…`.
+`type`: `request` (Zielanfrage), `arrived` (angekommen), `location-status` (Platzzustand, `state: { inbound?, outbound? }`, optional `plcState` für den Anlagenzustand des Platzes), `error` (Störung, `code`, `message`; mit Barcode zusätzlich als Fehlermeldung an der TU erfasst). Anlagenzustand und Fehlermeldung gelten unabhängig von der Action-Matrix. Mit `dryRun: true` wird nur entschieden und begründet, nichts gebucht oder gesendet. Die Antwort enthält die Entscheidung mit Begründung (`trace`) und den Fahrbefehl; zusätzlich geht der Fahrbefehl als Event `flow.command` an die Anlage (Node-RED). Alle Entscheidungen: `GET /v1/flow/decisions?barcode=…`.
 
 | Programm | Ereignisse | Wirkung |
 |---|---|---|
@@ -400,6 +404,7 @@ Ersetzt das TMS-Routing von OpenWMS (Analyse Kap. 3.7, Plan 5.1c). Eine Anlage m
 | `send-to` | request | fest an `location` schicken (z. B. Klärplatz) |
 | `book`, `finish-order` | request, arrived | nur buchen bzw. buchen und Auftrag abschließen |
 | `lock-location` | location-status, error | Sperren aus der Meldung (`state`) oder aus `params` übernehmen |
+| `lock-group` | location-status, error | Systemstatus: Sperren für den ganzen Bereich (Gruppe des meldenden Platzes oder `params.group`) aus der Meldung (`state`) oder aus `params` |
 | `interrupt-order` | error | laufenden Auftrag unterbrechen |
 | `node-red` | alle | Event `flow.program-requested` mit `params.flow`; der Node-RED-Flow antwortet z. B. mit `POST /v1/flow/commands` |
 

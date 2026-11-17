@@ -248,6 +248,7 @@ des angegebenen Typs an. Alle Felder: ${SPEC_HINT}; leere Charge/MHD werden wegg
       deviceId: { value: '' },
       code: { value: '' },
       message: { value: '' },
+      plcState: { value: '' },
       dryRun: { value: false },
     },
     fields: [
@@ -259,10 +260,13 @@ des angegebenen Typs an. Alle Felder: ${SPEC_HINT}; leere Charge/MHD werden wegg
       { name: 'deviceId', label: 'Geräte-ID', placeholder: 'SPS1' },
       { name: 'code', label: 'Fehlercode', placeholder: 'msg.payload.code' },
       { name: 'message', label: 'Meldung', placeholder: 'msg.payload.message' },
+      { name: 'plcState', label: 'Anlagenzustand', placeholder: 'msg.payload.plcState (0 = in Ordnung)' },
       { name: 'dryRun', label: 'Probelauf', type: 'checkbox' },
     ].concat([errorOutput]),
     help: `<p>Meldet ein Geräte-Ereignis an den Materialfluss (Protokoll-Adapter einer Anlage). Die Antwort in <code>msg.payload</code>
-enthält die Entscheidung mit Begründung (<code>decision.trace</code>) und ggf. den Fahrbefehl (<code>command</code>).</p>${ERRORS_HELP}`,
+enthält die Entscheidung mit Begründung (<code>decision.trace</code>) und ggf. den Fahrbefehl (<code>command</code>).</p>
+<p>Bei <code>location-status</code> setzt <i>Anlagenzustand</i> den Zustand des Platzes (0 = in Ordnung, sonst Störungscode).
+Bei <code>error</code> mit Barcode wird die Störung als Fehlermeldung an der TU erfasst.</p>${ERRORS_HELP}`,
   },
   {
     type: 'wms-event',

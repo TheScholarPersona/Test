@@ -4,9 +4,9 @@ import { Injectable } from '@nestjs/common';
 import { FlowCommandEvent, FlowNoRouteEvent, FlowProgramRequestedEvent, FlowUnhandledEvent } from '@wms/shared';
 import { DomainError, NotFoundError, RuleViolationError } from '../../../common/domain-error.js';
 import { OutboxService } from '../../../infrastructure/outbox/outbox.service.js';
-import { type Location, LocationLookup, LocationService } from '../../layout/index.js';
+import { type Location, LocationGroupService, LocationLookup, LocationService } from '../../layout/index.js';
 import { type TransportOrder, TransportOrderService } from '../../transport-order/index.js';
-import { type TransportUnit, type TransportUnitType, TransportUnitService } from '../../transport/index.js';
+import { type TransportUnit, type TransportUnitType, TransportUnitService, UnitErrorService } from '../../transport/index.js';
 import { bestAction, bestRoute, candidates, type PlaceKey, placeLabel } from '../domain/matching.js';
 import { PROGRAMS, type ProgramKey, type ProgramParams } from '../domain/programs.js';
 import { FlowAction, FlowDecision, type FlowOutcome, FlowRoute, FlowRouteStep } from '../entities/flow.entities.js';
@@ -62,6 +62,8 @@ export class FlowService {
     private readonly locations: LocationService,
     private readonly units: TransportUnitService,
     private readonly orders: TransportOrderService,
+    private readonly groups: LocationGroupService,
+    private readonly unitErrors: UnitErrorService,
   ) {}
 
   async handle(event: DeviceEvent): Promise<FlowResult> {
@@ -118,6 +120,17 @@ export class FlowService {
     if (event.barcode) trace.push(unit ? `TU ${unit.barcode} (${(unit.type as TransportUnitType).code}) steht auf ${(unit.location as Location).locationId}` : `TU ${event.barcode} ist unbekannt`);
     const order = event.barcode ? await this.orders.activeFor(tx, event.barcode) : null;
     if (event.barcode) trace.push(order ? `Laufender Transportauftrag ${order.number} (${order.state})` : 'Kein laufender Transportauftrag');
+
+    // Zustandsmeldungen gelten unabhängig von der Action-Matrix: Platzzustand der Anlage und Störung an der TU.
+    const source = event.deviceId ? `device:${event.deviceId}` : 'device';
+    if (event.type === 'location-status' && event.plcState !== undefined) {
+      await this.locations.changePlcStateIn(tx, location.id, { plcState: event.plcState, ...(event.message ? { text: event.message } : {}) }, source);
+      trace.push(event.plcState === 0 ? `Anlagenzustand von ${location.locationId}: in Ordnung` : `Anlagenzustand von ${location.locationId}: Störung ${event.plcState}${event.message ? ` (${event.message})` : ''}`);
+    }
+    if (event.type === 'error' && unit) {
+      this.unitErrors.reportIn(tx, unit, { code: event.code ?? 'STOERUNG', ...(event.message ? { message: event.message } : {}) }, source);
+      trace.push(`Fehlermeldung an TU ${unit.barcode} erfasst: ${event.code ?? 'STOERUNG'}`);
+    }
 
     const ctx: Context = { tx, event, decisionId, location, groupPath, unit, order, route: null, trace };
     if (order) await this.selectRoute(ctx);
@@ -273,6 +286,8 @@ export class FlowService {
         return this.finishOrder(ctx);
       case 'lock-location':
         return this.lockLocation(ctx, params);
+      case 'lock-group':
+        return this.lockGroup(ctx, params);
       case 'interrupt-order':
         return this.interruptOrder(ctx);
       case 'node-red':
@@ -367,6 +382,21 @@ export class FlowService {
       reason,
     });
     ctx.trace.push(`Sperren von ${ctx.location.locationId} gesetzt: ${JSON.stringify({ inbound, outbound })}`);
+    return { outcome: 'HANDLED' };
+  }
+
+  /** Systemstatus: Sperren für einen ganzen Bereich (Gruppe des meldenden Platzes oder fest konfiguriert). */
+  private async lockGroup(ctx: Context, params: ProgramParams<'lock-group'>): Promise<ProgramResult> {
+    const inbound = ctx.event.state?.inbound ?? params.inbound;
+    const outbound = ctx.event.state?.outbound ?? params.outbound;
+    if (inbound === undefined && outbound === undefined) {
+      ctx.trace.push('Keine Sperränderung gemeldet oder konfiguriert');
+      return { outcome: 'HANDLED' };
+    }
+    const group = params.group ?? ctx.groupPath[0]!;
+    const reason = [`Anlage${ctx.event.deviceId ? ` ${ctx.event.deviceId}` : ''}`, ctx.event.code, ctx.event.message].filter(Boolean).join(': ').slice(0, 200);
+    await this.groups.changeLocksIn(ctx.tx, group, { ...(inbound === undefined ? {} : { inbound }), ...(outbound === undefined ? {} : { outbound }), reason });
+    ctx.trace.push(`Sperren des Bereichs ${group} gesetzt: ${JSON.stringify({ inbound, outbound })}`);
     return { outcome: 'HANDLED' };
   }
 

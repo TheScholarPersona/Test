@@ -345,3 +345,60 @@ features:
         note: Suche nach Barcode, Platz (und hier zusätzlich Typ und Zustand).
         refs:
           - Analyse 3.3 /v1/transport-units
+
+  - id: transporteinheiten.fehlermeldungen
+    title: Fehlermeldungen an Transporteinheiten
+    group: transporteinheiten.fuehrung
+    summary: Hält Probleme an einer Palette fest – von der Anlage („Kontur zu hoch“) oder vom Bediener – und zeigt sie dem Leitstand, bis sie erledigt sind.
+    description: |
+      Eine Fehlermeldung trägt Code, Text, den Platz der TU und den Melder (Benutzer, Service oder Gerät). Meldet die
+      Anlage eine Störung mit Barcode, entsteht die Meldung automatisch. Offene Meldungen erscheinen als Arbeitsliste
+      im Leitstand und werden mit einem Vermerk erledigt; die Historie je TU bleibt erhalten, auch wenn die TU später
+      gelöscht wird. Eine Meldung ändert Zustand und Platz der TU nicht – wer sperren will, setzt den Zustand.
+    usage:
+      - channel: leitstand
+        text: Seite **Übersicht** – Abschnitt **Störungen** mit offenen Meldungen und „Erledigt“.
+      - channel: api
+        text: "Melden `POST /v1/transport-units/{barcode}/errors` (`code`, `message`), Historie `GET …/errors?state=open|resolved|all`, erledigen `POST …/errors/{errorId}/resolve`, Arbeitsliste `GET /v1/transport-unit-errors`."
+      - channel: node-red
+        text: Node `wms-device-event` mit Ereignis `error` und Barcode.
+    rules:
+      - Erledigte Meldungen lassen sich nicht erneut erledigen (`UNIT_ERROR_RESOLVED`).
+      - Störungen der Anlage mit Barcode werden mit Melder `device:<Geräte-ID>` erfasst.
+    dependsOn: [transporteinheiten.anlegen]
+    technical:
+      components:
+        - apps/api/src/modules/transport/application/unit-error.service.ts
+        - apps/api/src/modules/transport/http/unit-errors.controller.ts
+        - apps/api/src/modules/transport/entities/transport-unit-error.entity.ts
+        - apps/web/src/pages/OverviewPage.tsx
+      endpoints:
+        - POST /v1/transport-units/{barcode}/errors
+        - GET /v1/transport-units/{barcode}/errors
+        - POST /v1/transport-units/{barcode}/errors/{errorId}/resolve
+        - GET /v1/transport-unit-errors
+      events:
+        emits: [transport-unit.error-reported, transport-unit.error-resolved]
+      uiRoutes: [/]
+      notes:
+        - Tabelle `transport_unit_error`; Verweis auf die TU mit `on delete set null`, Barcode und Platz werden mitgeschrieben.
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/transport.integration.test.ts
+        test: erfasst, listet und erledigt Fehlermeldungen an einer TU und behält die Historie
+      - kind: integration
+        file: apps/api/test/integration/transport.integration.test.ts
+        test: meldet unbekannte TUs und Meldungen
+      - kind: integration
+        file: apps/api/test/integration/flow.integration.test.ts
+        test: erfasst eine Störung mit Barcode als Fehlermeldung an der TU
+      - kind: web-e2e
+        file: apps/web/e2e/seiten.spec.ts
+        test: "Störungen: Anlagenzustand eines Platzes und Fehlermeldung an einer TU"
+    comparisons:
+      openwms:
+        status: erweitert
+        note: Entspricht UnitError in OpenWMS (Fehler an einer TU melden); zusätzlich Erledigung mit Vermerk, Historie, Arbeitsliste im Leitstand und automatische Erfassung von Anlagenstörungen.
+        refs:
+          - Analyse 2.1 UnitError
+          - "Analyse 3.3 POST /v1/transport-units/error"

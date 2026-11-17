@@ -154,3 +154,49 @@ export const PlacementResultSchema = z
   .object({ unit: TransportUnitDtoSchema, violations: z.array(PlacementViolationSchema) })
   .meta({ id: 'PlacementResult' });
 export type PlacementResult = z.infer<typeof PlacementResultSchema>;
+
+// --- Fehlermeldungen an TUs ---------------------------------------------------------
+
+export const ReportUnitErrorSchema = z
+  .strictObject({
+    code: z.string().trim().min(1).max(60).meta({ description: 'Fehlercode, z. B. KONTUR oder GEWICHT' }),
+    message: z.string().trim().min(1).max(200).optional(),
+  })
+  .meta({ id: 'ReportTransportUnitError' });
+export type ReportUnitError = z.infer<typeof ReportUnitErrorSchema>;
+
+export const ResolveUnitErrorSchema = z
+  .strictObject({ resolution: z.string().trim().min(1).max(200).optional().meta({ description: 'Was getan wurde' }) })
+  .meta({ id: 'ResolveTransportUnitError' });
+export type ResolveUnitError = z.infer<typeof ResolveUnitErrorSchema>;
+
+export const UnitErrorParam = z.object({ barcode: BarcodeSchema, errorId: z.uuid() });
+
+export const UnitErrorStateSchema = z.enum(['open', 'resolved', 'all']);
+
+export const UnitErrorQuerySchema = z.object({
+  state: UnitErrorStateSchema.default('open'),
+  barcode: BarcodeSchema.optional(),
+  limit: z.coerce.number().int().min(1).max(1000).default(100),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+export type UnitErrorQuery = z.infer<typeof UnitErrorQuerySchema>;
+
+export const UnitErrorListQuerySchema = z.object({ state: UnitErrorStateSchema.default('all') });
+
+export const UnitErrorDtoSchema = z
+  .object({
+    id: z.uuid(),
+    barcode: z.string(),
+    code: z.string(),
+    message: z.string().nullable(),
+    locationId: z.string().nullable().meta({ description: 'Platz der TU zum Zeitpunkt der Meldung' }),
+    reportedBy: z.string().nullable(),
+    reportedAt: z.iso.datetime(),
+    resolvedAt: z.iso.datetime().nullable(),
+    resolvedBy: z.string().nullable(),
+    resolution: z.string().nullable(),
+  })
+  .meta({ id: 'TransportUnitError' });
+export type UnitErrorDto = z.infer<typeof UnitErrorDtoSchema>;
+

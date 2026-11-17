@@ -13,6 +13,10 @@ export function summarize(type: string, p: Record<string, any>): string {
       return `${q(p.quantity)} ${p.sku}: ${p.from} → ${p.to}`;
     case 'transport-unit.moved':
       return `${p.barcode}: ${p.from?.locationId ?? '?'} → ${p.location?.locationId ?? '?'}`;
+    case 'transport-unit.error-reported':
+      return `${p.barcode}: ${p.code}${p.message ? ` – ${p.message}` : ''}`;
+    case 'location.plc-state-changed':
+      return `${p.plcCode ?? p.locationId}: ${p.plcState === 0 ? 'in Ordnung' : `Störung ${p.plcState}${p.text ? ` – ${p.text}` : ''}`}`;
     case 'flow.command':
       return `${p.barcode} → ${p.to?.plcCode ?? p.to?.locationId}`;
     case 'outbound-order.state-changed':

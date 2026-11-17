@@ -111,6 +111,14 @@ describe('WMS-Nodes für Node-RED', () => {
       expect((await out).payload.command).toEqual({ to: { plcCode: 'CV02' } });
       expect(api.requests[0].body).toEqual({ type: 'request', location: { plcCode: 'CV01' }, barcode: 'P1', deviceId: 'SPS1' });
     });
+
+    it('wms-device-event meldet den Anlagenzustand eines Platzes', async () => {
+      await load([{ id: 'n', type: 'wms-device-event', server: 'cfg', eventType: 'location-status', plcState: 'msg.payload.plcState', message: 'msg.payload.text', barcode: '', wires: [['out']] }]);
+      const out = next(helper.getNode('out'));
+      helper.getNode('n').receive({ payload: { location: 'CV02', plcState: 7, text: 'Antrieb' } });
+      await out;
+      expect(api.requests[0].body).toEqual({ type: 'location-status', location: { plcCode: 'CV02' }, message: 'Antrieb', plcState: 7 });
+    });
   });
 
   describe('Ereignisse', () => {
