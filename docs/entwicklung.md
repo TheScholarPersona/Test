@@ -316,6 +316,8 @@ Noch nicht enthalten: Seriennummern, Reservierung über mehrere Posten (Bedarf j
 
 Mengenpositionen erwarten eine Menge eines Produkts, TU-Positionen eine ganze TU eines Typs (`typeCode` Pflicht, erwarteter `barcode` z. B. SSCC optional). Positionsnummern werden vergeben, wenn sie fehlen.
 
+**Priorität, Detailattribute, Sperre:** `priority` (`HIGHEST` … `LOWEST`, Standard `NORMAL`) und `details` (bis zu 30 Attribute `{ "rampe": "3" }`) beim Anlegen; ändern mit `PATCH /v1/receiving-orders/{orderId}` `{ priority?, expectedAt?, details? }` (Attribute werden zusammengeführt, `null` löscht). `POST …/{orderId}/lock` `{ reason? }` sperrt die Erfassung (`409 ORDER_LOCKED`), `POST …/{orderId}/unlock` gibt sie frei. Nur offene Avise (`ORDER_CLOSED`). Liste mit `?priority=…&locked=true|false&sort=priority` (höchste Priorität, dann frühester Termin). Event `receiving-order.changed` mit `fields`.
+
 **Erfassen** `POST /v1/receiving-orders/{orderId}/captures`:
 
 - Menge: `{ kind: "quantity", sku, quantity, unit: { barcode? | typeCode? }, location, lot?, bestBefore?, putawayGroup? }` – bucht auf eine vorhandene TU oder legt eine neue an (Barcode `TU0000000001`). Die Position wird automatisch gewählt (erste offene mit ausreichender Restmenge). Mehr als avisiert nur, wenn das Produkt es erlaubt (`OVERDELIVERY_NOT_ALLOWED` mit Restmengen, sonst `overdelivered: true`).

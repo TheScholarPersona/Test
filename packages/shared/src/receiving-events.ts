@@ -13,6 +13,19 @@ export const ReceivingOrderCreatedEvent = defineEvent(
   z.object({ orderId: z.string(), supplier: z.string().nullable(), positions: z.number().int() }),
 );
 
+/** Priorität, Termin, Detailattribute oder Sperre geändert; `fields` nennt, was sich geändert hat. */
+export const ReceivingOrderChangedEvent = defineEvent(
+  'receiving-order.changed',
+  1,
+  z.object({
+    orderId: z.string(),
+    fields: z.array(z.string()),
+    priority: z.enum(['HIGHEST', 'HIGH', 'NORMAL', 'LOW', 'LOWEST']),
+    locked: z.boolean(),
+    lockReason: z.string().nullable(),
+  }),
+);
+
 export const ReceivingOrderStateChangedEvent = defineEvent(
   'receiving-order.state-changed',
   1,

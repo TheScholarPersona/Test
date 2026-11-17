@@ -6,6 +6,7 @@ import {
   GoodsCapturedEvent,
   LocationGroupNameSchema,
   Quantity,
+  ReceivingOrderChangedEvent,
   ReceivingOrderCreatedEvent,
   ReceivingOrderStateChangedEvent,
   ReceivingPositionStateChangedEvent,
@@ -24,10 +25,11 @@ import {
   deriveOrderState,
   isOpen,
   type PositionState,
+  priorityRankOf,
   stateAfterReceipt,
 } from '../domain/receiving-rules.js';
 import { ReceivingCapture, ReceivingOrder, ReceivingPosition } from '../entities/receiving.entities.js';
-import type { BlindCapture, CaptureInput, CreateReceivingOrder, QuantityCapture, ReceivingQuery, UnitCapture } from '../http/schemas.js';
+import type { BlindCapture, CaptureInput, ChangeReceivingOrder, CreateReceivingOrder, LockReceivingOrder, QuantityCapture, ReceivingQuery, UnitCapture } from '../http/schemas.js';
 
 export interface OrderWithPositions {
   order: ReceivingOrder;
@@ -58,8 +60,13 @@ export class ReceivingService {
     const where: FilterQuery<ReceivingOrder> = {};
     if (query.state) where.state = query.state;
     if (query.supplier) where.supplier = query.supplier;
+    if (query.priority) where.priority = query.priority;
+    if (query.locked !== undefined) where.locked = query.locked;
     const [orders, total] = await this.em.findAndCount(ReceivingOrder, where, {
-      orderBy: { createdAt: 'desc', orderId: 'asc' },
+      orderBy:
+        query.sort === 'priority'
+          ? { priorityRank: 'asc', expectedAt: 'asc nulls last', createdAt: 'asc', orderId: 'asc' }
+          : { createdAt: 'desc', orderId: 'asc' },
       limit: query.limit,
       offset: query.offset,
     });
@@ -96,6 +103,11 @@ export class ReceivingService {
         orderId: input.orderId,
         supplier: input.supplier ?? partner?.code ?? null,
         supplierCode: partner?.code ?? null,
+        priority: input.priority,
+        priorityRank: priorityRankOf(input.priority),
+        details: input.details && Object.keys(input.details).length ? input.details : null,
+        locked: false,
+        lockReason: null,
         expectedAt: input.expectedAt ? new Date(input.expectedAt) : null,
         state: 'OPEN',
       });
@@ -141,12 +153,75 @@ export class ReceivingService {
     });
   }
 
+  /** Priorität, Termin oder Detailattribute ändern (Attribute werden zusammengeführt, `null` löscht). */
+  change(orderId: string, input: ChangeReceivingOrder): Promise<OrderWithPositions> {
+    return this.em.transactional(async (tx) => {
+      const order = await this.findOrder(tx, orderId, true);
+      this.assertChangeable(order);
+      const fields: string[] = [];
+      if (input.priority && input.priority !== order.priority) {
+        order.priority = input.priority;
+        order.priorityRank = priorityRankOf(input.priority);
+        fields.push('priority');
+      }
+      if (input.expectedAt !== undefined) {
+        const next = input.expectedAt ? new Date(input.expectedAt) : null;
+        if ((next?.getTime() ?? null) !== (order.expectedAt?.getTime() ?? null)) {
+          order.expectedAt = next;
+          fields.push('expectedAt');
+        }
+      }
+      if (input.details) {
+        const details = { ...(order.details ?? {}) };
+        for (const [key, value] of Object.entries(input.details)) {
+          if (value === null) delete details[key];
+          else details[key] = value;
+        }
+        if (Object.keys(details).length > 30) throw new DomainError('invalid', 'TOO_MANY_DETAILS', 'Höchstens 30 Attribute', { count: Object.keys(details).length });
+        if (JSON.stringify(details) !== JSON.stringify(order.details ?? {})) {
+          order.details = Object.keys(details).length ? details : null;
+          fields.push('details');
+        }
+      }
+      if (fields.length) this.recordChange(tx, order, fields);
+      return { order, positions: await this.positionsOf(tx, order) };
+    });
+  }
+
+  /** Sperren (keine Erfassung mehr) oder entsperren. Wiederholtes Sperren ändert nur den Grund. */
+  setLock(orderId: string, locked: boolean, input: LockReceivingOrder = {}): Promise<OrderWithPositions> {
+    return this.em.transactional(async (tx) => {
+      const order = await this.findOrder(tx, orderId, true);
+      this.assertChangeable(order);
+      const reason = locked ? (input.reason ?? null) : null;
+      if (order.locked !== locked || (order.lockReason ?? null) !== reason) {
+        order.locked = locked;
+        order.lockReason = reason;
+        this.recordChange(tx, order, ['locked']);
+      }
+      return { order, positions: await this.positionsOf(tx, order) };
+    });
+  }
+
+  private assertChangeable(order: ReceivingOrder): void {
+    if (!['OPEN', 'IN_PROGRESS'].includes(order.state)) {
+      throw new RuleViolationError('ORDER_CLOSED', `Wareneingangsauftrag ${order.orderId} ist ${order.state}`, { orderId: order.orderId, state: order.state });
+    }
+  }
+
+  private recordChange(tx: EntityManager, order: ReceivingOrder, fields: string[]): void {
+    this.outbox.record(tx, ReceivingOrderChangedEvent, { orderId: order.orderId, fields, priority: order.priority, locked: order.locked, lockReason: order.lockReason ?? null });
+  }
+
   /** Erfassung gegen den Auftrag – Menge eines Produkts oder eine ganze TU. */
   capture(orderId: string, input: CaptureInput): Promise<CaptureOutcome> {
     return this.em.transactional(async (tx) => {
       const order = await this.findOrder(tx, orderId, true);
       if (!['OPEN', 'IN_PROGRESS'].includes(order.state)) {
         throw new RuleViolationError('ORDER_CLOSED', `Wareneingangsauftrag ${orderId} ist ${order.state}; Erfassung nicht mehr möglich`, { orderId, state: order.state });
+      }
+      if (order.locked) {
+        throw new RuleViolationError('ORDER_LOCKED', `Wareneingangsauftrag ${orderId} ist gesperrt${order.lockReason ? `: ${order.lockReason}` : ''}`, { orderId, reason: order.lockReason ?? null });
       }
       const positions = await this.positionsOf(tx, order);
       const outcome = input.kind === 'quantity' ? await this.captureQuantity(tx, order, positions, input) : await this.captureUnit(tx, order, positions, input);

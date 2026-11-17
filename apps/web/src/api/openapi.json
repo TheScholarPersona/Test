@@ -4749,6 +4749,32 @@
               "null"
             ]
           },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "HIGHEST",
+              "HIGH",
+              "NORMAL",
+              "LOW",
+              "LOWEST"
+            ],
+            "description": "Bearbeitungsreihenfolge im Wareneingang"
+          },
+          "details": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "locked": {
+            "type": "boolean"
+          },
+          "lockReason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "expectedAt": {
             "type": [
               "string",
@@ -4914,6 +4940,10 @@
           "orderId",
           "supplier",
           "supplierCode",
+          "priority",
+          "details",
+          "locked",
+          "lockReason",
           "expectedAt",
           "state",
           "positions",
@@ -4939,6 +4969,27 @@
             "type": "string",
             "pattern": "^[A-Za-z0-9_.\\-/]{1,40}$",
             "description": "Geschäftspartner mit Rolle SUPPLIER"
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "HIGHEST",
+              "HIGH",
+              "NORMAL",
+              "LOW",
+              "LOWEST"
+            ],
+            "default": "NORMAL",
+            "description": "Bearbeitungsreihenfolge im Wareneingang"
+          },
+          "details": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "description": "Frei definierbare Detailattribute, z. B. { \"rampe\": \"3\", \"frachtbrief\": \"FB-1\" }"
           },
           "expectedAt": {
             "type": "string",
@@ -5453,6 +5504,53 @@
         ]
       },
       "Reason": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "additionalProperties": false
+      },
+      "ChangeReceivingOrder": {
+        "type": "object",
+        "properties": {
+          "priority": {
+            "type": "string",
+            "enum": [
+              "HIGHEST",
+              "HIGH",
+              "NORMAL",
+              "LOW",
+              "LOWEST"
+            ],
+            "description": "Bearbeitungsreihenfolge im Wareneingang"
+          },
+          "expectedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "details": {
+            "type": "object",
+            "additionalProperties": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "description": "Wird zusammengeführt; null löscht ein Attribut"
+          }
+        },
+        "additionalProperties": false
+      },
+      "LockReceivingOrder": {
         "type": "object",
         "properties": {
           "reason": {
@@ -16866,6 +16964,50 @@
           },
           {
             "schema": {
+              "type": "string",
+              "enum": [
+                "HIGHEST",
+                "HIGH",
+                "NORMAL",
+                "LOW",
+                "LOWEST"
+              ],
+              "description": "Bearbeitungsreihenfolge im Wareneingang"
+            },
+            "required": false,
+            "description": "Bearbeitungsreihenfolge im Wareneingang",
+            "name": "priority",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            },
+            "required": false,
+            "name": "locked",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "created",
+                "priority"
+              ],
+              "default": "created",
+              "description": "created: neueste zuerst; priority: höchste Priorität, dann frühester Termin"
+            },
+            "required": false,
+            "description": "created: neueste zuerst; priority: höchste Priorität, dann frühester Termin",
+            "name": "sort",
+            "in": "query"
+          },
+          {
+            "schema": {
               "type": "integer",
               "minimum": 1,
               "maximum": 1000,
@@ -17081,6 +17223,102 @@
           },
           "404": {
             "description": "Nicht gefunden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "Priorität, Termin oder Detailattribute ändern (null löscht ein Attribut)",
+        "tags": [
+          "Wareneingang"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._\\-/]{0,63}$"
+            },
+            "required": true,
+            "name": "orderId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeReceivingOrder"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Wareneingangsauftrag",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceivingOrder"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ungültige Anfrage (Feldprüfung)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nicht gefunden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Konflikt oder verletzte Geschäftsregel",
             "content": {
               "application/json": {
                 "schema": {
@@ -17412,6 +17650,173 @@
             }
           }
         },
+        "responses": {
+          "200": {
+            "description": "Wareneingangsauftrag",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceivingOrder"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nicht gefunden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Konflikt oder verletzte Geschäftsregel",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/receiving-orders/{orderId}/lock": {
+      "post": {
+        "summary": "Auftrag sperren: keine Erfassung bis zum Entsperren",
+        "tags": [
+          "Wareneingang"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._\\-/]{0,63}$"
+            },
+            "required": true,
+            "name": "orderId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LockReceivingOrder"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Wareneingangsauftrag",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceivingOrder"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nicht gefunden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Konflikt oder verletzte Geschäftsregel",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/receiving-orders/{orderId}/unlock": {
+      "post": {
+        "summary": "Auftrag entsperren",
+        "tags": [
+          "Wareneingang"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._\\-/]{0,63}$"
+            },
+            "required": true,
+            "name": "orderId",
+            "in": "path"
+          }
+        ],
         "responses": {
           "200": {
             "description": "Wareneingangsauftrag",

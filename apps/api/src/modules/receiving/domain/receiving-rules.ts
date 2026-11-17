@@ -5,6 +5,10 @@ export const POSITION_STATES = ['OPEN', 'IN_PROGRESS', 'COMPLETED', 'SHORT', 'CA
 export type PositionState = (typeof POSITION_STATES)[number];
 
 export const ORDER_STATES = ['OPEN', 'IN_PROGRESS', 'COMPLETED', 'PARTIALLY_COMPLETED', 'CANCELLED'] as const;
+export const ORDER_PRIORITIES = ['HIGHEST', 'HIGH', 'NORMAL', 'LOW', 'LOWEST'] as const;
+export type OrderPriority = (typeof ORDER_PRIORITIES)[number];
+/** 1 = HIGHEST … 5 = LOWEST. */
+export const priorityRankOf = (priority: OrderPriority): number => ORDER_PRIORITIES.indexOf(priority) + 1;
 export type OrderState = (typeof ORDER_STATES)[number];
 
 /** Positionen, auf die noch erfasst werden kann. */

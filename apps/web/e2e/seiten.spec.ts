@@ -276,3 +276,50 @@ test('Versand: am Packplatz packen, mit Ladekontrolle verladen, Warenausgang buc
   expect(pdf.headers()['content-type']).toBe('application/pdf');
   expect((await pdf.body()).subarray(0, 5).toString()).toBe('%PDF-');
 });
+
+test('Wareneingang: Avis mit Priorität und Attribut, Sperre verhindert die Erfassung', async ({ page, fx }) => {
+  const w = await fx.warehouse();
+  const orderId = `PW-${fx.s}-WS`;
+  const barcode = `PW-${fx.s}-WS1`;
+  fx.onCleanup(async () => {
+    const item = (await fx.api('GET', `/v1/stock?barcode=${barcode}`)).items[0];
+    if (item) await fx.api('POST', `/v1/stock/${item.id}/corrections`, { delta: { amount: `-${item.quantity.amount}`, unit: 'PCS' }, reason: 'Aufräumen' });
+    await fx.api('DELETE', `/v1/transport-units/${barcode}`).catch(() => undefined);
+    await fx.api('POST', `/v1/receiving-orders/${orderId}/complete`, {}).catch(() => undefined);
+  });
+
+  await page.goto('./wareneingang');
+  const form = page.locator('section', { hasText: 'Avis anlegen' });
+  await form.getByLabel('Auftrag').fill(orderId);
+  await form.getByLabel('Priorität').selectOption('HIGH');
+  await form.getByLabel('SKU').fill(w.sku);
+  await form.getByLabel('Menge').fill('2');
+  await form.getByRole('button', { name: 'Anlegen' }).click();
+  await expect(page.getByText(`Avis ${orderId} angelegt`)).toBeVisible();
+  await expect(page.getByRole('row', { name: new RegExp(orderId) })).toContainText('hoch');
+
+  await page.getByRole('row', { name: new RegExp(orderId) }).click();
+  const detail = page.locator('section', { hasText: `Auftrag ${orderId}` });
+  await detail.getByLabel('Attribut', { exact: true }).fill('rampe');
+  await detail.getByLabel('Wert').fill('3');
+  await detail.getByRole('button', { name: 'Attribut setzen' }).click();
+  await expect(detail.getByLabel('Detailattribute')).toContainText('rampe: 3');
+
+  page.once('dialog', (dialog) => void dialog.accept('Qualitätsprüfung'));
+  await detail.getByRole('button', { name: 'Sperren' }).click();
+  await expect(detail.getByText('Gesperrt: Qualitätsprüfung – Erfassung erst nach dem Entsperren.')).toBeVisible();
+  await expect(page.getByRole('row', { name: new RegExp(orderId) })).toContainText('gesperrt');
+
+  await detail.getByLabel('Menge').fill('2');
+  await detail.getByLabel('TU-Barcode').fill(barcode);
+  await detail.getByLabel('TU-Typ (neue TU)').selectOption(w.unitType);
+  await detail.getByLabel('Platz').selectOption({ label: `${w.a} (${w.group})` });
+  await detail.getByRole('button', { name: 'Erfassen' }).click();
+  await expect(detail.getByText(/ORDER_LOCKED|gesperrt/).first()).toBeVisible();
+  expect((await fx.api('GET', `/v1/stock?barcode=${barcode}`)).items).toHaveLength(0);
+
+  await detail.getByRole('button', { name: 'Entsperren' }).click();
+  await expect(detail.getByText('Gesperrt: Qualitätsprüfung – Erfassung erst nach dem Entsperren.')).toHaveCount(0);
+  await detail.getByRole('button', { name: 'Erfassen' }).click();
+  await expect(page.getByText(`2 PCS ${w.sku} erfasst`)).toBeVisible();
+});

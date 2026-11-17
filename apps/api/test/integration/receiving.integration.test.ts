@@ -197,6 +197,52 @@ describe('Wareneingang und Bestand', () => {
     });
   });
 
+  describe('Priorität, Detailattribute und Sperre', () => {
+    const quantityPosition = { kind: 'quantity', sku: 'SKU-A', quantity: { amount: '5', unit: 'PCS' } };
+    const create = (orderId: string, extra: Record<string, unknown> = {}) => api.post('/v1/receiving-orders', { orderId, positions: [quantityPosition], ...extra });
+
+    it('legt Avise mit Priorität und Attributen an und sortiert nach Priorität und Termin', async () => {
+      const created = await create('PR-1', { priority: 'LOW', details: { rampe: '3', frachtbrief: 'FB-100' } });
+      expect(created).toMatchObject({ status: 201, body: { priority: 'LOW', details: { rampe: '3', frachtbrief: 'FB-100' }, locked: false, lockReason: null } });
+      await create('PR-2', { priority: 'HIGHEST', expectedAt: '2026-12-02T08:00:00Z' });
+      await create('PR-3', { priority: 'HIGHEST', expectedAt: '2026-12-01T08:00:00Z' });
+      expect((await create('PR-X', { details: { 'kein leerzeichen': 'x' } })).status).toBe(400);
+      const sorted = ((await api.get('/v1/receiving-orders?sort=priority&state=OPEN')).body.items as { orderId: string }[]).map((o) => o.orderId).filter((id) => id.startsWith('PR-'));
+      expect(sorted).toEqual(['PR-3', 'PR-2', 'PR-1']);
+      expect(((await api.get('/v1/receiving-orders?priority=LOW')).body.items as { orderId: string }[]).map((o) => o.orderId)).toEqual(['PR-1']);
+      // Ohne Angabe: NORMAL
+      expect((await order('WE-1')).priority).toBe('NORMAL');
+    });
+
+    it('ändert Priorität, Termin und Attribute und meldet die geänderten Felder', async () => {
+      const changed = await api.patch('/v1/receiving-orders/PR-1', { priority: 'HIGH', expectedAt: '2026-12-03T10:00:00Z', details: { rampe: '5', frachtbrief: null, temperatur: 'kühl' } });
+      expect(changed).toMatchObject({ status: 200, body: { priority: 'HIGH', expectedAt: '2026-12-03T10:00:00.000Z', details: { rampe: '5', temperatur: 'kühl' } } });
+      expect(changed.body.details).not.toHaveProperty('frachtbrief');
+      const event = await collector.waitFor((m) => m.topic === 'wms/receiving-order/changed' && (m.body['payload'] as { orderId: string }).orderId === 'PR-1');
+      expect((event.body['payload'] as { fields: string[] }).fields).toEqual(['priority', 'expectedAt', 'details']);
+      expect((await api.patch('/v1/receiving-orders/PR-1', {})).status).toBe(400);
+    });
+
+    it('lehnt die Erfassung gegen ein gesperrtes Avis ab, bis es entsperrt wird', async () => {
+      const locked = await api.post('/v1/receiving-orders/PR-2/lock', { reason: 'Qualitätsprüfung' });
+      expect(locked.body).toMatchObject({ locked: true, lockReason: 'Qualitätsprüfung' });
+      const capture = { kind: 'quantity', sku: 'SKU-A', quantity: { amount: '5', unit: 'PCS' }, unit: { barcode: 'PR-T1', typeCode: 'EURO' }, location: at };
+      expect(await api.post('/v1/receiving-orders/PR-2/captures', capture)).toMatchObject({ status: 409, body: { code: 'ORDER_LOCKED' } });
+      expect(((await api.get('/v1/receiving-orders?locked=true')).body.items as { orderId: string }[]).map((o) => o.orderId)).toEqual(['PR-2']);
+      const event = await collector.waitFor((m) => m.topic === 'wms/receiving-order/changed' && (m.body['payload'] as { orderId: string; locked: boolean }).orderId === 'PR-2');
+      expect(event.body['payload']).toMatchObject({ fields: ['locked'], locked: true, lockReason: 'Qualitätsprüfung' });
+
+      expect((await api.post('/v1/receiving-orders/PR-2/unlock')).body).toMatchObject({ locked: false, lockReason: null });
+      expect((await api.post('/v1/receiving-orders/PR-2/captures', capture)).status).toBe(201);
+    });
+
+    it('ändert und sperrt abgeschlossene Avise nicht mehr', async () => {
+      await api.post('/v1/receiving-orders/PR-3/cancel', {});
+      expect(await api.patch('/v1/receiving-orders/PR-3', { priority: 'LOW' })).toMatchObject({ status: 409, body: { code: 'ORDER_CLOSED' } });
+      expect(await api.post('/v1/receiving-orders/PR-3/lock', {})).toMatchObject({ status: 409, body: { code: 'ORDER_CLOSED' } });
+    });
+  });
+
   describe('Blind-Erfassung und Löschschutz', () => {
     it('bucht Ware ohne Avis', async () => {
       const r = await api.post('/v1/receiving-blind-captures', { sku: 'SKU-A', quantity: { amount: '4', unit: 'PCS' }, unit: { typeCode: 'EURO' }, location: at });

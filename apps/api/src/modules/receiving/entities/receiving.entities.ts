@@ -1,6 +1,6 @@
 import { defineEntity, p } from '@mikro-orm/postgresql';
 import { Product } from '../../inventory/index.js';
-import { ORDER_STATES, POSITION_STATES } from '../domain/receiving-rules.js';
+import { ORDER_PRIORITIES, ORDER_STATES, POSITION_STATES } from '../domain/receiving-rules.js';
 
 /** Wareneingangsauftrag (Avis). Der Zustand wird aus den Positionen abgeleitet. */
 const ReceivingOrderSchema = defineEntity({
@@ -14,6 +14,14 @@ const ReceivingOrderSchema = defineEntity({
     supplierCode: p.string().length(40).nullable().index(),
     expectedAt: p.datetime().nullable(),
     state: p.enum(ORDER_STATES).default('OPEN'),
+    priority: p.enum(ORDER_PRIORITIES).default('NORMAL'),
+    /** 1 = HIGHEST … 5 = LOWEST, zum Sortieren. */
+    priorityRank: p.integer().default(3),
+    /** Frei definierbare Detailattribute (Schlüssel → Text), z. B. Rampe, Frachtbrief, Temperaturzone. */
+    details: p.json<Record<string, string>>().nullable(),
+    /** Gesperrt: keine Erfassung, bis der Leitstand entsperrt. */
+    locked: p.boolean().default(false),
+    lockReason: p.string().length(200).nullable(),
     createdAt: p.datetime().onCreate(() => new Date()),
     updatedAt: p.datetime().onCreate(() => new Date()).onUpdate(() => new Date()),
     version: p.integer().version(),

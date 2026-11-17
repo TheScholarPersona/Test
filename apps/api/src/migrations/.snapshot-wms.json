@@ -5333,6 +5333,23 @@
           "enumItems": [],
           "mappedType": "datetime"
         },
+        "details": {
+          "name": "details",
+          "type": "jsonb",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "json"
+        },
         "expected_at": {
           "name": "expected_at",
           "type": "timestamptz(6)",
@@ -5367,6 +5384,40 @@
           "enumItems": [],
           "mappedType": "uuid"
         },
+        "lock_reason": {
+          "name": "lock_reason",
+          "type": "varchar(200)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": 200,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "locked": {
+          "name": "locked",
+          "type": "boolean",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": "false",
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "boolean"
+        },
         "order_id": {
           "name": "order_id",
           "type": "varchar(64)",
@@ -5383,6 +5434,46 @@
           "collation": null,
           "enumItems": [],
           "mappedType": "string"
+        },
+        "priority": {
+          "name": "priority",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": "'NORMAL'",
+          "comment": null,
+          "collation": null,
+          "enumItems": [
+            "HIGHEST",
+            "HIGH",
+            "NORMAL",
+            "LOW",
+            "LOWEST"
+          ],
+          "mappedType": "enum"
+        },
+        "priority_rank": {
+          "name": "priority_rank",
+          "type": "int",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": "3",
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "integer"
         },
         "state": {
           "name": "state",
@@ -5509,6 +5600,12 @@
         }
       ],
       "checks": [
+        {
+          "name": "receiving_order_priority_check",
+          "expression": "\"priority\" in ('HIGHEST', 'HIGH', 'NORMAL', 'LOW', 'LOWEST')",
+          "definition": "check (\"priority\" in ('HIGHEST', 'HIGH', 'NORMAL', 'LOW', 'LOWEST'))",
+          "columnName": "priority"
+        },
         {
           "name": "receiving_order_state_check",
           "expression": "\"state\" in ('OPEN', 'IN_PROGRESS', 'COMPLETED', 'PARTIALLY_COMPLETED', 'CANCELLED')",
