@@ -2,6 +2,7 @@ import { defineEntity, p } from '@mikro-orm/postgresql';
 import { Location } from '../../layout/index.js';
 import { TransportUnit } from '../../transport/index.js';
 import { MOVEMENT_STATES } from '../domain/movement-state.js';
+import { MovementGroup } from './movement-group.entity.js';
 
 export const MOVEMENT_TYPES = ['INBOUND', 'RELOCATION', 'REPLENISHMENT', 'OUTBOUND', 'EMPTIES', 'CLEARING', 'MANUAL'] as const;
 export const MOVEMENT_PRIORITIES = ['HIGHEST', 'HIGH', 'NORMAL', 'LOW', 'LOWEST'] as const;
@@ -43,6 +44,8 @@ const MovementSchema = defineEntity({
     decisionId: p.uuid().nullable(),
     initiator: p.string().length(100).nullable(),
     assignedTo: p.string().length(100).nullable(),
+    /** Bewegungsgruppe, falls die Bewegung mit anderen zusammen abgearbeitet wird. */
+    group: () => p.manyToOne(MovementGroup).nullable().deleteRule('set null').index(),
     dueAt: p.datetime().nullable(),
     /** Tatsächlicher Abstellplatz nach Abschluss. */
     completedAt: p.datetime().nullable(),

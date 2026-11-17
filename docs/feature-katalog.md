@@ -118,7 +118,7 @@ Die Prüfung **legt nie Features an**. Sie meldet, was zugeordnet werden muss; o
 
 ## 6. Stand der Bestandsaufnahme
 
-Alle 12 Bereiche sind katalogisiert (`status: katalogisiert`); jeder erkannte Bestandteil ist einem Feature zugeordnet. Mit den Testberichten aller Testarten (Unit, Integration, Node-RED-Szenarien, MQTT-Sicherheit, Browser) sind **alle 75 Features im Testlauf nachgewiesen; der Prüfbestand ist leer**.
+Alle 12 Bereiche sind katalogisiert (`status: katalogisiert`); jeder erkannte Bestandteil ist einem Feature zugeordnet. Mit den Testberichten aller Testarten (Unit, Integration, Node-RED-Szenarien, MQTT-Sicherheit, Browser) sind **alle 76 Features im Testlauf nachgewiesen; der Prüfbestand ist leer**.
 
 | Bereich | Features | Erkannte Bestandteile |
 |---|---|---|
@@ -127,14 +127,14 @@ Alle 12 Bereiche sind katalogisiert (`status: katalogisiert`); jeder erkannte Be
 | Strategien und Regeln | 7 | 15 |
 | Bestand | 12 | 30 |
 | Wareneingang | 4 | 16 |
-| Lagerbewegungen | 3 | 12 |
+| Lagerbewegungen | 4 | 21 |
 | Transportaufträge | 2 | 19 |
 | Materialfluss und Anlagen | 7 | 21 |
 | Auslagerung | 4 | 13 |
 | Integration und Automatisierung | 7 | 11 |
 | Bedienoberfläche | 5 | 2 |
 | Sicherheit und Betrieb | 9 | 11 |
-| **Summe** | **75** | **214** |
+| **Summe** | **76** | **223** |
 
 **Festlegungen** (Produktentscheidung nach dem Pilot):
 
@@ -153,21 +153,21 @@ Grundlage ist die Analyse der öffentlichen OpenWMS-Repositories (`docs/openwms-
 | Einstufung | Bedeutung | Features |
 |---|---|---|
 | gleichwertig | kann dasselbe | 11 |
-| erweitert | kann mehr (z. B. durchgesetzte Platzierungsregeln, die OpenWMS nur speichert) | 15 |
+| erweitert | kann mehr (z. B. durchgesetzte Platzierungsregeln, die OpenWMS nur speichert) | 16 |
 | eingeschränkt | kann weniger | 2 |
 | neu | in OpenWMS nicht vorhanden (Regelwerk, Simulation, Node-RED, Szenario-Tests) | 13 |
 | abweichend | gleicher Zweck, anderer Ansatz (Programme statt BPMN, MQTT-Outbox statt AMQP, OpenAPI statt HATEOAS) | 6 |
 | nicht einsehbar | Gegenstück nur in privaten Teilen (Inventory, Picking, Shipping, Oberflächen, Identitätsdienst) | 28 |
 
-**Lücken** (`catalog/comparisons/openwms.yaml`, 16 Einträge) – Fähigkeiten von OpenWMS, die bei uns fehlen:
+**Lücken** (`catalog/comparisons/openwms.yaml`, 15 Einträge) – Fähigkeiten von OpenWMS, die bei uns fehlen:
 
 | Status | Einträge |
 |---|---|
-| fehlt (7) | Betriebsart/Füllgrad je Bereich, Bewegungsgruppen, Priorität/Attribute/Sperre am Avis, Metriken und Tracing; aus privaten Teilen: Versand, Druck, Geschäftspartner |
+| fehlt (6) | Betriebsart/Füllgrad je Bereich, Priorität/Attribute/Sperre am Avis, Metriken und Tracing; aus privaten Teilen: Versand, Druck, Geschäftspartner |
 | teilweise (5) | TU-Reservierung, zeitgesteuerte Abläufe, Problemhistorie der Transportaufträge; aus privaten Teilen: ERP-Adapter, Lageraufgaben |
 | bewusst weggelassen (4) | Mandanten, BPMN-Workflows, Microservices mit Replikaten, HATEOAS |
 
-Geschlossen seit dem ersten Vergleich: Fehlermeldungen je TU (`transporteinheiten.fehlermeldungen`), Anlagenzustand je Platz (`lagerstruktur.anlagenzustand`) und Systemstatus (`materialfluss.systemstatus`).
+Geschlossen seit dem ersten Vergleich: Fehlermeldungen je TU (`transporteinheiten.fehlermeldungen`), Anlagenzustand je Platz (`lagerstruktur.anlagenzustand`) Systemstatus (`materialfluss.systemstatus`) und Bewegungsgruppen (`lagerbewegungen.bewegungsgruppen`).
 
 Jede Lücke nennt den Bereich, in den sie gehören würde, ob sie im öffentlichen Code belegt oder nur beschrieben ist (`source: oss | privat`), Belege und verwandte Features. Die Ansicht zeigt den Vergleich im Reiter **Vergleich** (Übersicht, Tabelle je Bereich, Lücken) und je Feature als Abzeichen und Abschnitt; im Katalog lässt sich nach Einstufung filtern.
 

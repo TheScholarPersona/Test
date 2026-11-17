@@ -68,7 +68,9 @@ export class MovementService implements OnModuleInit {
     if (query.type) where.type = { $in: query.type };
     if (query.barcode) where.barcode = query.barcode;
     if (query.assignedTo) where.assignedTo = query.assignedTo;
+    if (query.group) where.group = { number: query.group };
     const [items, total] = await this.em.findAndCount(Movement, where, {
+      populate: ['group'],
       orderBy: { priorityRank: 'asc', createdAt: 'asc', number: 'asc' },
       limit: query.limit,
       offset: query.offset,
@@ -176,26 +178,29 @@ export class MovementService implements OnModuleInit {
   }
 
   start(number: string, input: StartMovement): Promise<Movement> {
-    return this.em.transactional(async (tx) => {
-      const movement = await this.load(tx, number);
-      movement.state = transition(movement.state, 'start', number);
-      movement.startedAt = new Date();
-      movement.assignedTo = input.assignedTo ?? null;
-      this.outbox.record(tx, MovementStartedEvent, movementSnapshot(movement));
-      return movement;
-    });
+    return this.em.transactional(async (tx) => this.startIn(tx, await this.load(tx, number), input.assignedTo ?? null));
+  }
+
+  /** Beginnen innerhalb einer bestehenden Transaktion (z. B. für alle Bewegungen einer Gruppe). */
+  startIn(tx: EntityManager, movement: Movement, assignedTo: string | null): Movement {
+    movement.state = transition(movement.state, 'start', movement.number);
+    movement.startedAt = new Date();
+    movement.assignedTo = assignedTo;
+    this.outbox.record(tx, MovementStartedEvent, movementSnapshot(movement));
+    return movement;
   }
 
   /** Zurückgeben: Bearbeitung abbrechen, Bewegung bleibt offen. */
   release(number: string): Promise<Movement> {
-    return this.em.transactional(async (tx) => {
-      const movement = await this.load(tx, number);
-      movement.state = transition(movement.state, 'release', number);
-      movement.assignedTo = null;
-      movement.startedAt = null;
-      this.outbox.record(tx, MovementReleasedEvent, movementSnapshot(movement));
-      return movement;
-    });
+    return this.em.transactional(async (tx) => this.releaseIn(tx, await this.load(tx, number)));
+  }
+
+  releaseIn(tx: EntityManager, movement: Movement): Movement {
+    movement.state = transition(movement.state, 'release', movement.number);
+    movement.assignedTo = null;
+    movement.startedAt = null;
+    this.outbox.record(tx, MovementReleasedEvent, movementSnapshot(movement));
+    return movement;
   }
 
   /**
@@ -263,7 +268,7 @@ export class MovementService implements OnModuleInit {
   }
 
   private async load(em: EntityManager, number: string): Promise<Movement> {
-    const movement = await em.findOne(Movement, { number }, { populate: ['unit', 'source', 'target', 'completedLocation'] });
+    const movement = await em.findOne(Movement, { number }, { populate: ['unit', 'source', 'target', 'completedLocation', 'group'] });
     if (!movement) {
       throw new NotFoundError('MOVEMENT_NOT_FOUND', `Lagerbewegung [${number}] existiert nicht`, { number });
     }

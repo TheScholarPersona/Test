@@ -111,8 +111,8 @@ areas:
     summary: Bewegungen von Transporteinheiten planen, ausführen und mit Abweichungen abschließen.
     status: katalogisiert
     owns:
-      endpoints: [/v1/movements]
-      events: [movement]
+      endpoints: [/v1/movements, /v1/movement-groups]
+      events: [movement, movement-group]
     groups:
       - id: lagerbewegungen.planung
         title: Planung

@@ -35,15 +35,6 @@ gaps:
     refs: [Analyse 3.7 TimeTriggeredWorkflowExecutor]
     related: [materialfluss.node-red-programme, transportauftraege.anlegen-starten]
 
-  - id: openwms.bewegungsgruppen
-    title: Bewegungsgruppen und Zuteilung an Bediener
-    area: lagerbewegungen
-    summary: Mehrere Lagerbewegungen zu einer Gruppe bündeln und einem Bediener zuweisen.
-    status: fehlt
-    source: oss
-    refs: [Analyse 2.1 MovementGroup]
-    related: [lagerbewegungen.arbeitsliste]
-
   - id: openwms.problemhistorie
     title: Problemhistorie von Transportaufträgen
     area: transportauftraege
@@ -117,7 +108,7 @@ gaps:
     source: privat
     note: Umfang unbekannt; Lagerbewegungen mit Arbeitsliste und Picks decken einen Teil ab.
     refs: [Analyse 1.1 private Repositories]
-    related: [lagerbewegungen.arbeitsliste, auslagerung.kommissionierung]
+    related: [lagerbewegungen.arbeitsliste, lagerbewegungen.bewegungsgruppen, auslagerung.kommissionierung]
 
   # --- bewusst weggelassen ------------------------------------------------------
   - id: openwms.mandanten

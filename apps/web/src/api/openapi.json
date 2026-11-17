@@ -3452,445 +3452,6 @@
         ],
         "additionalProperties": false
       },
-      "Movement": {
-        "type": "object",
-        "properties": {
-          "number": {
-            "type": "string"
-          },
-          "barcode": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": [
-              "INBOUND",
-              "RELOCATION",
-              "REPLENISHMENT",
-              "OUTBOUND",
-              "EMPTIES",
-              "CLEARING",
-              "MANUAL"
-            ]
-          },
-          "state": {
-            "type": "string",
-            "enum": [
-              "OPEN",
-              "IN_PROGRESS",
-              "DONE",
-              "CANCELLED"
-            ]
-          },
-          "priority": {
-            "type": "string",
-            "enum": [
-              "HIGHEST",
-              "HIGH",
-              "NORMAL",
-              "LOW",
-              "LOWEST"
-            ]
-          },
-          "source": {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "format": "uuid",
-                "description": "null, wenn der Platz inzwischen gelöscht wurde"
-              },
-              "locationId": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "id",
-              "locationId"
-            ]
-          },
-          "target": {
-            "type": [
-              "object",
-              "null"
-            ],
-            "properties": {
-              "id": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "format": "uuid",
-                "description": "null, wenn der Platz inzwischen gelöscht wurde"
-              },
-              "locationId": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "id",
-              "locationId"
-            ]
-          },
-          "targetGroup": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "decisionId": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "uuid"
-          },
-          "initiator": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "assignedTo": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "dueAt": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "date-time"
-          },
-          "startedAt": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "date-time"
-          },
-          "completed": {
-            "type": [
-              "object",
-              "null"
-            ],
-            "properties": {
-              "at": {
-                "type": "string",
-                "format": "date-time"
-              },
-              "location": {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
-                    "format": "uuid",
-                    "description": "null, wenn der Platz inzwischen gelöscht wurde"
-                  },
-                  "locationId": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "id",
-                  "locationId"
-                ]
-              },
-              "deviated": {
-                "type": "boolean"
-              }
-            },
-            "required": [
-              "at",
-              "location",
-              "deviated"
-            ]
-          },
-          "cancelled": {
-            "type": [
-              "object",
-              "null"
-            ],
-            "properties": {
-              "at": {
-                "type": "string",
-                "format": "date-time"
-              },
-              "reason": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              }
-            },
-            "required": [
-              "at",
-              "reason"
-            ]
-          },
-          "allowedActions": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "enum": [
-                "start",
-                "release",
-                "complete",
-                "cancel"
-              ]
-            }
-          },
-          "version": {
-            "type": "integer"
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
-          }
-        },
-        "required": [
-          "number",
-          "barcode",
-          "type",
-          "state",
-          "priority",
-          "source",
-          "target",
-          "targetGroup",
-          "decisionId",
-          "initiator",
-          "assignedTo",
-          "dueAt",
-          "startedAt",
-          "completed",
-          "cancelled",
-          "allowedActions",
-          "version",
-          "createdAt",
-          "updatedAt"
-        ]
-      },
-      "CreateMovement": {
-        "type": "object",
-        "properties": {
-          "barcode": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 64,
-            "pattern": "^[A-Za-z0-9._\\-/]+$"
-          },
-          "type": {
-            "type": "string",
-            "enum": [
-              "INBOUND",
-              "RELOCATION",
-              "REPLENISHMENT",
-              "OUTBOUND",
-              "EMPTIES",
-              "CLEARING",
-              "MANUAL"
-            ]
-          },
-          "target": {
-            "$ref": "#/components/schemas/MovementTarget"
-          },
-          "priority": {
-            "type": "string",
-            "enum": [
-              "HIGHEST",
-              "HIGH",
-              "NORMAL",
-              "LOW",
-              "LOWEST"
-            ],
-            "default": "NORMAL"
-          },
-          "initiator": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 100,
-            "description": "Auslöser, z. B. erp, node-red, Benutzername"
-          },
-          "dueAt": {
-            "type": "string",
-            "format": "date-time"
-          }
-        },
-        "required": [
-          "barcode",
-          "type",
-          "target"
-        ],
-        "additionalProperties": false
-      },
-      "MovementTarget": {
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "location": {
-                "$ref": "#/components/schemas/LocationReference"
-              }
-            },
-            "required": [
-              "location"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "group": {
-                "type": "string",
-                "pattern": "^[A-Z0-9][A-Z0-9_-]{0,39}$"
-              }
-            },
-            "required": [
-              "group"
-            ],
-            "additionalProperties": false
-          }
-        ],
-        "description": "Fester Zielplatz oder Zielgruppe (Platz wird per Einlagerstrategie bestimmt und reserviert)"
-      },
-      "StartMovement": {
-        "type": "object",
-        "properties": {
-          "assignedTo": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 100
-          }
-        },
-        "additionalProperties": false
-      },
-      "MovementCompletion": {
-        "type": "object",
-        "properties": {
-          "movement": {
-            "$ref": "#/components/schemas/Movement"
-          },
-          "violations": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "rule": {
-                  "type": "string"
-                },
-                "message": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "rule",
-                "message"
-              ]
-            }
-          }
-        },
-        "required": [
-          "movement",
-          "violations"
-        ],
-        "description": "Verstöße nur bei mode physical möglich"
-      },
-      "CompleteMovement": {
-        "type": "object",
-        "properties": {
-          "location": {
-            "anyOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "format": "uuid"
-                  }
-                },
-                "required": [
-                  "id"
-                ],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "locationId": {
-                    "type": "string",
-                    "pattern": "^[A-Z0-9_]{1,10}(\\/[A-Z0-9_]{1,10}){4}$"
-                  }
-                },
-                "required": [
-                  "locationId"
-                ],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "erpCode": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 64
-                  }
-                },
-                "required": [
-                  "erpCode"
-                ],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "plcCode": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 64
-                  }
-                },
-                "required": [
-                  "plcCode"
-                ],
-                "additionalProperties": false
-              }
-            ],
-            "description": "Tatsächlicher Abstellplatz; ohne Angabe das Ziel"
-          },
-          "mode": {
-            "type": "string",
-            "enum": [
-              "checked",
-              "physical"
-            ],
-            "default": "checked"
-          }
-        },
-        "additionalProperties": false
-      },
-      "CancelMovement": {
-        "type": "object",
-        "properties": {
-          "reason": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 200
-          }
-        },
-        "additionalProperties": false
-      },
       "TransportOrder": {
         "type": "object",
         "properties": {
@@ -4322,6 +3883,629 @@
         "required": [
           "reason"
         ],
+        "additionalProperties": false
+      },
+      "Movement": {
+        "type": "object",
+        "properties": {
+          "number": {
+            "type": "string"
+          },
+          "barcode": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "INBOUND",
+              "RELOCATION",
+              "REPLENISHMENT",
+              "OUTBOUND",
+              "EMPTIES",
+              "CLEARING",
+              "MANUAL"
+            ]
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "OPEN",
+              "IN_PROGRESS",
+              "DONE",
+              "CANCELLED"
+            ]
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "HIGHEST",
+              "HIGH",
+              "NORMAL",
+              "LOW",
+              "LOWEST"
+            ]
+          },
+          "source": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "null, wenn der Platz inzwischen gelöscht wurde"
+              },
+              "locationId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "locationId"
+            ]
+          },
+          "target": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "id": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "null, wenn der Platz inzwischen gelöscht wurde"
+              },
+              "locationId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "locationId"
+            ]
+          },
+          "targetGroup": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "decisionId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "initiator": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "assignedTo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "groupNumber": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Bewegungsgruppe, falls zugeordnet"
+          },
+          "dueAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "startedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "completed": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "location": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "uuid",
+                    "description": "null, wenn der Platz inzwischen gelöscht wurde"
+                  },
+                  "locationId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "locationId"
+                ]
+              },
+              "deviated": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "at",
+              "location",
+              "deviated"
+            ]
+          },
+          "cancelled": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "reason": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "at",
+              "reason"
+            ]
+          },
+          "allowedActions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "start",
+                "release",
+                "complete",
+                "cancel"
+              ]
+            }
+          },
+          "version": {
+            "type": "integer"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "number",
+          "barcode",
+          "type",
+          "state",
+          "priority",
+          "source",
+          "target",
+          "targetGroup",
+          "decisionId",
+          "initiator",
+          "assignedTo",
+          "groupNumber",
+          "dueAt",
+          "startedAt",
+          "completed",
+          "cancelled",
+          "allowedActions",
+          "version",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "CreateMovement": {
+        "type": "object",
+        "properties": {
+          "barcode": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9._\\-/]+$"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "INBOUND",
+              "RELOCATION",
+              "REPLENISHMENT",
+              "OUTBOUND",
+              "EMPTIES",
+              "CLEARING",
+              "MANUAL"
+            ]
+          },
+          "target": {
+            "$ref": "#/components/schemas/MovementTarget"
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "HIGHEST",
+              "HIGH",
+              "NORMAL",
+              "LOW",
+              "LOWEST"
+            ],
+            "default": "NORMAL"
+          },
+          "initiator": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "Auslöser, z. B. erp, node-red, Benutzername"
+          },
+          "dueAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "barcode",
+          "type",
+          "target"
+        ],
+        "additionalProperties": false
+      },
+      "MovementTarget": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "location": {
+                "$ref": "#/components/schemas/LocationReference"
+              }
+            },
+            "required": [
+              "location"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "group": {
+                "type": "string",
+                "pattern": "^[A-Z0-9][A-Z0-9_-]{0,39}$"
+              }
+            },
+            "required": [
+              "group"
+            ],
+            "additionalProperties": false
+          }
+        ],
+        "description": "Fester Zielplatz oder Zielgruppe (Platz wird per Einlagerstrategie bestimmt und reserviert)"
+      },
+      "StartMovement": {
+        "type": "object",
+        "properties": {
+          "assignedTo": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          }
+        },
+        "additionalProperties": false
+      },
+      "MovementCompletion": {
+        "type": "object",
+        "properties": {
+          "movement": {
+            "$ref": "#/components/schemas/Movement"
+          },
+          "violations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "rule": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "rule",
+                "message"
+              ]
+            }
+          }
+        },
+        "required": [
+          "movement",
+          "violations"
+        ],
+        "description": "Verstöße nur bei mode physical möglich"
+      },
+      "CompleteMovement": {
+        "type": "object",
+        "properties": {
+          "location": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "id"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "locationId": {
+                    "type": "string",
+                    "pattern": "^[A-Z0-9_]{1,10}(\\/[A-Z0-9_]{1,10}){4}$"
+                  }
+                },
+                "required": [
+                  "locationId"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "erpCode": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  }
+                },
+                "required": [
+                  "erpCode"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "plcCode": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  }
+                },
+                "required": [
+                  "plcCode"
+                ],
+                "additionalProperties": false
+              }
+            ],
+            "description": "Tatsächlicher Abstellplatz; ohne Angabe das Ziel"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "checked",
+              "physical"
+            ],
+            "default": "checked"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CancelMovement": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "additionalProperties": false
+      },
+      "MovementGroup": {
+        "type": "object",
+        "properties": {
+          "number": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "assignedTo": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "OPEN",
+              "IN_PROGRESS",
+              "DONE",
+              "CANCELLED"
+            ],
+            "description": "Abgeleitet: IN_PROGRESS, sobald eine Bewegung läuft; DONE/CANCELLED, wenn alle beendet sind"
+          },
+          "counts": {
+            "type": "object",
+            "properties": {
+              "open": {
+                "type": "integer"
+              },
+              "inProgress": {
+                "type": "integer"
+              },
+              "done": {
+                "type": "integer"
+              },
+              "cancelled": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "open",
+              "inProgress",
+              "done",
+              "cancelled"
+            ]
+          },
+          "movements": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Movement"
+            }
+          },
+          "createdBy": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "number",
+          "description",
+          "assignedTo",
+          "state",
+          "counts",
+          "movements",
+          "createdBy",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "CreateMovementGroup": {
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "movements": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 20
+            },
+            "minItems": 1,
+            "maxItems": 100,
+            "description": "Nummern offener Lagerbewegungen"
+          },
+          "assignedTo": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          }
+        },
+        "required": [
+          "movements"
+        ],
+        "additionalProperties": false
+      },
+      "ChangeMovementGroup": {
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "add": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 20
+            },
+            "maxItems": 100
+          },
+          "remove": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 20
+            },
+            "maxItems": 100
+          }
+        },
+        "additionalProperties": false
+      },
+      "AssignMovementGroup": {
+        "type": "object",
+        "properties": {
+          "assignedTo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "Bediener; null hebt die Zuteilung auf"
+          }
+        },
+        "required": [
+          "assignedTo"
+        ],
+        "additionalProperties": false
+      },
+      "StartMovementGroup": {
+        "type": "object",
+        "properties": {
+          "assignedTo": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "Ohne Angabe: zugeteilter Bediener, sonst der Angemeldete"
+          }
+        },
         "additionalProperties": false
       },
       "ReceivingOrder": {
@@ -13397,653 +13581,6 @@
         }
       }
     },
-    "/v1/movements": {
-      "get": {
-        "summary": "Lagerbewegungen, dringendste zuerst (Arbeitsliste)",
-        "tags": [
-          "Lagerbewegungen"
-        ],
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "session": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "description": "Kommagetrennt, z. B. OPEN,IN_PROGRESS"
-            },
-            "required": false,
-            "description": "Kommagetrennt, z. B. OPEN,IN_PROGRESS",
-            "name": "state",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": "string",
-              "description": "Kommagetrennt, z. B. INBOUND,RELOCATION"
-            },
-            "required": false,
-            "description": "Kommagetrennt, z. B. INBOUND,RELOCATION",
-            "name": "type",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 64,
-              "pattern": "^[A-Za-z0-9._\\-/]+$"
-            },
-            "required": false,
-            "name": "barcode",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 100
-            },
-            "required": false,
-            "name": "assignedTo",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 1000,
-              "default": 100
-            },
-            "required": false,
-            "name": "limit",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": [
-                "integer",
-                "null"
-              ],
-              "minimum": 0,
-              "default": 0
-            },
-            "required": false,
-            "name": "offset",
-            "in": "query"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Liste",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "items": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/Movement"
-                      }
-                    },
-                    "total": {
-                      "type": "integer"
-                    }
-                  },
-                  "required": [
-                    "items",
-                    "total"
-                  ]
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Ungültige Anfrage (Feldprüfung)",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Nicht angemeldet (UNAUTHENTICATED)",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Rolle reicht nicht (FORBIDDEN)",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "summary": "Lagerbewegung anlegen und Ziel reservieren",
-        "tags": [
-          "Lagerbewegungen"
-        ],
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "session": []
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateMovement"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Lagerbewegung",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Movement"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Ungültige Anfrage (Feldprüfung)",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Nicht angemeldet (UNAUTHENTICATED)",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Rolle reicht nicht (FORBIDDEN)",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Nicht gefunden",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Konflikt oder verletzte Geschäftsregel",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/v1/movements/{number}": {
-      "get": {
-        "summary": "Lagerbewegung lesen",
-        "tags": [
-          "Lagerbewegungen"
-        ],
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "session": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "pattern": "^MV\\d{8}$"
-            },
-            "required": true,
-            "name": "number",
-            "in": "path"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Lagerbewegung",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Movement"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Nicht angemeldet (UNAUTHENTICATED)",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Rolle reicht nicht (FORBIDDEN)",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Nicht gefunden",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/v1/movements/{number}/start": {
-      "post": {
-        "summary": "Bearbeitung beginnen (OPEN → IN_PROGRESS)",
-        "tags": [
-          "Lagerbewegungen"
-        ],
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "session": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "pattern": "^MV\\d{8}$"
-            },
-            "required": true,
-            "name": "number",
-            "in": "path"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/StartMovement"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Lagerbewegung",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Movement"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Nicht angemeldet (UNAUTHENTICATED)",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Rolle reicht nicht (FORBIDDEN)",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Nicht gefunden",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Konflikt oder verletzte Geschäftsregel",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/v1/movements/{number}/release": {
-      "post": {
-        "summary": "Zurückgeben (IN_PROGRESS → OPEN)",
-        "tags": [
-          "Lagerbewegungen"
-        ],
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "session": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "pattern": "^MV\\d{8}$"
-            },
-            "required": true,
-            "name": "number",
-            "in": "path"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Lagerbewegung",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Movement"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Nicht angemeldet (UNAUTHENTICATED)",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Rolle reicht nicht (FORBIDDEN)",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Nicht gefunden",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Konflikt oder verletzte Geschäftsregel",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/v1/movements/{number}/complete": {
-      "post": {
-        "summary": "Abschließen: TU auf Ziel oder tatsächlichen Platz buchen",
-        "tags": [
-          "Lagerbewegungen"
-        ],
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "session": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "pattern": "^MV\\d{8}$"
-            },
-            "required": true,
-            "name": "number",
-            "in": "path"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CompleteMovement"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Abgeschlossen",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MovementCompletion"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Ungültige Anfrage (Feldprüfung)",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Nicht angemeldet (UNAUTHENTICATED)",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Rolle reicht nicht (FORBIDDEN)",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Nicht gefunden",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Konflikt oder verletzte Geschäftsregel",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/v1/movements/{number}/cancel": {
-      "post": {
-        "summary": "Stornieren und Zielreservierung freigeben",
-        "tags": [
-          "Lagerbewegungen"
-        ],
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "session": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "pattern": "^MV\\d{8}$"
-            },
-            "required": true,
-            "name": "number",
-            "in": "path"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CancelMovement"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Lagerbewegung",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Movement"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Nicht angemeldet (UNAUTHENTICATED)",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Rolle reicht nicht (FORBIDDEN)",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Nicht gefunden",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Konflikt oder verletzte Geschäftsregel",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/v1/transport-orders": {
       "get": {
         "summary": "Transportaufträge in Startreihenfolge (Priorität, Alter)",
@@ -14849,6 +14386,1304 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nicht gefunden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Konflikt oder verletzte Geschäftsregel",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/movements": {
+      "get": {
+        "summary": "Lagerbewegungen, dringendste zuerst (Arbeitsliste)",
+        "tags": [
+          "Lagerbewegungen"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "Kommagetrennt, z. B. OPEN,IN_PROGRESS"
+            },
+            "required": false,
+            "description": "Kommagetrennt, z. B. OPEN,IN_PROGRESS",
+            "name": "state",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "Kommagetrennt, z. B. INBOUND,RELOCATION"
+            },
+            "required": false,
+            "description": "Kommagetrennt, z. B. INBOUND,RELOCATION",
+            "name": "type",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9._\\-/]+$"
+            },
+            "required": false,
+            "name": "barcode",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "required": false,
+            "name": "assignedTo",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 20,
+              "description": "Nummer der Bewegungsgruppe"
+            },
+            "required": false,
+            "description": "Nummer der Bewegungsgruppe",
+            "name": "group",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000,
+              "default": 100
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0,
+              "default": 0
+            },
+            "required": false,
+            "name": "offset",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Liste",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Movement"
+                      }
+                    },
+                    "total": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "total"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ungültige Anfrage (Feldprüfung)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Lagerbewegung anlegen und Ziel reservieren",
+        "tags": [
+          "Lagerbewegungen"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMovement"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Lagerbewegung",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Movement"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ungültige Anfrage (Feldprüfung)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nicht gefunden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Konflikt oder verletzte Geschäftsregel",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/movements/{number}": {
+      "get": {
+        "summary": "Lagerbewegung lesen",
+        "tags": [
+          "Lagerbewegungen"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^MV\\d{8}$"
+            },
+            "required": true,
+            "name": "number",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lagerbewegung",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Movement"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nicht gefunden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/movements/{number}/start": {
+      "post": {
+        "summary": "Bearbeitung beginnen (OPEN → IN_PROGRESS)",
+        "tags": [
+          "Lagerbewegungen"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^MV\\d{8}$"
+            },
+            "required": true,
+            "name": "number",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartMovement"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Lagerbewegung",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Movement"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nicht gefunden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Konflikt oder verletzte Geschäftsregel",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/movements/{number}/release": {
+      "post": {
+        "summary": "Zurückgeben (IN_PROGRESS → OPEN)",
+        "tags": [
+          "Lagerbewegungen"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^MV\\d{8}$"
+            },
+            "required": true,
+            "name": "number",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lagerbewegung",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Movement"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nicht gefunden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Konflikt oder verletzte Geschäftsregel",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/movements/{number}/complete": {
+      "post": {
+        "summary": "Abschließen: TU auf Ziel oder tatsächlichen Platz buchen",
+        "tags": [
+          "Lagerbewegungen"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^MV\\d{8}$"
+            },
+            "required": true,
+            "name": "number",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompleteMovement"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Abgeschlossen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MovementCompletion"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ungültige Anfrage (Feldprüfung)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nicht gefunden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Konflikt oder verletzte Geschäftsregel",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/movements/{number}/cancel": {
+      "post": {
+        "summary": "Stornieren und Zielreservierung freigeben",
+        "tags": [
+          "Lagerbewegungen"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^MV\\d{8}$"
+            },
+            "required": true,
+            "name": "number",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelMovement"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Lagerbewegung",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Movement"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nicht gefunden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Konflikt oder verletzte Geschäftsregel",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/movement-groups": {
+      "get": {
+        "summary": "Bewegungsgruppen, neueste zuerst (Filter: Zustand, Bediener)",
+        "tags": [
+          "Lagerbewegungen"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "Kommagetrennt, z. B. OPEN,IN_PROGRESS"
+            },
+            "required": false,
+            "description": "Kommagetrennt, z. B. OPEN,IN_PROGRESS",
+            "name": "state",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "required": false,
+            "name": "assignedTo",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 100
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0,
+              "default": 0
+            },
+            "required": false,
+            "name": "offset",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Liste",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/MovementGroup"
+                      }
+                    },
+                    "total": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "total"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ungültige Anfrage (Feldprüfung)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Bewegungsgruppe aus offenen Lagerbewegungen bilden",
+        "tags": [
+          "Lagerbewegungen"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMovementGroup"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Bewegungsgruppe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MovementGroup"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ungültige Anfrage (Feldprüfung)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nicht gefunden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Konflikt oder verletzte Geschäftsregel",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/movement-groups/{number}": {
+      "get": {
+        "summary": "Bewegungsgruppe mit ihren Bewegungen lesen",
+        "tags": [
+          "Lagerbewegungen"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 20
+            },
+            "required": true,
+            "name": "number",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bewegungsgruppe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MovementGroup"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nicht gefunden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "Bewegungen aufnehmen oder entfernen, Beschreibung ändern",
+        "tags": [
+          "Lagerbewegungen"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 20
+            },
+            "required": true,
+            "name": "number",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeMovementGroup"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Bewegungsgruppe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MovementGroup"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ungültige Anfrage (Feldprüfung)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nicht gefunden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Konflikt oder verletzte Geschäftsregel",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/movement-groups/{number}/assign": {
+      "post": {
+        "summary": "Einem Bediener zuteilen (null hebt die Zuteilung auf)",
+        "tags": [
+          "Lagerbewegungen"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 20
+            },
+            "required": true,
+            "name": "number",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignMovementGroup"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Bewegungsgruppe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MovementGroup"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ungültige Anfrage (Feldprüfung)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nicht gefunden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Konflikt oder verletzte Geschäftsregel",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/movement-groups/{number}/start": {
+      "post": {
+        "summary": "Alle offenen Bewegungen der Gruppe beginnen",
+        "tags": [
+          "Lagerbewegungen"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 20
+            },
+            "required": true,
+            "name": "number",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartMovementGroup"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Bewegungsgruppe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MovementGroup"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nicht gefunden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Konflikt oder verletzte Geschäftsregel",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/movement-groups/{number}/release": {
+      "post": {
+        "summary": "Laufende Bewegungen zurückgeben und Zuteilung aufheben",
+        "tags": [
+          "Lagerbewegungen"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 20
+            },
+            "required": true,
+            "name": "number",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bewegungsgruppe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MovementGroup"
                 }
               }
             }

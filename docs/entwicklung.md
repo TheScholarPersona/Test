@@ -250,9 +250,21 @@ Andere Übergänge werden mit `409 INVALID_STATE_TRANSITION` abgelehnt; jede Ant
 
 **Löschschutz und Historie:** Eine TU mit offener Bewegung und ein Platz, der Ziel einer offenen Bewegung ist, können nicht gelöscht werden (Einwand `open-movements`). Bewegungen selbst werden nie gelöscht: Barcode und Platzkoordinaten bleiben gespeichert, auch wenn TU oder Platz später gelöscht werden (`id: null`).
 
-Events: `movement.created|started|released|completed|cancelled` (Schemas in `packages/shared/src/movement-events.ts`).
+**Bewegungsgruppen** (`/v1/movement-groups`, Nummer `MG00000001`): mehrere offene oder laufende Bewegungen gemeinsam einem Bediener zuteilen.
 
-Noch nicht enthalten: Bewegungsgruppen (Zuteilung an Bediener), automatischer Abschluss, wenn die TU ohne Quittung am Ziel gebucht wird.
+| Aktion | Endpunkt | Wirkung |
+|---|---|---|
+| bilden | `POST /v1/movement-groups` `{ movements, assignedTo?, description? }` | je Bewegung höchstens eine Gruppe (`MOVEMENT_GROUPED`), nur offene/laufende (`MOVEMENT_CLOSED`) |
+| ändern | `PATCH …/{number}` `{ add?, remove?, description? }` | nicht mehr, wenn alle Bewegungen beendet sind (`GROUP_CLOSED`) |
+| zuteilen | `POST …/{number}/assign` `{ assignedTo \| null }` | laufende Bewegungen wechseln mit zum neuen Bediener |
+| beginnen | `POST …/{number}/start` `{ assignedTo? }` | alle offenen Bewegungen starten (Bediener: Angabe, zugeteilter oder Angemeldeter) |
+| zurückgeben | `POST …/{number}/release` | alle laufenden Bewegungen wieder öffnen, Zuteilung aufheben |
+
+Abschließen und Stornieren bleiben je Bewegung. Der Zustand der Gruppe wird abgeleitet (`IN_PROGRESS`, sobald eine läuft; `DONE`/`CANCELLED`, wenn alle beendet sind). Die Arbeitsliste filtert mit `GET /v1/movements?group=MG…`. Rechte: bilden, ändern, zuteilen leitstand; beginnen, zurückgeben auch lager.
+
+Events: `movement.created|started|released|completed|cancelled`, `movement-group.created|changed` (Schemas in `packages/shared/src/movement-events.ts`).
+
+Noch nicht enthalten: automatischer Abschluss, wenn die TU ohne Quittung am Ziel gebucht wird.
 
 ## Modul Bestand (`/v1/products`, `/v1/stock…`, `/v1/stock-counts`)
 

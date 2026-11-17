@@ -12,6 +12,7 @@ import { Migration20261117300000_stock } from './Migration20261117300000_stock.j
 import { Migration20261117400000_outbound } from './Migration20261117400000_outbound.js';
 import { Migration20261117500000_auth } from './Migration20261117500000_auth.js';
 import { Migration20261117600000_unit_errors_plc_state } from './Migration20261117600000_unit_errors_plc_state.js';
+import { Migration20261117700000_movement_groups } from './Migration20261117700000_movement_groups.js';
 
 /**
  * Registrierte Migrationen in Ausführungsreihenfolge.
@@ -32,4 +33,5 @@ export const migrations: MigrationObject[] = [
   { name: Migration20261117400000_outbound.name, class: Migration20261117400000_outbound },
   { name: Migration20261117500000_auth.name, class: Migration20261117500000_auth },
   { name: Migration20261117600000_unit_errors_plc_state.name, class: Migration20261117600000_unit_errors_plc_state },
+  { name: Migration20261117700000_movement_groups.name, class: Migration20261117700000_movement_groups },
 ];

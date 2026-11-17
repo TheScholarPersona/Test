@@ -56,7 +56,7 @@ features:
     comparisons:
       openwms:
         status: gleichwertig
-        note: Bewegung mit Ziel, Typ und Priorität wie in OpenWMS (M-01); Zielwahl über eigene Einlagerstrategie statt privatem Putaway-Dienst. Bewegungsgruppen fehlen, siehe Lücken.
+        note: Bewegung mit Ziel, Typ und Priorität wie in OpenWMS (M-01); Zielwahl über eigene Einlagerstrategie statt privatem Putaway-Dienst.
         refs:
           - Analyse 3.5 M-01, M-04
 
@@ -67,7 +67,7 @@ features:
     description: Die Arbeitsliste sortiert nach Priorität, dann nach Alter und filtert nach Zustand, Bewegungstyp, Barcode und Bearbeiter.
     usage:
       - channel: api
-        text: "`GET /v1/movements?state=OPEN,IN_PROGRESS&type=INBOUND&assignedTo=…`"
+        text: "`GET /v1/movements?state=OPEN,IN_PROGRESS&type=INBOUND&assignedTo=…&group=…`"
       - channel: leitstand
         text: Seite **Transport** – offene Bewegungen, dringendste zuerst.
     technical:
@@ -154,3 +154,66 @@ features:
         refs:
           - Analyse 3.5 M-02, M-03
           - Analyse 5.4 Nr. 2–5
+
+  - id: lagerbewegungen.bewegungsgruppen
+    title: Bewegungsgruppen mit Zuteilung an Bediener
+    group: lagerbewegungen.planung
+    summary: Bündelt mehrere Lagerbewegungen zu einer Tour und teilt sie einem Bediener zu – er beginnt sie mit einem Klick und kann sie zurückgeben.
+    description: |
+      Eine Bewegungsgruppe (Nummer `MG00000001` …) fasst offene oder laufende Lagerbewegungen zusammen, optional mit
+      Beschreibung und zugeteiltem Bediener. Beginnen startet alle offenen Bewegungen der Gruppe für den zugeteilten
+      Bediener (oder den Angemeldeten), Zurückgeben öffnet alle laufenden wieder und hebt die Zuteilung auf. Bewegungen
+      lassen sich aufnehmen und entfernen; abgeschlossen und storniert wird weiter je Bewegung, weil jede TU einzeln am
+      Ziel ankommt. Der Zustand der Gruppe folgt aus ihren Bewegungen.
+    usage:
+      - channel: leitstand
+        text: Seite **Transport** – Bewegungen auswählen, Bediener eintragen, „Gruppe bilden“; je Gruppe „Zuteilen“, „Beginnen“, „Zurückgeben“.
+      - channel: api
+        text: "Bilden `POST /v1/movement-groups` (`movements`, `assignedTo?`, `description?`), ändern `PATCH …/{number}` (`add`, `remove`), `POST …/{number}/assign`, `…/start`, `…/release`, Liste `GET /v1/movement-groups?state=…&assignedTo=…`."
+    rules:
+      - Eine Bewegung gehört höchstens zu einer Gruppe (`MOVEMENT_GROUPED`); nur offene oder laufende Bewegungen (`MOVEMENT_CLOSED`).
+      - Sind alle Bewegungen beendet, ist die Gruppe erledigt und nimmt nichts mehr auf (`GROUP_CLOSED`).
+      - Zustand abgeleitet – `IN_PROGRESS`, sobald eine Bewegung läuft; `DONE`/`CANCELLED`, wenn alle beendet sind.
+      - Bilden, Ändern und Zuteilen darf der Leitstand; Beginnen und Zurückgeben auch die Rolle lager.
+    dependsOn: [lagerbewegungen.anlegen, lagerbewegungen.ausfuehren]
+    technical:
+      components:
+        - apps/api/src/modules/movement/application/movement-group.service.ts
+        - apps/api/src/modules/movement/http/movement-groups.controller.ts
+        - apps/api/src/modules/movement/entities/movement-group.entity.ts
+        - apps/web/src/pages/TransportPage.tsx
+      endpoints:
+        - GET /v1/movement-groups
+        - POST /v1/movement-groups
+        - GET /v1/movement-groups/{number}
+        - PATCH /v1/movement-groups/{number}
+        - POST /v1/movement-groups/{number}/assign
+        - POST /v1/movement-groups/{number}/start
+        - POST /v1/movement-groups/{number}/release
+      events:
+        emits: [movement-group.created, movement-group.changed, movement.started, movement.released]
+      uiRoutes: [/transport]
+      notes:
+        - Tabelle `movement_group`, Nummernkreis `movement_group_number_seq`, Spalte `group_id` an `movement`; Gruppenzeile wird bei Änderungen gesperrt.
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/movement.integration.test.ts
+        test: bündelt offene Bewegungen zu einer Gruppe und lehnt Doppelzuordnung ab
+      - kind: integration
+        file: apps/api/test/integration/movement.integration.test.ts
+        test: nimmt Bewegungen auf und entfernt sie wieder
+      - kind: integration
+        file: apps/api/test/integration/movement.integration.test.ts
+        test: beginnt alle Bewegungen für den zugeteilten Bediener und gibt sie zurück
+      - kind: integration
+        file: apps/api/test/integration/movement.integration.test.ts
+        test: wird erledigt, wenn alle Bewegungen abgeschlossen sind, und nimmt dann nichts mehr auf
+      - kind: web-e2e
+        file: apps/web/e2e/seiten.spec.ts
+        test: "Bewegungsgruppen: bilden, zuteilen, beginnen und zurückgeben"
+    comparisons:
+      openwms:
+        status: erweitert
+        note: Entspricht MovementGroup (Name, Zustand, zugeteilter Bediener, Bewegungen); zusätzlich gemeinsames Beginnen und Zurückgeben, Umzuteilung laufender Bewegungen, abgeleiteter Zustand und Bedienung im Leitstand.
+        refs:
+          - Analyse 2.1 MovementGroup

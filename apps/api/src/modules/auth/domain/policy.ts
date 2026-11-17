@@ -52,6 +52,11 @@ export const RULES: readonly Rule[] = [
   // Sperren (vor den Stammdaten-Regeln, die sonst greifen)
   { methods: ['PATCH'], path: new RegExp(`^/v1/(locations|location-groups)/${ID}/locks$`), access: OPERATIONS, note: 'Platz- und Gruppensperren' },
   { methods: ['PATCH'], path: new RegExp(`^/v1/locations/${ID}/plc-state$`), access: PLANT, note: 'Zustand laut Anlage' },
+  // Bewegungsgruppen
+  { methods: ['POST'], path: /^\/v1\/movement-groups$/, access: OPERATIONS, note: 'Bewegungsgruppe bilden' },
+  { methods: ['PATCH'], path: new RegExp(`^/v1/movement-groups/${ID}$`), access: OPERATIONS, note: 'Bewegungsgruppe ändern' },
+  { methods: ['POST'], path: new RegExp(`^/v1/movement-groups/${ID}/assign$`), access: OPERATIONS, note: 'Bewegungsgruppe zuteilen' },
+  { methods: ['POST'], path: new RegExp(`^/v1/movement-groups/${ID}/(start|release)$`), access: FLOOR, note: 'Bewegungsgruppe beginnen/zurückgeben' },
   // Bestand
   { methods: ['POST'], path: new RegExp(`^/v1/stock/${ID}/(issues|transfers)$`), access: FLOOR, note: 'Abgang, Umbuchung' },
   { methods: ['POST'], path: new RegExp(`^/v1/stock/${ID}/(corrections|reservations)$`), access: OPERATIONS, note: 'Korrektur, Reservierung' },

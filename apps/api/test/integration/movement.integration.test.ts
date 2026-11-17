@@ -208,6 +208,70 @@ describe('Lagerbewegungen', () => {
     });
   });
 
+  describe('Bewegungsgruppen', () => {
+    let group: string;
+    const groupMv: string[] = [];
+
+    beforeAll(async () => {
+      expect((await api.post('/v1/locations', { locationId: coord('GZ'), erpCode: 'GZ', groupName: 'LEER', typeCode: 'REGAL', maxTransportUnits: 20 })).status).toBe(201);
+      for (const barcode of ['G1', 'G2', 'G3']) {
+        expect((await api.post('/v1/transport-units', { barcode, typeCode: 'EURO', location: { erpCode: 'WE' } })).status).toBe(201);
+        const m = await api.post('/v1/movements', { barcode, type: 'RELOCATION', target: { location: { erpCode: 'GZ' } } });
+        expect(m.status).toBe(201);
+        groupMv.push(m.body.number);
+      }
+    });
+
+    it('bündelt offene Bewegungen zu einer Gruppe und lehnt Doppelzuordnung ab', async () => {
+      const r = await api.post('/v1/movement-groups', { description: 'Tour 1', movements: groupMv.slice(0, 2), assignedTo: 'stapler-7' });
+      expect(r).toMatchObject({ status: 201, body: { number: expect.stringMatching(/^MG\d{8}$/), state: 'OPEN', assignedTo: 'stapler-7', counts: { open: 2 } } });
+      group = r.body.number;
+      expect(r.body.movements.map((m: { number: string; groupNumber: string }) => [m.number, m.groupNumber])).toEqual(groupMv.slice(0, 2).map((n) => [n, group]));
+      const created = await collector.waitFor((m) => m.topic === 'wms/movement-group/created');
+      expect(created.body['payload']).toMatchObject({ number: group, movements: groupMv.slice(0, 2) });
+
+      expect(await api.post('/v1/movement-groups', { movements: [groupMv[0]] })).toMatchObject({ status: 409, body: { code: 'MOVEMENT_GROUPED' } });
+      expect(await api.post('/v1/movement-groups', { movements: ['MV99999999'] })).toMatchObject({ status: 404 });
+      expect((await api.get(`/v1/movements?group=${group}`)).body.total).toBe(2);
+    });
+
+    it('nimmt Bewegungen auf und entfernt sie wieder', async () => {
+      const added = await api.patch(`/v1/movement-groups/${group}`, { add: [groupMv[2]] });
+      expect(added.body.counts.open).toBe(3);
+      const removed = await api.patch(`/v1/movement-groups/${group}`, { remove: [groupMv[2]] });
+      expect(removed.body.movements.map((m: { number: string }) => m.number)).toEqual(groupMv.slice(0, 2));
+      expect((await api.get(`/v1/movements/${groupMv[2]}`)).body.groupNumber).toBeNull();
+      expect(await api.patch(`/v1/movement-groups/${group}`, { remove: [groupMv[2]] })).toMatchObject({ status: 404, body: { code: 'MOVEMENT_NOT_IN_GROUP' } });
+    });
+
+    it('beginnt alle Bewegungen für den zugeteilten Bediener und gibt sie zurück', async () => {
+      const started = await api.post(`/v1/movement-groups/${group}/start`, {});
+      expect(started.body).toMatchObject({ state: 'IN_PROGRESS', counts: { open: 0, inProgress: 2 } });
+      expect(started.body.movements.every((m: { assignedTo: string }) => m.assignedTo === 'stapler-7')).toBe(true);
+      expect(await api.post(`/v1/movement-groups/${group}/start`, {})).toMatchObject({ status: 409, body: { code: 'NOTHING_TO_START' } });
+
+      const reassigned = await api.post(`/v1/movement-groups/${group}/assign`, { assignedTo: 'stapler-9' });
+      expect(reassigned.body.movements.every((m: { assignedTo: string }) => m.assignedTo === 'stapler-9')).toBe(true);
+      expect((await api.get('/v1/movement-groups?assignedTo=stapler-9')).body.items.map((g: { number: string }) => g.number)).toEqual([group]);
+
+      const released = await api.post(`/v1/movement-groups/${group}/release`);
+      expect(released.body).toMatchObject({ state: 'OPEN', assignedTo: null, counts: { open: 2 } });
+      const changed = await collector.waitFor((m) => m.topic === 'wms/movement-group/changed' && (m.body['payload'] as { change: string }).change === 'released');
+      expect(changed.body['payload']).toMatchObject({ number: group, state: 'OPEN' });
+    });
+
+    it('wird erledigt, wenn alle Bewegungen abgeschlossen sind, und nimmt dann nichts mehr auf', async () => {
+      const started = await api.post(`/v1/movement-groups/${group}/start`, { assignedTo: 'stapler-7' });
+      expect(started.body.state).toBe('IN_PROGRESS');
+      for (const number of groupMv.slice(0, 2)) expect((await api.post(`/v1/movements/${number}/complete`, {})).status).toBe(200);
+      const done = (await api.get(`/v1/movement-groups/${group}`)).body;
+      expect(done).toMatchObject({ state: 'DONE', counts: { done: 2 } });
+      expect((await api.get('/v1/movement-groups?state=DONE')).body.items.map((g: { number: string }) => g.number)).toContain(group);
+      expect(await api.patch(`/v1/movement-groups/${group}`, { add: [groupMv[2]] })).toMatchObject({ status: 409, body: { code: 'GROUP_CLOSED' } });
+      await api.post(`/v1/movements/${groupMv[2]}/cancel`, {});
+    });
+  });
+
   it('beschreibt die Endpunkte in OpenAPI', async () => {
     const paths = Object.keys(((await api.get('/openapi.json')).body as { paths: Record<string, unknown> }).paths);
     expect(paths).toEqual(

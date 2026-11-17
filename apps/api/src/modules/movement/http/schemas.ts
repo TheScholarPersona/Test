@@ -49,6 +49,7 @@ export const MovementQuerySchema = z.object({
   type: z.string().transform(splitCsv).pipe(z.array(MovementTypeSchema).min(1)).optional().meta({ description: 'Kommagetrennt, z. B. INBOUND,RELOCATION' }),
   barcode: BarcodeSchema.optional(),
   assignedTo: Actor.optional(),
+  group: z.string().trim().min(1).max(20).optional().meta({ description: 'Nummer der Bewegungsgruppe' }),
   limit: z.coerce.number().int().min(1).max(1000).default(100),
   offset: z.coerce.number().int().min(0).default(0),
 });
@@ -69,6 +70,7 @@ export const MovementDtoSchema = z
     decisionId: z.uuid().nullable(),
     initiator: z.string().nullable(),
     assignedTo: z.string().nullable(),
+    groupNumber: z.string().nullable().meta({ description: 'Bewegungsgruppe, falls zugeordnet' }),
     dueAt: z.iso.datetime().nullable(),
     startedAt: z.iso.datetime().nullable(),
     completed: z.object({ at: z.iso.datetime(), location: PlaceSchema, deviated: z.boolean() }).nullable(),
@@ -84,3 +86,63 @@ export type MovementDto = z.infer<typeof MovementDtoSchema>;
 export const CompletionResultSchema = z
   .object({ movement: MovementDtoSchema, violations: z.array(z.object({ rule: z.string(), message: z.string() })) })
   .meta({ id: 'MovementCompletion', description: 'Verstöße nur bei mode physical möglich' });
+
+// --- Bewegungsgruppen ------------------------------------------------------------------
+
+const MovementNumber = z.string().trim().min(1).max(20);
+const MovementGroupState = z.enum(['OPEN', 'IN_PROGRESS', 'DONE', 'CANCELLED']);
+
+export const CreateMovementGroupSchema = z
+  .strictObject({
+    description: z.string().trim().min(1).max(200).optional(),
+    movements: z.array(MovementNumber).min(1).max(100).meta({ description: 'Nummern offener Lagerbewegungen' }),
+    assignedTo: Actor.optional(),
+  })
+  .meta({ id: 'CreateMovementGroup' });
+export type CreateMovementGroup = z.infer<typeof CreateMovementGroupSchema>;
+
+export const ChangeMovementGroupSchema = z
+  .strictObject({
+    description: z.string().trim().min(1).max(200).nullable().optional(),
+    add: z.array(MovementNumber).max(100).optional(),
+    remove: z.array(MovementNumber).max(100).optional(),
+  })
+  .refine((v) => v.description !== undefined || v.add?.length || v.remove?.length, { message: 'description, add oder remove angeben' })
+  .meta({ id: 'ChangeMovementGroup' });
+export type ChangeMovementGroup = z.infer<typeof ChangeMovementGroupSchema>;
+
+export const AssignMovementGroupSchema = z
+  .strictObject({ assignedTo: Actor.nullable().meta({ description: 'Bediener; null hebt die Zuteilung auf' }) })
+  .meta({ id: 'AssignMovementGroup' });
+export type AssignMovementGroup = z.infer<typeof AssignMovementGroupSchema>;
+
+export const StartMovementGroupSchema = z
+  .strictObject({ assignedTo: Actor.optional().meta({ description: 'Ohne Angabe: zugeteilter Bediener, sonst der Angemeldete' }) })
+  .meta({ id: 'StartMovementGroup' });
+export type StartMovementGroup = z.infer<typeof StartMovementGroupSchema>;
+
+export const MovementGroupParam = z.object({ number: z.string().trim().min(1).max(20) });
+
+export const MovementGroupQuerySchema = z.object({
+  state: z.string().transform(splitCsv).pipe(z.array(MovementGroupState).min(1)).optional().meta({ description: 'Kommagetrennt, z. B. OPEN,IN_PROGRESS' }),
+  assignedTo: Actor.optional(),
+  limit: z.coerce.number().int().min(1).max(500).default(100),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+export type MovementGroupQuery = z.infer<typeof MovementGroupQuerySchema>;
+
+export const MovementGroupDtoSchema = z
+  .object({
+    number: z.string(),
+    description: z.string().nullable(),
+    assignedTo: z.string().nullable(),
+    state: MovementGroupState.meta({ description: 'Abgeleitet: IN_PROGRESS, sobald eine Bewegung läuft; DONE/CANCELLED, wenn alle beendet sind' }),
+    counts: z.object({ open: z.number().int(), inProgress: z.number().int(), done: z.number().int(), cancelled: z.number().int() }),
+    movements: z.array(MovementDtoSchema),
+    createdBy: z.string().nullable(),
+    createdAt: z.iso.datetime(),
+    updatedAt: z.iso.datetime(),
+  })
+  .meta({ id: 'MovementGroup' });
+export type MovementGroupDto = z.infer<typeof MovementGroupDtoSchema>;
+

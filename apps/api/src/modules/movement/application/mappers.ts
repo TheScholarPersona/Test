@@ -24,6 +24,7 @@ export function toMovementDto(m: Movement): MovementDto {
     decisionId: m.decisionId ?? null,
     initiator: m.initiator ?? null,
     assignedTo: m.assignedTo ?? null,
+    groupNumber: (m.group as { number: string } | null | undefined)?.number ?? null,
     dueAt: m.dueAt?.toISOString() ?? null,
     startedAt: m.startedAt?.toISOString() ?? null,
     completed:

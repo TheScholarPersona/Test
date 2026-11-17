@@ -153,3 +153,32 @@ test('Störungen: Anlagenzustand eines Platzes und Fehlermeldung an einer TU', a
   await page.getByRole('button', { name: w.group }).click();
   await expect(page.getByRole('row', { name: new RegExp(w.b) })).toContainText('Störung 12');
 });
+
+test('Bewegungsgruppen: bilden, zuteilen, beginnen und zurückgeben', async ({ page, fx }) => {
+  const w = await fx.warehouse();
+  const numbers: string[] = [];
+  for (const n of [1, 2]) {
+    const barcode = `PW-${fx.s}-G${n}`;
+    await fx.api('POST', '/v1/transport-units', { barcode, typeCode: w.unitType, location: { erpCode: w.a } });
+    fx.onCleanup(() => fx.api('DELETE', `/v1/transport-units/${barcode}`));
+    const m = await fx.api('POST', '/v1/movements', { barcode, type: 'RELOCATION', target: { location: { erpCode: w.ship } } });
+    fx.onCleanup(() => fx.api('POST', `/v1/movements/${m.number}/cancel`, {}).catch(() => undefined));
+    numbers.push(m.number);
+  }
+  const operator = `stapler-${fx.s.toLowerCase()}`;
+
+  await page.goto('./transport');
+  for (const n of numbers) await page.getByLabel(`${n} auswählen`).check();
+  await page.getByLabel('Bediener').fill(operator);
+  await page.getByRole('button', { name: 'Gruppe bilden (2)' }).click();
+  await expect(page.getByRole('status')).toHaveText('Bewegungsgruppe mit 2 Bewegungen gebildet');
+
+  const row = page.getByRole('table', { name: 'Bewegungsgruppen' }).getByRole('row', { name: new RegExp(operator) });
+  await expect(row).toContainText('2 offen');
+  await row.getByRole('button', { name: 'Beginnen' }).click();
+  await expect(row).toContainText('2 in Arbeit');
+  for (const n of numbers) expect((await fx.api('GET', `/v1/movements/${n}`)).assignedTo).toBe(operator);
+  await row.getByRole('button', { name: 'Zurückgeben' }).click();
+  await expect(page.getByRole('status')).toContainText('zurückgegeben');
+  for (const n of numbers) expect((await fx.api('GET', `/v1/movements/${n}`)).state).toBe('OPEN');
+});
