@@ -18,7 +18,15 @@ import { normalizeDecimal } from '../../../http/common-schemas.js';
 import { OutboxService } from '../../../infrastructure/outbox/outbox.service.js';
 import { LocationLookup } from '../../layout/index.js';
 import { type TransportUnit, TransportUnitRemovalPolicy, TransportUnitService } from '../../transport/index.js';
-import { type BOOKING_TYPES, Product, ProductUnit, StockBooking, StockCount, StockItem, StockReservation } from '../entities/inventory.entities.js';
+import {
+  type BOOKING_TYPES,
+  Product,
+  ProductUnit,
+  StockBooking,
+  StockCount,
+  StockItem,
+  StockReservation,
+} from '../entities/inventory.entities.js';
 import type {
   CreateProduct,
   IssueInput,
@@ -56,8 +64,14 @@ export interface SummaryRow {
 
 type BookingType = (typeof BOOKING_TYPES)[number];
 
-const productSnapshot = (p: Product) => ({ sku: p.sku, description: p.description, baseUnit: p.baseUnit, overdeliveryAllowed: p.overdeliveryAllowed });
-const isoDate = (d: Date | string | null | undefined): string | null => (d == null ? null : typeof d === 'string' ? d.slice(0, 10) : d.toISOString().slice(0, 10));
+const productSnapshot = (p: Product) => ({
+  sku: p.sku,
+  description: p.description,
+  baseUnit: p.baseUnit,
+  overdeliveryAllowed: p.overdeliveryAllowed,
+});
+const isoDate = (d: Date | string | null | undefined): string | null =>
+  d == null ? null : typeof d === 'string' ? d.slice(0, 10) : d.toISOString().slice(0, 10);
 const SCALE = 3;
 
 const onHandOf = (item: StockItem) => Quantity.of(normalizeDecimal(item.quantity), item.unitCode);
@@ -90,7 +104,10 @@ export class InventoryService implements OnModuleInit {
       return items > 0 ? `${items} Bestandsposten auf der TU` : null;
     });
     this.unitRemoval.register('stock-count', async (unit) => {
-      const open = await this.em.fork().findOne(StockCount, { unit: unit.id, state: { $in: ['OPEN', 'COUNTED'] } });
+      const open = await this.em.fork().findOne(StockCount, {
+        unit: unit.id,
+        state: { $in: ['OPEN', 'COUNTED'] },
+      });
       return open ? `Laufende Inventur ${open.number}` : null;
     });
   }
@@ -115,7 +132,9 @@ export class InventoryService implements OnModuleInit {
 
   /** Alternative Einheiten je Produkt (für die Ausgabe). */
   async unitsOf(products: Product[]): Promise<Map<string, { unit: string; factor: string }[]>> {
-    const rows = products.length ? await this.em.find(ProductUnit, { product: { $in: products.map((p) => p.id) } }, { orderBy: { unitCode: 'asc' } }) : [];
+    const rows = products.length
+      ? await this.em.find(ProductUnit, { product: { $in: products.map((p) => p.id) } }, { orderBy: { unitCode: 'asc' } })
+      : [];
     const result = new Map<string, { unit: string; factor: string }[]>(products.map((p) => [p.id, []]));
     for (const row of rows) result.get((row.product as Product).id)?.push({ unit: row.unitCode, factor: normalizeDecimal(row.factor) });
     return result;
@@ -138,10 +157,16 @@ export class InventoryService implements OnModuleInit {
     return this.em.transactional(async (tx) => {
       const product = await this.productIn(tx, sku);
       if (input.baseUnit !== undefined && input.baseUnit !== product.baseUnit && (await tx.count(StockItem, { product })) > 0) {
-        throw new RuleViolationError('PRODUCT_UNIT_IN_USE', `Die Basiseinheit von [${sku}] kann nicht geändert werden, solange Bestand existiert`, { sku });
+        throw new RuleViolationError(
+          'PRODUCT_UNIT_IN_USE',
+          `Die Basiseinheit von [${sku}] kann nicht geändert werden, solange Bestand existiert`,
+          { sku },
+        );
       }
       if (input.baseUnit !== undefined && (await tx.count(ProductUnit, { product, unitCode: input.baseUnit }))) {
-        throw new DomainError('invalid', 'UNIT_CONFLICT', `${input.baseUnit} ist bereits als alternative Einheit definiert`, { unit: input.baseUnit });
+        throw new DomainError('invalid', 'UNIT_CONFLICT', `${input.baseUnit} ist bereits als alternative Einheit definiert`, {
+          unit: input.baseUnit,
+        });
       }
       if (input.description !== undefined) product.description = input.description;
       if (input.baseUnit !== undefined) product.baseUnit = input.baseUnit;
@@ -170,7 +195,10 @@ export class InventoryService implements OnModuleInit {
     const unitWhere: Record<string, unknown> = {};
     if (query.barcode) unitWhere['barcode'] = query.barcode;
     if (query.location) unitWhere['location'] = query.location;
-    if (query.group) unitWhere['location'] = { $in: (await this.lookup.inGroup(this.em.fork(), query.group, true)).map((l) => l.id) };
+    if (query.group)
+      unitWhere['location'] = {
+        $in: (await this.lookup.inGroup(this.em.fork(), query.group, true)).map((l) => l.id),
+      };
     if (Object.keys(unitWhere).length) where.unit = unitWhere;
     if (query.sku) where.product = { sku: query.sku };
     if (query.lot) where.lot = query.lot;
@@ -187,7 +215,11 @@ export class InventoryService implements OnModuleInit {
     if (query.sku) where.sku = query.sku;
     if (query.barcode) where.barcode = query.barcode;
     if (query.reference) where.reference = query.reference;
-    return this.em.findAndCount(StockBooking, where, { orderBy: { createdAt: 'desc', id: 'asc' }, limit: query.limit, offset: query.offset });
+    return this.em.findAndCount(StockBooking, where, {
+      orderBy: { createdAt: 'desc', id: 'asc' },
+      limit: query.limit,
+      offset: query.offset,
+    });
   }
 
   /** Summen je Produkt bzw. je Platz und Produkt, mit Reservierung und verfügbarer Menge. */
@@ -260,18 +292,33 @@ export class InventoryService implements OnModuleInit {
     return this.em.transactional(async (tx) => {
       const item = await this.lockItem(tx, id);
       const product = item.product as Product;
-      const delta = await this.toBase(tx, product, input.delta, { allowNegative: true });
+      const delta = await this.toBase(tx, product, input.delta, {
+        allowNegative: true,
+      });
       return this.correctIn(tx, item, delta, `correction:${input.reason}`, input.reason);
     });
   }
 
   /** Korrektur innerhalb einer Transaktion; die TU muss bereits gesperrt sein (z. B. Inventurabschluss). */
-  async correctIn(tx: EntityManager, item: StockItem, delta: Quantity, reference: string, reason: string): Promise<{ booking: StockBooking; onHand: Quantity; removed: boolean }> {
+  async correctIn(
+    tx: EntityManager,
+    item: StockItem,
+    delta: Quantity,
+    reference: string,
+    reason: string,
+  ): Promise<{ booking: StockBooking; onHand: Quantity; removed: boolean }> {
     const product = item.product as Product;
     const unit = item.unit as TransportUnit;
     const { onHand, removed } = this.applyDelta(tx, item, delta);
     const booking = this.book(tx, 'CORRECTION', item, delta, reference);
-    this.outbox.record(tx, StockCorrectedEvent, { bookingId: booking.id, sku: product.sku, barcode: unit.barcode, delta: delta.toDto(), onHand: onHand.toDto(), reason });
+    this.outbox.record(tx, StockCorrectedEvent, {
+      bookingId: booking.id,
+      sku: product.sku,
+      barcode: unit.barcode,
+      delta: delta.toDto(),
+      onHand: onHand.toDto(),
+      reason,
+    });
     return { booking, onHand, removed };
   }
 
@@ -280,30 +327,50 @@ export class InventoryService implements OnModuleInit {
    * die verfügbare Menge; mit `reservationId` wird die Reservierung verbraucht.
    */
   issue(id: string, input: IssueInput): Promise<{ booking: StockBooking; onHand: Quantity; removed: boolean }> {
-    return this.em.transactional(async (tx) => {
+    return this.em.transactional((tx) => this.issueIn(tx, id, input));
+  }
+
+  /** Wie `issue`, innerhalb der Transaktion des Aufrufers (z. B. Pick-Quittung). */
+  async issueIn(tx: EntityManager, id: string, input: IssueInput): Promise<{ booking: StockBooking; onHand: Quantity; removed: boolean }> {
+    {
       const item = await this.lockItem(tx, id);
       const product = item.product as Product;
       const unit = item.unit as TransportUnit;
       const quantity = await this.toBase(tx, product, input.quantity);
       let reservation: StockReservation | null = null;
       if (input.reservationId) {
-        reservation = await tx.findOne(StockReservation, { id: input.reservationId, item: item.id });
+        reservation = await tx.findOne(StockReservation, {
+          id: input.reservationId,
+          item: item.id,
+        });
         if (!reservation) {
-          throw new NotFoundError('RESERVATION_NOT_FOUND', `Reservierung [${input.reservationId}] gehört nicht zu diesem Posten`, { reservationId: input.reservationId });
+          throw new NotFoundError('RESERVATION_NOT_FOUND', `Reservierung [${input.reservationId}] gehört nicht zu diesem Posten`, {
+            reservationId: input.reservationId,
+          });
         }
         const reserved = Quantity.of(normalizeDecimal(reservation.quantity), reservation.unitCode);
         if (quantity.compareTo(reserved) > 0) {
-          throw new RuleViolationError('EXCEEDS_RESERVATION', `Abgang ${quantity.toString()} übersteigt die Reservierung ${reserved.toString()}`, {
-            quantity: quantity.amount,
-            reserved: reserved.amount,
-          });
+          throw new RuleViolationError(
+            'EXCEEDS_RESERVATION',
+            `Abgang ${quantity.toString()} übersteigt die Reservierung ${reserved.toString()}`,
+            {
+              quantity: quantity.amount,
+              reserved: reserved.amount,
+            },
+          );
         }
         // Reservierung zuerst verringern, dann ist der Abgang innerhalb der verfügbaren Menge.
         this.changeReserved(item, quantity.negate());
         const rest = reserved.subtract(quantity);
         if (rest.isZero()) tx.remove(reservation);
         else reservation.quantity = rest.amount;
-        this.outbox.record(tx, StockReservationReleasedEvent, { reservationId: reservation.id, sku: product.sku, barcode: unit.barcode, quantity: quantity.toDto(), consumed: true });
+        this.outbox.record(tx, StockReservationReleasedEvent, {
+          reservationId: reservation.id,
+          sku: product.sku,
+          barcode: unit.barcode,
+          quantity: quantity.toDto(),
+          consumed: true,
+        });
       }
       const { onHand, removed } = this.applyDelta(tx, item, quantity.negate());
       const booking = this.book(tx, 'ISSUE', item, quantity.negate(), input.reference);
@@ -317,14 +384,22 @@ export class InventoryService implements OnModuleInit {
         reservationId: reservation?.id ?? null,
       });
       return { booking, onHand, removed };
-    });
+    }
   }
 
   /**
    * Umbuchung einer Teilmenge auf eine andere TU (z. B. Umpacken). Charge und
    * MHD bleiben erhalten; auf der Ziel-TU wird gleichartiger Bestand zusammengeführt.
    */
-  transfer(id: string, input: TransferInput): Promise<{ transferId: string; from: StockItem; to: StockItem; fromRemoved: boolean }> {
+  transfer(
+    id: string,
+    input: TransferInput,
+  ): Promise<{
+    transferId: string;
+    from: StockItem;
+    to: StockItem;
+    fromRemoved: boolean;
+  }> {
     return this.em.transactional(async (tx) => {
       const peek = await this.peekItem(tx, id);
       const target = await this.units.loadIn(tx, input.to);
@@ -360,7 +435,12 @@ export class InventoryService implements OnModuleInit {
 
   /** Reserviert verfügbaren Bestand eines Postens. */
   reserve(id: string, input: ReserveInput): Promise<StockReservation> {
-    return this.em.transactional(async (tx) => {
+    return this.em.transactional((tx) => this.reserveIn(tx, id, input));
+  }
+
+  /** Wie `reserve`, innerhalb der Transaktion des Aufrufers (z. B. Zuteilung eines Auslagerauftrags). */
+  async reserveIn(tx: EntityManager, id: string, input: ReserveInput): Promise<StockReservation> {
+    {
       const item = await this.lockItem(tx, id);
       const product = item.product as Product;
       const quantity = await this.toBase(tx, product, input.quantity);
@@ -372,7 +452,13 @@ export class InventoryService implements OnModuleInit {
         });
       }
       this.changeReserved(item, quantity);
-      const reservation = tx.create(StockReservation, { id: randomUUID(), item, quantity: quantity.amount, unitCode: quantity.unit, reference: input.reference });
+      const reservation = tx.create(StockReservation, {
+        id: randomUUID(),
+        item,
+        quantity: quantity.amount,
+        unitCode: quantity.unit,
+        reference: input.reference,
+      });
       this.outbox.record(tx, StockReservedEvent, {
         reservationId: reservation.id,
         sku: product.sku,
@@ -381,14 +467,25 @@ export class InventoryService implements OnModuleInit {
         reference: input.reference,
       });
       return reservation;
-    });
+    }
   }
 
   releaseReservation(reservationId: string): Promise<void> {
     return this.em.transactional(async (tx) => {
+      await this.releaseReservationIn(tx, reservationId);
+    });
+  }
+
+  /** Reservierung aufheben, innerhalb der Transaktion des Aufrufers. Bereits verbrauchte Reservierungen: `false`. */
+  async releaseReservationIn(tx: EntityManager, reservationId: string, options: { ignoreMissing?: boolean } = {}): Promise<boolean> {
+    {
       const peek = await tx.findOne(StockReservation, { id: reservationId }, { populate: ['item'] });
-      if (!peek) throw new NotFoundError('RESERVATION_NOT_FOUND', `Reservierung [${reservationId}] existiert nicht`, { reservationId });
+      if (!peek) {
+        if (options.ignoreMissing) return false;
+        throw new NotFoundError('RESERVATION_NOT_FOUND', `Reservierung [${reservationId}] existiert nicht`, { reservationId });
+      }
       const item = await this.lockItem(tx, (peek.item as StockItem).id);
+      await tx.flush(); // eigene, noch nicht geschriebene Änderungen nicht durch refresh verwerfen
       const reservation = await tx.findOneOrFail(StockReservation, { id: reservationId }, { refresh: true });
       const quantity = Quantity.of(normalizeDecimal(reservation.quantity), reservation.unitCode);
       this.changeReserved(item, quantity.negate());
@@ -400,7 +497,71 @@ export class InventoryService implements OnModuleInit {
         quantity: quantity.toDto(),
         consumed: false,
       });
-    });
+      return true;
+    }
+  }
+
+  // --- Auslagerung ----------------------------------------------------------------
+
+  /** TU-Ids mit Bestand des Produkts (für das Sperren vor einer Zuteilung). */
+  async unitIdsWithStock(em: EntityManager, sku: string): Promise<string[]> {
+    const rows = await em
+      .getConnection()
+      .execute<
+        { unit_id: string }[]
+      >('select distinct si.unit_id from stock_item si join product p on p.id = si.product_id where p.sku = ? order by si.unit_id', [sku]);
+    return rows.map((r) => r.unit_id);
+  }
+
+  /** Sperrt TU-Zeilen in fester Reihenfolge, ohne die Inventursperre zu prüfen (die Zuteilung schließt solche TUs als Regel aus). */
+  async lockUnitRows(tx: EntityManager, unitIds: string[]): Promise<void> {
+    if (unitIds.length === 0) return;
+    const ids = [...new Set(unitIds)].sort();
+    await tx.execute(`select "id" from "transport_unit" where "id" in (${ids.map(() => '?').join(', ')}) order by "id" for update`, ids);
+  }
+
+  /**
+   * Bestandsposten eines Produkts mit TU, Platz und TU-Typ (frisch gelesen),
+   * dazu die TUs mit laufender Inventur und die Anzahl Posten je TU.
+   */
+  async allocationCandidates(
+    tx: EntityManager,
+    sku: string,
+    lot?: string,
+  ): Promise<{
+    items: StockItem[];
+    countedUnits: Set<string>;
+    itemsPerUnit: Map<string, number>;
+  }> {
+    await tx.flush(); // eigene, noch nicht geschriebene Änderungen nicht durch refresh verwerfen
+    const items = await tx.find(
+      StockItem,
+      { product: { sku }, ...(lot ? { lot } : {}) },
+      {
+        populate: ['product', 'unit', 'unit.location'],
+        refresh: true,
+        orderBy: { createdAt: 'asc', id: 'asc' },
+      },
+    );
+    const unitIds = [...new Set(items.map((i) => (i.unit as TransportUnit).id))];
+    const counts = unitIds.length
+      ? await tx.find(StockCount, {
+          unit: { $in: unitIds },
+          state: { $in: ['OPEN', 'COUNTED'] },
+        })
+      : [];
+    const perUnit = unitIds.length
+      ? await tx
+          .getConnection()
+          .execute<
+            { unit_id: string; n: number }[]
+          >(`select unit_id, count(*)::int as n from stock_item where unit_id in (${unitIds.map(() => '?').join(', ')}) group by unit_id`, unitIds)
+      : [];
+    return {
+      items,
+      countedUnits: new Set(counts.map((c) => (c.unit as TransportUnit).id)),
+      itemsPerUnit: new Map(perUnit.map((r) => [r.unit_id, Number(r.n)])),
+    };
   }
 
   /**
@@ -411,11 +572,15 @@ export class InventoryService implements OnModuleInit {
   async receiveIn(tx: EntityManager, input: ReceiveInput): Promise<{ item: StockItem; booking: StockBooking }> {
     const { product, unit, quantity } = input;
     if (quantity.unit !== product.baseUnit) {
-      throw new RuleViolationError('UNIT_MISMATCH', `Produkt ${product.sku} wird in ${product.baseUnit} geführt, erfasst wurde ${quantity.unit}`, {
-        sku: product.sku,
-        baseUnit: product.baseUnit,
-        unit: quantity.unit,
-      });
+      throw new RuleViolationError(
+        'UNIT_MISMATCH',
+        `Produkt ${product.sku} wird in ${product.baseUnit} geführt, erfasst wurde ${quantity.unit}`,
+        {
+          sku: product.sku,
+          baseUnit: product.baseUnit,
+          unit: quantity.unit,
+        },
+      );
     }
     if (quantity.isZero() || quantity.isNegative()) {
       throw new RuleViolationError('INVALID_QUANTITY', 'Die Menge muss größer als 0 sein', { quantity: quantity.amount });
@@ -437,10 +602,26 @@ export class InventoryService implements OnModuleInit {
   }
 
   /** Zugang aus einer Inventur (gefundener Bestand); die TU muss gesperrt sein. */
-  async foundIn(tx: EntityManager, product: Product, unit: TransportUnit, quantity: Quantity, lot: string | null, bestBefore: string | null, reference: string, reason: string): Promise<void> {
+  async foundIn(
+    tx: EntityManager,
+    product: Product,
+    unit: TransportUnit,
+    quantity: Quantity,
+    lot: string | null,
+    bestBefore: string | null,
+    reference: string,
+    reason: string,
+  ): Promise<void> {
     const item = await this.addTo(tx, product, unit, quantity, lot, bestBefore);
     const booking = this.book(tx, 'CORRECTION', item, quantity, reference, unit.barcode);
-    this.outbox.record(tx, StockCorrectedEvent, { bookingId: booking.id, sku: product.sku, barcode: unit.barcode, delta: quantity.toDto(), onHand: onHandOf(item).toDto(), reason });
+    this.outbox.record(tx, StockCorrectedEvent, {
+      bookingId: booking.id,
+      sku: product.sku,
+      barcode: unit.barcode,
+      delta: quantity.toDto(),
+      onHand: onHandOf(item).toDto(),
+      reason,
+    });
   }
 
   /**
@@ -450,11 +631,19 @@ export class InventoryService implements OnModuleInit {
   async lockUnits(tx: EntityManager, unitIds: string[], countId?: string): Promise<void> {
     const ids = [...new Set(unitIds)].sort();
     await tx.execute(`select "id" from "transport_unit" where "id" in (${ids.map(() => '?').join(', ')}) order by "id" for update`, ids);
-    const counts = await tx.find(StockCount, { unit: { $in: ids }, state: { $in: ['OPEN', 'COUNTED'] }, ...(countId ? { id: { $ne: countId } } : {}) });
+    const counts = await tx.find(StockCount, {
+      unit: { $in: ids },
+      state: { $in: ['OPEN', 'COUNTED'] },
+      ...(countId ? { id: { $ne: countId } } : {}),
+    });
     if (counts.length > 0) {
-      throw new ConflictError('COUNT_IN_PROGRESS', `Inventur ${counts.map((c) => c.number).join(', ')} läuft; Buchungen auf ${counts.map((c) => c.barcode).join(', ')} sind gesperrt`, {
-        counts: counts.map((c) => ({ number: c.number, barcode: c.barcode })),
-      });
+      throw new ConflictError(
+        'COUNT_IN_PROGRESS',
+        `Inventur ${counts.map((c) => c.number).join(', ')} läuft; Buchungen auf ${counts.map((c) => c.barcode).join(', ')} sind gesperrt`,
+        {
+          counts: counts.map((c) => ({ number: c.number, barcode: c.barcode })),
+        },
+      );
     }
   }
 
@@ -467,23 +656,38 @@ export class InventoryService implements OnModuleInit {
     if (given.unit === product.baseUnit) {
       base = given;
     } else {
-      const unit = await tx.findOne(ProductUnit, { product: product.id, unitCode: given.unit });
+      const unit = await tx.findOne(ProductUnit, {
+        product: product.id,
+        unitCode: given.unit,
+      });
       if (!unit) {
         const known = (await tx.find(ProductUnit, { product: product.id })).map((u) => u.unitCode);
-        throw new RuleViolationError('UNIT_MISMATCH', `Produkt ${product.sku} kennt die Einheit ${given.unit} nicht (Basis ${product.baseUnit}${known.length ? `, außerdem ${known.join(', ')}` : ''})`, {
-          sku: product.sku,
-          baseUnit: product.baseUnit,
-          unit: given.unit,
-          units: known,
-        });
+        throw new RuleViolationError(
+          'UNIT_MISMATCH',
+          `Produkt ${product.sku} kennt die Einheit ${given.unit} nicht (Basis ${product.baseUnit}${known.length ? `, außerdem ${known.join(', ')}` : ''})`,
+          {
+            sku: product.sku,
+            baseUnit: product.baseUnit,
+            unit: given.unit,
+            units: known,
+          },
+        );
       }
       base = given.convert(normalizeDecimal(unit.factor), product.baseUnit);
     }
     if (base.isZero() || (base.isNegative() && !options.allowNegative)) {
-      throw new RuleViolationError('INVALID_QUANTITY', options.allowNegative ? 'Die Menge darf nicht 0 sein' : 'Die Menge muss größer als 0 sein', { quantity: given.amount });
+      throw new RuleViolationError(
+        'INVALID_QUANTITY',
+        options.allowNegative ? 'Die Menge darf nicht 0 sein' : 'Die Menge muss größer als 0 sein',
+        { quantity: given.amount },
+      );
     }
     if (base.decimalPlaces() > SCALE) {
-      throw new RuleViolationError('INVALID_QUANTITY', `${given.toString()} ergibt ${base.toString()}; Bestand wird mit höchstens ${SCALE} Nachkommastellen geführt`, { quantity: base.amount });
+      throw new RuleViolationError(
+        'INVALID_QUANTITY',
+        `${given.toString()} ergibt ${base.toString()}; Bestand wird mit höchstens ${SCALE} Nachkommastellen geführt`,
+        { quantity: base.amount },
+      );
     }
     return base;
   }
@@ -502,6 +706,7 @@ export class InventoryService implements OnModuleInit {
   }
 
   private async reloadItem(tx: EntityManager, id: string): Promise<StockItem> {
+    await tx.flush(); // eigene, noch nicht geschriebene Änderungen nicht durch refresh verwerfen
     const item = await tx.findOne(StockItem, { id }, { populate: ['product', 'unit'], refresh: true });
     if (!item) throw new NotFoundError('STOCK_ITEM_NOT_FOUND', `Bestandsposten [${id}] existiert nicht mehr`, { id });
     return item;
@@ -512,15 +717,22 @@ export class InventoryService implements OnModuleInit {
     const before = onHandOf(item);
     const onHand = before.add(delta);
     if (onHand.isNegative()) {
-      throw new RuleViolationError('STOCK_INSUFFICIENT', `Bestand ${before.toString()} reicht für ${delta.toString()} nicht`, { onHand: before.amount, delta: delta.amount });
+      throw new RuleViolationError('STOCK_INSUFFICIENT', `Bestand ${before.toString()} reicht für ${delta.toString()} nicht`, {
+        onHand: before.amount,
+        delta: delta.amount,
+      });
     }
     const reserved = reservedOf(item);
     if (onHand.compareTo(reserved) < 0) {
-      throw new RuleViolationError('STOCK_RESERVED', `${reserved.toString()} sind reserviert; verfügbar ${before.subtract(reserved).toString()}`, {
-        onHand: before.amount,
-        reserved: reserved.amount,
-        delta: delta.amount,
-      });
+      throw new RuleViolationError(
+        'STOCK_RESERVED',
+        `${reserved.toString()} sind reserviert; verfügbar ${before.subtract(reserved).toString()}`,
+        {
+          onHand: before.amount,
+          reserved: reserved.amount,
+          delta: delta.amount,
+        },
+      );
     }
     const removed = onHand.isZero();
     if (removed) tx.remove(item);
@@ -532,16 +744,40 @@ export class InventoryService implements OnModuleInit {
     item.reserved = reservedOf(item).add(delta).amount;
   }
 
-  private async addTo(tx: EntityManager, product: Product, unit: TransportUnit, quantity: Quantity, lot: string | null, bestBefore: string | null): Promise<StockItem> {
+  private async addTo(
+    tx: EntityManager,
+    product: Product,
+    unit: TransportUnit,
+    quantity: Quantity,
+    lot: string | null,
+    bestBefore: string | null,
+  ): Promise<StockItem> {
+    await tx.flush(); // eigene, noch nicht geschriebene Änderungen nicht durch refresh verwerfen
     const existing = await tx.findOne(StockItem, { unit, product, lot, bestBefore }, { refresh: true });
     if (existing) {
       existing.quantity = onHandOf(existing).add(quantity).amount;
       return existing;
     }
-    return tx.create(StockItem, { id: randomUUID(), product, unit, quantity: quantity.amount, reserved: '0', unitCode: quantity.unit, lot, bestBefore });
+    return tx.create(StockItem, {
+      id: randomUUID(),
+      product,
+      unit,
+      quantity: quantity.amount,
+      reserved: '0',
+      unitCode: quantity.unit,
+      lot,
+      bestBefore,
+    });
   }
 
-  private book(tx: EntityManager, type: BookingType, item: StockItem, quantity: Quantity, reference: string, barcode?: string): StockBooking {
+  private book(
+    tx: EntityManager,
+    type: BookingType,
+    item: StockItem,
+    quantity: Quantity,
+    reference: string,
+    barcode?: string,
+  ): StockBooking {
     return tx.create(StockBooking, {
       id: randomUUID(),
       type,
@@ -562,7 +798,12 @@ export class InventoryService implements OnModuleInit {
         throw new DomainError('invalid', 'UNIT_CONFLICT', `Einheit ${u.unit} ist doppelt oder die Basiseinheit`, { unit: u.unit });
       }
       seen.add(u.unit);
-      tx.create(ProductUnit, { id: randomUUID(), product, unitCode: u.unit, factor: u.factor });
+      tx.create(ProductUnit, {
+        id: randomUUID(),
+        product,
+        unitCode: u.unit,
+        factor: u.factor,
+      });
     }
   }
 }

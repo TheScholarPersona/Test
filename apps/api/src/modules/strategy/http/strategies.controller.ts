@@ -1,3 +1,4 @@
+import { type AllocationResult, AllocationService } from '../allocation/allocation.service.js';
 import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Post, Put, Query } from '@nestjs/common';
 import { z } from 'zod';
 import { itemsOf } from '../../../http/common-schemas.js';
@@ -28,6 +29,9 @@ import {
   StrategyCatalogSchema,
   type UpdateRuleSet,
   UpdateRuleSetSchema,
+  AllocationResultSchema,
+  type AllocationSimulationRequest,
+  AllocationSimulationRequestSchema,
 } from './schemas.js';
 
 const TAGS = ['Strategien'];
@@ -52,6 +56,7 @@ export class StrategiesController {
     private readonly registry: StrategyRegistry,
     private readonly ruleSets: RuleSetService,
     private readonly putaway: PutawayService,
+    private readonly allocation: AllocationService,
     private readonly decisions: DecisionService,
     docs: ApiDocumentation,
   ) {
@@ -66,6 +71,7 @@ export class StrategiesController {
     docs.route({ method: 'delete', path: '/v1/strategy-rule-sets/{id}', summary: 'Entwurf löschen', tags: TAGS, params: RuleSetIdParam, response: { status: 204, description: 'Gelöscht' }, errors: [404, 409] });
     docs.route({ method: 'post', path: '/v1/putaway/decisions', summary: 'Einlagerplatz bestimmen (aktiver Regelsatz), optional als Ziel zuweisen', tags: TAGS, body: PutawayDecisionRequestSchema, response: { ...decision, status: 201 }, errors: [400, 404, 409] });
     docs.route({ method: 'post', path: '/v1/putaway/simulations', summary: 'Einlagerentscheidung simulieren (auch mit Entwurf), ohne zu speichern', tags: TAGS, body: PutawaySimulationRequestSchema, response: decision, errors: [400, 404, 409] });
+    docs.route({ method: 'post', path: '/v1/allocation/simulations', summary: 'Auslagerentscheidung simulieren (auch mit Entwurf): Plan mit Begründung, ohne Reservierung', tags: TAGS, body: AllocationSimulationRequestSchema, response: { status: 200, description: 'Plan', schema: AllocationResultSchema }, errors: [400, 404, 409] });
     docs.route({ method: 'get', path: '/v1/strategy-decisions', summary: 'Gespeicherte Entscheidungen (neueste zuerst)', tags: TAGS, query: DecisionQuerySchema, response: { status: 200, description: 'Liste', schema: pageOf(DecisionResultSchema) } });
     docs.route({ method: 'get', path: '/v1/strategy-decisions/{id}', summary: 'Entscheidung mit Begründung lesen', tags: TAGS, params: DecisionIdParam, response: decision, errors: [404] });
   }
@@ -126,6 +132,13 @@ export class StrategiesController {
   @HttpCode(HttpStatus.OK)
   simulate(@Body(new ZodValidationPipe(PutawaySimulationRequestSchema)) body: PutawaySimulationRequest): Promise<DecisionResult> {
     return this.putaway.simulate({ barcode: body.barcode, group: body.group }, body.ruleSetId);
+  }
+
+  @Post('allocation/simulations')
+  @HttpCode(HttpStatus.OK)
+  simulateAllocation(@Body(new ZodValidationPipe(AllocationSimulationRequestSchema)) body: AllocationSimulationRequest): Promise<AllocationResult> {
+    const { ruleSetId, ...request } = body;
+    return this.allocation.simulate({ ...request, subject: `simulation:${request.sku}` }, ruleSetId);
   }
 
   @Get('strategy-decisions')

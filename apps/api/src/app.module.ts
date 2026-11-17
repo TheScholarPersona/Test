@@ -10,6 +10,7 @@ import { LayoutModule } from './modules/layout/index.js';
 import { MovementModule } from './modules/movement/index.js';
 import { ReceivingModule } from './modules/receiving/index.js';
 import { FlowModule } from './modules/flow/index.js';
+import { OutboundModule } from './modules/outbound/index.js';
 import { TransportOrderModule } from './modules/transport-order/index.js';
 import { StrategyModule } from './modules/strategy/index.js';
 import { TestSupportModule } from './modules/test-support/index.js';
@@ -51,6 +52,7 @@ export class AppModule {
         ReceivingModule,
         TransportOrderModule,
         FlowModule,
+        OutboundModule,
         ...testModules,
       ],
     };

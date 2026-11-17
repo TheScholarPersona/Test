@@ -583,15 +583,15 @@
   {
     "id": "f504000000000000",
     "type": "tab",
-    "label": "Szenario: putaway-strategy",
+    "label": "Szenario: outbound-flow",
     "disabled": false,
-    "info": "Schrittliste aus flows/scenarios/putaway-strategy.js; ausgeführt vom Tab „Schritt-Engine“."
+    "info": "Schrittliste aus flows/scenarios/outbound-flow.js; ausgeführt vom Tab „Schritt-Engine“."
   },
   {
     "id": "f504000000000001",
     "type": "comment",
     "z": "f504000000000000",
-    "name": "Definition: flows/scenarios/putaway-strategy.js (im Repository bearbeiten, dann Flows neu erzeugen)",
+    "name": "Definition: flows/scenarios/outbound-flow.js (im Repository bearbeiten, dann Flows neu erzeugen)",
     "info": "",
     "x": 380,
     "y": 40,
@@ -601,6 +601,39 @@
     "id": "f504000000000002",
     "type": "function",
     "z": "f504000000000000",
+    "name": "Szenario outbound-flow anmelden",
+    "func": "return msg;\n",
+    "outputs": 0,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "const registerScenario = (definition) => {\n  const all = global.get('stepScenarios') || {};\n  all[definition.id] = definition;\n  global.set('stepScenarios', all);\n};\n/**\n * Szenario: Auslagerung.\n *\n * Zwei TUs mit unterschiedlichem MHD. Die Strategie wird per Simulation mit\n * einem Entwurf geprüft (FEFO wählt das frühere MHD) – der Entwurf wird danach\n * gelöscht, ein aktiver Regelsatz bleibt unberührt. Ist für die Auslagerung\n * noch kein Regelsatz aktiv, legt das Szenario einen FIFO-Standard an und\n * aktiviert ihn (er bleibt bestehen). Der Auftrag braucht den ganzen Bestand,\n * das Ergebnis hängt deshalb nicht von der aktiven Strategie ab.\n * Danach: Zuteilung mit Lagerbewegungen zum Versandplatz, eine volle und eine\n * Fehlmengen-Quittung, Abschluss mit Fehlmenge.\n * Schrittformat: siehe flows/scenarios/layout-locks.js.\n */\nregisterScenario({\n  id: 'outbound-flow',\n  description: 'Auslagerung: FEFO-Simulation, Zuteilung mit Reservierung und Bewegungen, Pick mit Fehlmenge, Abschluss.',\n  init: (runId) => {\n    const s = runId.replace(/[^a-z0-9]/gi, '').slice(-8).toUpperCase();\n    const inDays = (d) => new Date(Date.now() + d * 86400000).toISOString().slice(0, 10);\n    return {\n      locationType: `SA-${s}`,\n      group: `SA-${s}-G`,\n      unitType: `SA-${s}`,\n      sku: `SA-${s}-ART`,\n      orderId: `SA-${s}-AUF`,\n      coords: { a: `A${s}/0001/0001/0001/0000`, b: `A${s}/0002/0001/0001/0000`, v: `A${s}/0009/0001/0001/0000` },\n      loc: {},\n      tu: { late: `SA-${s}-SPAET`, early: `SA-${s}-FRUEH` },\n      bestBefore: { late: inDays(200), early: inDays(100) },\n      draft: null,\n      hasActive: true,\n      created: null,\n      picks: [],\n      movements: [],\n    };\n  },\n  steps: [\n    { name: 'Platztyp anlegen', request: (v) => ({ method: 'POST', path: '/v1/location-types', body: { code: v.locationType } }), expectStatus: 201 },\n    { name: 'Gruppe anlegen', request: (v) => ({ method: 'POST', path: '/v1/location-groups', body: { name: v.group } }), expectStatus: 201 },\n    ...['a', 'b', 'v'].map((key) => ({\n      name: `Platz ${key} anlegen`,\n      request: (v) => ({ method: 'POST', path: '/v1/locations', body: { locationId: v.coords[key], typeCode: v.locationType, groupName: v.group, maxTransportUnits: 10 } }),\n      expectStatus: 201,\n      save: (body, v) => {\n        v.loc[key] = body.id;\n      },\n    })),\n    { name: 'TU-Typ anlegen', request: (v) => ({ method: 'POST', path: '/v1/transport-unit-types', body: { code: v.unitType } }), expectStatus: 201 },\n    {\n      name: 'Produkt in PCS mit Karton (6 PCS) anlegen',\n      request: (v) => ({ method: 'POST', path: '/v1/products', body: { sku: v.sku, baseUnit: 'PCS', units: [{ unit: 'KAR', factor: '6' }] } }),\n      expectStatus: 201,\n    },\n    ...[\n      ['late', 'a'],\n      ['early', 'b'],\n    ].map(([tu, at]) => ({\n      name: `Zugang 12 PCS auf TU mit ${tu === 'late' ? 'spätem' : 'frühem'} MHD`,\n      request: (v) => ({\n        method: 'POST',\n        path: '/v1/receiving-blind-captures',\n        body: { sku: v.sku, quantity: { amount: '12', unit: 'PCS' }, unit: { barcode: v.tu[tu], typeCode: v.unitType }, location: { id: v.loc[at] }, bestBefore: v.bestBefore[tu] },\n      }),\n      expectStatus: 201,\n    })),\n\n    // --- Strategie per Simulation (Entwurf, ohne Aktivierung) ---------------------\n    {\n      name: 'Entwurf FEFO anlegen',\n      request: () => ({\n        method: 'POST',\n        path: '/v1/strategy-rule-sets',\n        body: { decisionPoint: 'allocation', description: 'Szenario outbound-flow', rules: [{ name: 'fefo', when: { always: true }, strategy: 'fefo', params: {} }] },\n      }),\n      expectStatus: 201,\n      save: (body, v) => {\n        v.draft = body.id;\n      },\n    },\n    {\n      name: 'Simulation mit Entwurf: FEFO nimmt das frühere MHD',\n      request: (v) => ({ method: 'POST', path: '/v1/allocation/simulations', body: { sku: v.sku, quantity: { amount: '1', unit: 'KAR' }, ruleSetId: v.draft } }),\n      expectStatus: 200,\n      check: (body, v) =>\n        body.plan.length === 1 && body.plan[0].barcode === v.tu.early && body.plan[0].quantity === '6' && body.decision.strategy === 'fefo'\n          ? null\n          : `Unerwartet: ${JSON.stringify(body.plan)}`,\n    },\n    { name: 'Entwurf löschen', request: (v) => ({ method: 'DELETE', path: `/v1/strategy-rule-sets/${v.draft}` }), expectStatus: 204, save: (body, v) => (v.draft = null) },\n\n    // --- Aktiver Regelsatz (nur falls keiner existiert) ---------------------------\n    {\n      name: 'Aktiven Auslager-Regelsatz suchen',\n      request: () => ({ method: 'GET', path: '/v1/strategy-rule-sets?decisionPoint=allocation' }),\n      expectStatus: 200,\n      save: (body, v) => {\n        v.hasActive = (body.items || []).some((r) => r.status === 'ACTIVE');\n      },\n    },\n    {\n      name: 'Falls keiner aktiv: FIFO-Standard anlegen',\n      request: (v) =>\n        v.hasActive\n          ? null\n          : {\n              method: 'POST',\n              path: '/v1/strategy-rule-sets',\n              body: { decisionPoint: 'allocation', description: 'Standard (vom Szenario outbound-flow angelegt)', rules: [{ name: 'standard', when: { always: true }, strategy: 'fifo', params: {} }] },\n            },\n      expectStatus: 201,\n      save: (body, v) => {\n        v.created = body.id;\n      },\n    },\n    { name: 'Falls keiner aktiv: FIFO-Standard aktivieren', request: (v) => (v.created ? { method: 'POST', path: `/v1/strategy-rule-sets/${v.created}/activate` } : null), expectStatus: 200 },\n\n    // --- Auftrag ------------------------------------------------------------------\n    {\n      name: 'Auftrag über 4 Kartons (24 PCS) mit Versandplatz anlegen',\n      request: (v) => ({ method: 'POST', path: '/v1/outbound-orders', body: { orderId: v.orderId, target: { id: v.loc.v }, lines: [{ sku: v.sku, quantity: { amount: '4', unit: 'KAR' } }] } }),\n      expectStatus: 201,\n      check: (body) => (body.lines[0].quantity.amount === '24' ? null : `Unerwartet: ${JSON.stringify(body.lines)}`),\n    },\n    {\n      name: 'Zuteilen mit Lagerbewegungen zum Versandplatz',\n      request: (v) => ({ method: 'POST', path: `/v1/outbound-orders/${v.orderId}/allocate`, body: { transport: 'movement' } }),\n      expectStatus: 200,\n      check: (body) =>\n        body.state === 'ALLOCATED' && body.picks.length === 2 && body.picks.every((p) => p.movementNumber && p.quantity.amount === '12') ? null : `Unerwartet: ${JSON.stringify(body)}`,\n      save: (body, v) => {\n        v.picks = body.picks.map((p) => p.id);\n        v.movements = body.picks.map((p) => p.movementNumber);\n      },\n    },\n    { name: 'Event outbound-order.allocated', event: (e, v) => e.type === 'outbound-order.allocated' && e.payload.orderId === v.orderId && e.payload.picks.length === 2 },\n    {\n      name: 'Bestand ist reserviert',\n      request: (v) => ({ method: 'GET', path: `/v1/stock/summary?sku=${v.sku}` }),\n      expectStatus: 200,\n      check: (body) => (body.items[0].reserved.amount === '24' && body.items[0].available.amount === '0' ? null : `Unerwartet: ${JSON.stringify(body.items)}`),\n    },\n    {\n      name: 'Erster Pick vollständig quittiert',\n      request: (v) => ({ method: 'POST', path: `/v1/outbound-orders/${v.orderId}/picks/${v.picks[0]}/confirm`, body: { pickedBy: 'node-red' } }),\n      expectStatus: 200,\n      check: (body) => (body.state === 'IN_PICKING' ? null : `Unerwartet: ${body.state}`),\n    },\n    {\n      name: 'Zweiter Pick mit Fehlmenge (1 Karton statt 2)',\n      request: (v) => ({ method: 'POST', path: `/v1/outbound-orders/${v.orderId}/picks/${v.picks[1]}/confirm`, body: { quantity: { amount: '1', unit: 'KAR' } } }),\n      expectStatus: 200,\n      check: (body) => (body.lines[0].picked.amount === '18' && body.lines[0].open.amount === '6' ? null : `Unerwartet: ${JSON.stringify(body.lines)}`),\n    },\n    { name: 'Event outbound-pick.confirmed mit Fehlmenge', event: (e, v) => e.type === 'outbound-pick.confirmed' && e.payload.pickId === v.picks[1] && e.payload.short === true },\n    {\n      name: 'Auftrag mit Fehlmenge abschließen',\n      request: (v) => ({ method: 'POST', path: `/v1/outbound-orders/${v.orderId}/complete`, body: { reason: 'Rest nicht vorhanden' } }),\n      expectStatus: 200,\n      check: (body) => (body.state === 'COMPLETED' && body.lines[0].state === 'SHORT' ? null : `Unerwartet: ${JSON.stringify(body)}`),\n    },\n    { name: 'Event outbound-order.state-changed (COMPLETED)', event: (e, v) => e.type === 'outbound-order.state-changed' && e.payload.orderId === v.orderId && e.payload.state === 'COMPLETED' },\n    {\n      name: 'Journal: zwei Abgänge (12 und 6 PCS)',\n      request: (v) => ({ method: 'GET', path: `/v1/stock-bookings?reference=outbound:${v.orderId}/1` }),\n      expectStatus: 200,\n      check: (body) => {\n        const amounts = body.items.map((b) => `${b.type}:${b.quantity.amount}`).sort();\n        return JSON.stringify(amounts) === JSON.stringify(['ISSUE:-12', 'ISSUE:-6']) ? null : `Unerwartet: ${JSON.stringify(amounts)}`;\n      },\n    },\n    {\n      name: 'Restbestand 6 PCS ist wieder verfügbar',\n      request: (v) => ({ method: 'GET', path: `/v1/stock/summary?sku=${v.sku}` }),\n      expectStatus: 200,\n      check: (body) => (body.items[0].onHand.amount === '6' && body.items[0].reserved.amount === '0' ? null : `Unerwartet: ${JSON.stringify(body.items)}`),\n    },\n\n    // --- Aufräumen ------------------------------------------------------------------\n    { name: 'Aufräumen: Entwurf löschen (falls noch vorhanden)', cleanup: true, request: (v) => (v.draft ? { method: 'DELETE', path: `/v1/strategy-rule-sets/${v.draft}` } : null) },\n    { name: 'Aufräumen: Auftrag stornieren (falls offen)', cleanup: true, request: (v) => ({ method: 'POST', path: `/v1/outbound-orders/${v.orderId}/cancel`, body: { reason: 'Aufräumen' } }) },\n    ...[0, 1].map((i) => ({\n      name: `Aufräumen: Lagerbewegung ${i + 1} stornieren`,\n      cleanup: true,\n      request: (v) => (v.movements[i] ? { method: 'POST', path: `/v1/movements/${v.movements[i]}/cancel`, body: { reason: 'Aufräumen' } } : null),\n    })),\n    ...['late', 'early'].map((tu) => ({\n      name: `Aufräumen: Bestand auf TU ${tu} lesen`,\n      cleanup: true,\n      request: (v) => ({ method: 'GET', path: `/v1/stock?barcode=${v.tu[tu]}` }),\n      save: (body, v) => {\n        v[`rest_${tu}`] = (body.items || [])[0] || null;\n      },\n    })),\n    ...['late', 'early'].map((tu) => ({\n      name: `Aufräumen: Restbestand auf TU ${tu} ausbuchen`,\n      cleanup: true,\n      request: (v) => {\n        const rest = v[`rest_${tu}`];\n        return rest ? { method: 'POST', path: `/v1/stock/${rest.id}/corrections`, body: { delta: { amount: `-${rest.quantity.amount}`, unit: 'PCS' }, reason: 'Aufräumen' } } : null;\n      },\n    })),\n    ...['late', 'early'].map((tu) => ({ name: `Aufräumen: TU ${tu} löschen`, cleanup: true, request: (v) => ({ method: 'DELETE', path: `/v1/transport-units/${v.tu[tu]}` }) })),\n    ...['a', 'b', 'v'].map((key) => ({\n      name: `Aufräumen: Platz ${key} löschen`,\n      cleanup: true,\n      request: (v) => (v.loc[key] ? { method: 'DELETE', path: `/v1/locations/${v.loc[key]}` } : null),\n      expectStatus: 204,\n    })),\n    { name: 'Aufräumen: Gruppe löschen', cleanup: true, request: (v) => ({ method: 'DELETE', path: `/v1/location-groups/${v.group}` }), expectStatus: 204 },\n    { name: 'Aufräumen: TU-Typ löschen', cleanup: true, request: (v) => ({ method: 'DELETE', path: `/v1/transport-unit-types/${v.unitType}` }), expectStatus: 204 },\n    { name: 'Aufräumen: Platztyp löschen', cleanup: true, request: (v) => ({ method: 'DELETE', path: `/v1/location-types/${v.locationType}` }), expectStatus: 204 },\n  ],\n});\n",
+    "finalize": "",
+    "libs": [],
+    "x": 200,
+    "y": 100,
+    "wires": []
+  },
+  {
+    "id": "f505000000000000",
+    "type": "tab",
+    "label": "Szenario: putaway-strategy",
+    "disabled": false,
+    "info": "Schrittliste aus flows/scenarios/putaway-strategy.js; ausgeführt vom Tab „Schritt-Engine“."
+  },
+  {
+    "id": "f505000000000001",
+    "type": "comment",
+    "z": "f505000000000000",
+    "name": "Definition: flows/scenarios/putaway-strategy.js (im Repository bearbeiten, dann Flows neu erzeugen)",
+    "info": "",
+    "x": 380,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "f505000000000002",
+    "type": "function",
+    "z": "f505000000000000",
     "name": "Szenario putaway-strategy anmelden",
     "func": "return msg;\n",
     "outputs": 0,
@@ -614,16 +647,16 @@
     "wires": []
   },
   {
-    "id": "f505000000000000",
+    "id": "f506000000000000",
     "type": "tab",
     "label": "Szenario: receiving-flow",
     "disabled": false,
     "info": "Schrittliste aus flows/scenarios/receiving-flow.js; ausgeführt vom Tab „Schritt-Engine“."
   },
   {
-    "id": "f505000000000001",
+    "id": "f506000000000001",
     "type": "comment",
-    "z": "f505000000000000",
+    "z": "f506000000000000",
     "name": "Definition: flows/scenarios/receiving-flow.js (im Repository bearbeiten, dann Flows neu erzeugen)",
     "info": "",
     "x": 380,
@@ -631,9 +664,9 @@
     "wires": []
   },
   {
-    "id": "f505000000000002",
+    "id": "f506000000000002",
     "type": "function",
-    "z": "f505000000000000",
+    "z": "f506000000000000",
     "name": "Szenario receiving-flow anmelden",
     "func": "return msg;\n",
     "outputs": 0,
@@ -647,16 +680,16 @@
     "wires": []
   },
   {
-    "id": "f506000000000000",
+    "id": "f507000000000000",
     "type": "tab",
     "label": "Szenario: stock-flow",
     "disabled": false,
     "info": "Schrittliste aus flows/scenarios/stock-flow.js; ausgeführt vom Tab „Schritt-Engine“."
   },
   {
-    "id": "f506000000000001",
+    "id": "f507000000000001",
     "type": "comment",
-    "z": "f506000000000000",
+    "z": "f507000000000000",
     "name": "Definition: flows/scenarios/stock-flow.js (im Repository bearbeiten, dann Flows neu erzeugen)",
     "info": "",
     "x": 380,
@@ -664,9 +697,9 @@
     "wires": []
   },
   {
-    "id": "f506000000000002",
+    "id": "f507000000000002",
     "type": "function",
-    "z": "f506000000000000",
+    "z": "f507000000000000",
     "name": "Szenario stock-flow anmelden",
     "func": "return msg;\n",
     "outputs": 0,
@@ -680,16 +713,16 @@
     "wires": []
   },
   {
-    "id": "f507000000000000",
+    "id": "f508000000000000",
     "type": "tab",
     "label": "Szenario: transport-order-flow",
     "disabled": false,
     "info": "Schrittliste aus flows/scenarios/transport-order-flow.js; ausgeführt vom Tab „Schritt-Engine“."
   },
   {
-    "id": "f507000000000001",
+    "id": "f508000000000001",
     "type": "comment",
-    "z": "f507000000000000",
+    "z": "f508000000000000",
     "name": "Definition: flows/scenarios/transport-order-flow.js (im Repository bearbeiten, dann Flows neu erzeugen)",
     "info": "",
     "x": 380,
@@ -697,9 +730,9 @@
     "wires": []
   },
   {
-    "id": "f507000000000002",
+    "id": "f508000000000002",
     "type": "function",
-    "z": "f507000000000000",
+    "z": "f508000000000000",
     "name": "Szenario transport-order-flow anmelden",
     "func": "return msg;\n",
     "outputs": 0,
@@ -713,16 +746,16 @@
     "wires": []
   },
   {
-    "id": "f508000000000000",
+    "id": "f509000000000000",
     "type": "tab",
     "label": "Szenario: tu-placement",
     "disabled": false,
     "info": "Schrittliste aus flows/scenarios/tu-placement.js; ausgeführt vom Tab „Schritt-Engine“."
   },
   {
-    "id": "f508000000000001",
+    "id": "f509000000000001",
     "type": "comment",
-    "z": "f508000000000000",
+    "z": "f509000000000000",
     "name": "Definition: flows/scenarios/tu-placement.js (im Repository bearbeiten, dann Flows neu erzeugen)",
     "info": "",
     "x": 380,
@@ -730,9 +763,9 @@
     "wires": []
   },
   {
-    "id": "f508000000000002",
+    "id": "f509000000000002",
     "type": "function",
-    "z": "f508000000000000",
+    "z": "f509000000000000",
     "name": "Szenario tu-placement anmelden",
     "func": "return msg;\n",
     "outputs": 0,

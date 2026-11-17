@@ -17,12 +17,13 @@ apps/api/                  WMS-Kern (NestJS)
     health/                GET /health
     layout/                Lagerstruktur: Platztypen, Gruppen, Lagerplätze, Sperren
     transport/             Transporteinheiten: Typen, Regeln, TUs, Bewegen, Stapeln
-    strategy/              Strategie-Kern: Regelsätze, Entscheidungen; Einlagerung (putaway/)
+    strategy/              Strategie-Kern: Regelsätze, Entscheidungen; Einlagerung (putaway/), Auslagerung (allocation/)
     movement/              Lagerbewegungen mit Zustandsautomat
     inventory/             Bestand: Produkte/Einheiten, Bestand je TU, Buchungen, Reservierung, Inventur
     receiving/             Wareneingang: Avis, Erfassung, Blind-Erfassung
     transport-order/       Transportaufträge: Zustandsautomat, Start-Steuerung, Zielumleitung
     flow/                  Materialfluss: Routen, Schritte, Action-Matrix, Geräte-Ereignisse
+    outbound/              Auslagerung: Aufträge, Zuteilung per Strategie, Picks
     test-support/          Test-Endpunkte, nur im Profil "test"
   test/unit/               Unit-Tests (ohne Datenbank)
   test/integration/        Integrationstests mit Testcontainers
@@ -126,9 +127,9 @@ Der Zielplatz wird während der Prüfung in der Datenbank gesperrt (`SELECT … 
 
 Events: `transport-unit-type.created|updated|deleted`, `transport-unit.created|moved|updated|state-changed|stacked|unstacked|deleted` (Schemas in `packages/shared/src/transport-events.ts`).
 
-## Strategie-Kern (`/v1/strategies`, `/v1/strategy-rule-sets`, `/v1/putaway/…`, `/v1/strategy-decisions`)
+## Strategie-Kern (`/v1/strategies`, `/v1/strategy-rule-sets`, `/v1/putaway/…`, `/v1/allocation/…`, `/v1/strategy-decisions`)
 
-Entscheidungen wie „Auf welchen Platz kommt diese TU?“ werden nicht fest programmiert, sondern über versionierte **Regelsätze** konfiguriert. Bisheriger Entscheidungspunkt: `putaway` (Einlagerung).
+Entscheidungen wie „Auf welchen Platz kommt diese TU?“ werden nicht fest programmiert, sondern über versionierte **Regelsätze** konfiguriert. Entscheidungspunkte: `putaway` (Einlagerung) und `allocation` (Auslagerung, siehe unten).
 
 **Ablauf einer Entscheidung:** Fakten ermitteln → erste zutreffende Regel wählen → deren Strategie mit Parametern ausführen → Kandidaten gegen die **harten Regeln** prüfen → geeignete Kandidaten bewerten → Ergebnis mit Begründung speichern.
 
@@ -179,6 +180,28 @@ Ohne `group` in der Regel gilt die Suchgruppe aus der Anfrage (`NO_SEARCH_GROUP`
 **Begründung (Decision Trace):** Regel und Index, Strategie mit vollständigen Parametern, Fakten, gewählter Kandidat mit Punktzahl, Zusammenfassung (`evaluated`, `eligible`, `excludedByRule`) und bis zu 20 Kandidaten mit Verstößen bzw. Bewertungsanteilen. Wird nichts gewählt, erklärt `note` warum.
 
 **Parallele Zuweisungen:** Der gewählte Platz wird ohne Warten gesperrt (`FOR UPDATE SKIP LOCKED`) und mit frisch gelesener Belegung erneut geprüft. Ist er inzwischen vergeben oder wird er gerade von einer anderen Anfrage vergeben (`LOCATION_BUSY`), wird er ausgeschlossen und neu gewählt (höchstens 5 Versuche, siehe `attempts` und `rejectedOnAssign`). Da nie auf eine Sperre gewartet wird, sind Deadlocks ausgeschlossen; ein Platz, dessen parallele Vergabe doch scheitert, wird in diesem Durchlauf nicht berücksichtigt.
+
+**Auslagerstrategien** (Entscheidungspunkt `allocation`, Felder `product.sku`, `demand.amount`, `demand.unit`, `demand.lot`, `order.priority`, `order.customer`):
+
+| Strategie | Auswahl |
+|---|---|
+| `fifo` | ältester Zugang zuerst |
+| `fefo` | frühestes Mindesthaltbarkeitsdatum zuerst, Posten ohne MHD zuletzt |
+| `lifo` | jüngster Zugang zuerst |
+| `partial-first` | Anbruch zuerst: kleinste Restmengen zuerst |
+| `full-unit` | ganze TU bevorzugen: möglichst ganze Posten (größte, die in den Restbedarf passen), Rest vom kleinsten deckenden Posten |
+
+Gemeinsame Parameter: `group?`, `includeSubgroups` (Standard `true`), `minRemainingDays` (Mindestrestlaufzeit, Standard 0). Harte Regeln: verfügbare Menge > 0 (`NOT_AVAILABLE`), TU `AVAILABLE` (`UNIT_NOT_AVAILABLE`), Platz nicht für Auslagerung gesperrt (`SOURCE_OUTBOUND_BLOCKED`), keine laufende Inventur (`COUNT_IN_PROGRESS`), Mindestrestlaufzeit (`REMAINING_SHELF_LIFE`), geforderte Charge.
+
+Beispiel: Kunde FRISCH bekommt FEFO mit 30 Tagen Restlaufzeit, alle anderen FIFO:
+
+```json
+{ "decisionPoint": "allocation", "rules": [
+  { "name": "frische", "when": { "field": "order.customer", "op": "eq", "value": "FRISCH" }, "strategy": "fefo", "params": { "minRemainingDays": 30 } },
+  { "name": "standard", "when": { "always": true }, "strategy": "fifo", "params": {} } ] }
+```
+
+`POST /v1/allocation/simulations` `{ sku, quantity, lot?, customer?, orderPriority?, ruleSetId? }` liefert den Plan (`plan`: Posten und Menge in Reihenfolge, `allocated`, `shortfall`) mit Begründung, ohne zu reservieren. Echte Entscheidungen trifft der Auslagerauftrag; sie werden mit Plan gespeichert (Event `allocation.decided`). Vor der Entscheidung werden alle TUs mit Bestand des Produkts in fester Reihenfolge gesperrt, damit gleichzeitige Zuteilungen nicht denselben Bestand planen.
 
 **Neuen Entscheidungspunkt ergänzen:** Definition mit Feldkatalog und Strategien (Vorbild `strategy/putaway/putaway.point.ts`), in `StrategyRegistry` eintragen, Service für Kontext und Ergebnis.
 
@@ -392,6 +415,34 @@ Tab „Anlagensimulator“: Auf jeden `flow.command` fährt die TU mit der Fahrz
 | `DELETE /sim/faults` | Störungen entfernen |
 
 Schritt-Szenarien erreichen diese Endpunkte mit `request: () => ({ service: 'simulator', method: 'GET', path: '/sim/state' })`. Tab „Programm: send-to-plc“ ist ein Beispiel für ein Materialfluss-Programm in Node-RED. Szenario `material-flow` prüft den ganzen Ablauf.
+
+**Regelsätze in Szenarien:** Szenarien ersetzen nie einen aktiven Regelsatz; Strategien prüfen sie per Simulation mit einem Entwurf, der danach gelöscht wird. Einzige Ausnahme: `outbound-flow` legt einen FIFO-Standard für `allocation` an und aktiviert ihn, **nur wenn** noch keiner aktiv ist – ohne aktiven Regelsatz kann nicht zugeteilt werden. Dieser Standard bleibt danach bestehen.
+
+## Modul Auslagerung (`/v1/outbound-orders`, `/v1/outbound-picks`)
+
+**Auftrag** `POST /v1/outbound-orders`:
+
+```json
+{ "orderId": "K-4711", "customer": "FRISCH", "priority": "HIGH", "target": { "erpCode": "VERSAND-1" },
+  "lines": [ { "sku": "MILCH", "quantity": { "amount": "4", "unit": "KAR" } }, { "sku": "MEHL", "quantity": { "amount": "50", "unit": "KG" }, "lot": "L7" } ] }
+```
+
+Mengen werden in die Basiseinheit umgerechnet. `target` ist das Ziel für Bewegungen bzw. Transportaufträge (z. B. Versand- oder Kommissionierplatz).
+
+| Aktion | Endpunkt | Wirkung |
+|---|---|---|
+| zuteilen | `POST …/{orderId}/allocate` `{ transport: none \| movement \| transport-order }` | offener Bedarf je Position per Auslagerstrategie; jede Entnahme wird als **Pick** reserviert; mehrfach aufrufbar (Nachzuteilung). Optional je TU eine Lagerbewegung (`OUTBOUND`) bzw. ein Transportauftrag zum Ziel; ist die TU schon belegt oder das Ziel abgelehnt, steht der Grund im Pick (`transportNote`), die Zuteilung bleibt gültig |
+| quittieren | `POST …/{orderId}/picks/{pickId}/confirm` `{ quantity?, pickedBy? }` | Abgang gegen die Reservierung; weniger als zugeteilt = Fehlmenge, der Rest wird freigegeben und ist neu zuteilbar |
+| abschließen | `POST …/{orderId}/complete` `{ reason? }` | nur ohne offene Picks; nicht gedeckte Positionen werden `SHORT` |
+| stornieren | `POST …/{orderId}/cancel` `{ reason? }` | offene Picks werden freigegeben, Entnommenes bleibt gebucht |
+
+**Zustände:** Position `OPEN → PARTIALLY_ALLOCATED → ALLOCATED → PICKED` (`SHORT`, `CANCELLED`); Auftrag `CREATED → PARTIALLY_ALLOCATED → ALLOCATED → IN_PICKING → COMPLETED` (`CANCELLED`), abgeleitet aus den Positionen; sind alle Positionen entnommen, schließt der Auftrag automatisch. Zuteilung, Quittung und Storno eines Auftrags laufen über eine Zeilensperre des Auftrags nacheinander.
+
+**Pick-Arbeitsliste:** `GET /v1/outbound-picks?state=OPEN&orderId=…&barcode=…`, sortiert nach Platz. Buchungen tragen den Bezug `outbound:<orderId>/<Position>`.
+
+Events: `outbound-order.created|allocated|state-changed`, `outbound-pick.confirmed`, `allocation.decided` (`packages/shared/src/outbound-events.ts`).
+
+Noch nicht enthalten: Wellenbildung, Wegoptimierung der Pick-Liste, Packen und Versand, Teilmengen aus einer TU auf eine Versand-TU umbuchen (geht bereits über die Bestandsumbuchung).
 
 ## Events
 

@@ -1,4 +1,4 @@
-import { BarcodeSchema, LocationGroupNameSchema } from '@wms/shared';
+import { BarcodeSchema, LocationGroupNameSchema, LotSchema, QuantitySchema, SkuSchema } from '@wms/shared';
 import { z } from 'zod';
 import { pageOf } from '../../../http/common-schemas.js';
 import { RulesSchema } from '../domain/rule-set.js';
@@ -112,3 +112,25 @@ export const StrategyCatalogSchema = z
     ),
   })
   .meta({ id: 'StrategyCatalog' });
+
+export const AllocationSimulationRequestSchema = z
+  .strictObject({
+    sku: SkuSchema,
+    quantity: QuantitySchema.meta({ description: 'Bedarf in Basis- oder alternativer Einheit' }),
+    lot: LotSchema.optional(),
+    orderPriority: z.string().max(20).optional(),
+    customer: z.string().max(100).optional(),
+    ruleSetId: z.uuid().optional().meta({ description: 'Zu prüfender Regelsatz (auch Entwurf); ohne Angabe der aktive' }),
+  })
+  .meta({ id: 'AllocationSimulationRequest' });
+export type AllocationSimulationRequest = z.infer<typeof AllocationSimulationRequestSchema>;
+
+export const AllocationResultSchema = z
+  .object({
+    decision: DecisionResultSchema,
+    plan: z.array(z.object({ key: z.string().meta({ description: 'Bestandsposten-id' }), barcode: z.string(), locationId: z.string(), quantity: z.string() })),
+    requested: QuantitySchema,
+    allocated: QuantitySchema,
+    shortfall: QuantitySchema,
+  })
+  .meta({ id: 'AllocationResult' });

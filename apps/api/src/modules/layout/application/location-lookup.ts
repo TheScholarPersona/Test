@@ -77,6 +77,11 @@ export class LocationLookup {
     return { inbound: effectiveLock(chain, 'inbound'), outbound: effectiveLock(chain, 'outbound') };
   }
 
+  /** Lädt die Gruppenhierarchie in den EntityManager; danach liefern `locks`/`groupPathOf` für alle Plätze Ergebnisse ohne weitere Abfragen. */
+  async loadHierarchy(em: EntityManager): Promise<void> {
+    await GroupHierarchy.load(em);
+  }
+
   /** Wirksame Sperren einer Gruppe (eigene oder von übergeordneten Gruppen geerbte). */
   async groupLocks(em: EntityManager, groupName: string): Promise<LocationLocks> {
     const chain = (await GroupHierarchy.load(em)).get(groupName).lockChain();

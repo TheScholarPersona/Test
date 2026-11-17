@@ -150,6 +150,7 @@ export class StockCountService {
         if (!diff || diff.isZero()) continue;
         const product = await this.inventory.productIn(tx, line.sku);
         const bestBefore = isoDate(line.bestBefore);
+        await tx.flush(); // eigene, noch nicht geschriebene Änderungen nicht durch refresh verwerfen
         const item = await tx.findOne(StockItem, { unit: unit.id, product: product.id, lot: line.lot ?? null, bestBefore }, { populate: ['product', 'unit'], refresh: true });
         if (item) {
           await this.inventory.correctIn(tx, item, diff, reference, reason);
