@@ -20,12 +20,18 @@ const STATUS: Record<DomainErrorKind, HttpStatus> = {
   conflict: HttpStatus.CONFLICT,
   'rule-violation': HttpStatus.CONFLICT,
   invalid: HttpStatus.BAD_REQUEST,
+  unauthenticated: HttpStatus.UNAUTHORIZED,
+  forbidden: HttpStatus.FORBIDDEN,
+  'too-many-requests': HttpStatus.TOO_MANY_REQUESTS,
 };
 
 const REASON: Partial<Record<HttpStatus, string>> = {
   [HttpStatus.NOT_FOUND]: 'Not Found',
   [HttpStatus.CONFLICT]: 'Conflict',
   [HttpStatus.BAD_REQUEST]: 'Bad Request',
+  [HttpStatus.UNAUTHORIZED]: 'Unauthorized',
+  [HttpStatus.FORBIDDEN]: 'Forbidden',
+  [HttpStatus.TOO_MANY_REQUESTS]: 'Too Many Requests',
 };
 
 interface JsonResponse {

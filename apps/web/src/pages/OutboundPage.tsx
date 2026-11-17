@@ -5,6 +5,7 @@ import { Feedback } from '../components/Feedback';
 import { LocationSelect } from '../components/LocationSelect';
 import { Empty, ErrorMessage, Panel, Quantity, StateBadge, dateTime } from '../components/ui';
 import { useAction } from '../components/useAction';
+import { useCan } from '../auth/session';
 
 type Transport = 'none' | 'movement' | 'transport-order';
 
@@ -53,6 +54,7 @@ function CreateOrder() {
 }
 
 export function OutboundPage() {
+  const can = useCan();
   const [selected, setSelected] = useState<string | null>(null);
   const [transport, setTransport] = useState<Transport>('none');
   const orders = useQuery({ queryKey: ['outbound', 'orders'], queryFn: () => unwrap(api.GET('/v1/outbound-orders', { params: { query: { limit: 200 } } })) });
@@ -82,7 +84,7 @@ export function OutboundPage() {
     <>
       <h1>Auslagerung</h1>
       <ErrorMessage error={orders.error} />
-      <CreateOrder />
+      {can('leitstand') && <CreateOrder />}
       <Panel title="Aufträge (neueste zuerst)">
         {orders.data?.items.length ? (
           <div className="table-wrap">
@@ -110,7 +112,7 @@ export function OutboundPage() {
         <Panel
           title={`Auftrag ${order.orderId}`}
           actions={
-            !closed && (
+            !closed && can('leitstand') && (
               <div className="row">
                 <select value={transport} onChange={(e) => setTransport(e.target.value as Transport)} aria-label="Transport">
                   <option value="none">ohne Transport</option>
@@ -162,7 +164,7 @@ export function OutboundPage() {
                       <td><StateBadge state={p.state} /></td>
                       <td className="muted">{p.movementNumber ?? p.transportOrderNumber ?? p.transportNote ?? '–'}</td>
                       <td>
-                        {p.state === 'OPEN' && (
+                        {p.state === 'OPEN' && can('lager', 'leitstand') && (
                           <div className="row">
                             <button onClick={() => confirm.run({ pickId: p.id, unit: p.quantity.unit })}>Quittieren</button>
                             <button className="secondary" onClick={() => confirm.run({ pickId: p.id, amount: '0', unit: p.quantity.unit })}>Fehlmenge</button>

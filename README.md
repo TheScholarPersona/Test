@@ -18,6 +18,7 @@ Voraussetzungen: Node.js ≥ 22.17, pnpm 10 (`corepack enable`), Docker mit Comp
 
 ```bash
 pnpm install
+pnpm env:init          # .env mit Zufallspasswörtern anlegen (einmalig)
 pnpm verify            # Build, Typprüfung, Architekturregeln, Unit-Tests
 pnpm test:integration  # Integrationstests mit PostgreSQL und Mosquitto in Containern
 pnpm stack:up          # komplette Umgebung starten
@@ -29,11 +30,12 @@ Nach `pnpm stack:up`:
 
 | Dienst | Adresse |
 |---|---|
-| API | http://localhost:3000 – `GET /health`, `GET /openapi.json` |
-| Node-RED | http://localhost:1880 – Editor und Szenario-Endpunkte `/test/scenarios` |
-| MQTT | `mqtt://localhost:1883` – z. B. `mosquitto_sub -t 'wms/#' -v` |
-| PostgreSQL | `postgresql://wms:wms@localhost:5432/wms` |
+| Oberfläche | http://localhost:3000/ui/ – Benutzer `admin`, Passwort `WMS_ADMIN_PASSWORD` aus der `.env` |
+| API | http://localhost:3000 – `GET /health`, `GET /openapi.json`; sonst Sitzung oder Service-Token |
+| Node-RED | http://localhost:1880 – Editor: `admin` / `WMS_NODE_RED_ADMIN_PASSWORD`; `/test/scenarios`: `wms` / `WMS_NODE_RED_HTTP_PASSWORD` |
+| MQTT | `mqtts://localhost:8883` – nur TLS mit Benutzer und Passwort |
+| PostgreSQL | `postgresql://wms:<WMS_POSTGRES_PASSWORD>@localhost:5432/wms` |
 
-Die Compose-Umgebung ist nur für Entwicklung und Tests gedacht (Testprofil, keine Anmeldung an MQTT und Node-RED).
+Die Compose-Umgebung läuft im Testprofil. Alle Zugänge sind angemeldet; Details und Rollen: [docs/entwicklung.md#absicherung](docs/entwicklung.md#absicherung).
 
 Weitere Details: [docs/entwicklung.md](docs/entwicklung.md).

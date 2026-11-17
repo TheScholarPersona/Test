@@ -10,6 +10,7 @@ import { Migration20261117100000_transport_order } from './Migration202611171000
 import { Migration20261117200000_flow } from './Migration20261117200000_flow.js';
 import { Migration20261117300000_stock } from './Migration20261117300000_stock.js';
 import { Migration20261117400000_outbound } from './Migration20261117400000_outbound.js';
+import { Migration20261117500000_auth } from './Migration20261117500000_auth.js';
 
 /**
  * Registrierte Migrationen in Ausführungsreihenfolge.
@@ -28,4 +29,5 @@ export const migrations: MigrationObject[] = [
   { name: Migration20261117200000_flow.name, class: Migration20261117200000_flow },
   { name: Migration20261117300000_stock.name, class: Migration20261117300000_stock },
   { name: Migration20261117400000_outbound.name, class: Migration20261117400000_outbound },
+  { name: Migration20261117500000_auth.name, class: Migration20261117500000_auth },
 ];

@@ -4,6 +4,7 @@ import { api, unwrap } from '../api/client';
 import { Feedback } from '../components/Feedback';
 import { Empty, ErrorMessage, Panel, StateBadge, time } from '../components/ui';
 import { useAction } from '../components/useAction';
+import { useCan } from '../auth/session';
 
 type DeviceEventType = 'request' | 'arrived' | 'location-status' | 'error';
 
@@ -58,6 +59,7 @@ function DeviceEventForm() {
 }
 
 export function FlowPage() {
+  const can = useCan();
   const [open, setOpen] = useState<string | null>(null);
   const routes = useQuery({ queryKey: ['flow', 'routes'], queryFn: () => unwrap(api.GET('/v1/flow/routes')) });
   const actions = useQuery({ queryKey: ['flow', 'actions'], queryFn: () => unwrap(api.GET('/v1/flow/actions')) });
@@ -66,7 +68,7 @@ export function FlowPage() {
     <>
       <h1>Materialfluss</h1>
       <ErrorMessage error={routes.error ?? actions.error ?? decisions.error} />
-      <DeviceEventForm />
+      {can('leitstand', 'anlage') && <DeviceEventForm />}
       <Panel title="Entscheidungen (neueste zuerst)">
         {decisions.data?.items.length ? (
           <div className="table-wrap">

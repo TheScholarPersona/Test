@@ -5,6 +5,7 @@ import { Feedback } from '../components/Feedback';
 import { LocationSelect, UnitTypeSelect } from '../components/LocationSelect';
 import { Empty, ErrorMessage, Panel, Quantity, StateBadge, dateTime } from '../components/ui';
 import { useAction } from '../components/useAction';
+import { useCan } from '../auth/session';
 
 function CreateOrder() {
   const [orderId, setOrderId] = useState('');
@@ -89,6 +90,7 @@ function CaptureForm({ orderId, defaultSku }: { orderId: string; defaultSku: str
 }
 
 export function ReceivingPage() {
+  const can = useCan();
   const [selected, setSelected] = useState<string | null>(null);
   const orders = useQuery({ queryKey: ['receiving', 'orders'], queryFn: () => unwrap(api.GET('/v1/receiving-orders', { params: { query: { limit: 200 } } })) });
   const order = orders.data?.items.find((o) => o.orderId === selected);
@@ -104,7 +106,7 @@ export function ReceivingPage() {
     <>
       <h1>Wareneingang</h1>
       <ErrorMessage error={orders.error} />
-      <CreateOrder />
+      {can('leitstand') && <CreateOrder />}
       <Panel title="Aufträge (neueste zuerst)">
         {orders.data?.items.length ? (
           <div className="table-wrap">
@@ -131,10 +133,12 @@ export function ReceivingPage() {
         <Panel
           title={`Auftrag ${order.orderId}`}
           actions={
-            <div className="row">
-              <button className="secondary" onClick={() => close.run({ kind: 'complete' })}>Abschließen</button>
-              <button className="danger" onClick={() => close.run({ kind: 'cancel' })}>Stornieren</button>
-            </div>
+            can('leitstand') && (
+              <div className="row">
+                <button className="secondary" onClick={() => close.run({ kind: 'complete' })}>Abschließen</button>
+                <button className="danger" onClick={() => close.run({ kind: 'cancel' })}>Stornieren</button>
+              </div>
+            )
           }
         >
           <Feedback message={close.message} />
@@ -155,8 +159,8 @@ export function ReceivingPage() {
               </tbody>
             </table>
           </div>
-          <h2 style={{ marginTop: 16 }}>Ware erfassen</h2>
-          <CaptureForm key={order.orderId} orderId={order.orderId} defaultSku={order.positions.find((p) => p.sku)?.sku ?? ''} />
+          {can('lager', 'leitstand') && <h2 style={{ marginTop: 16 }}>Ware erfassen</h2>}
+          {can('lager', 'leitstand') && <CaptureForm key={order.orderId} orderId={order.orderId} defaultSku={order.positions.find((p) => p.sku)?.sku ?? ''} />}
         </Panel>
       )}
     </>

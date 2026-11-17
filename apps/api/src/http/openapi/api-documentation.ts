@@ -17,6 +17,8 @@ const ERROR_DESCRIPTIONS: Record<number, string> = {
   400: 'Ungültige Anfrage (Feldprüfung)',
   404: 'Nicht gefunden',
   409: 'Konflikt oder verletzte Geschäftsregel',
+  401: 'Nicht angemeldet (UNAUTHENTICATED)',
+  403: 'Rolle reicht nicht (FORBIDDEN)',
 };
 
 type ZodObjectLike = NonNullable<NonNullable<RouteConfig['request']>['params']>;
@@ -33,6 +35,8 @@ export interface RouteDoc {
   body?: z.ZodType;
   response: { status: number; description: string; schema?: z.ZodType };
   errors?: (400 | 404 | 409)[];
+  /** Ohne Anmeldung erreichbar (z. B. Login). Sonst: Bearer-Token oder Sitzungs-Cookie, Antworten 401/403. */
+  public?: boolean;
 }
 
 /**
@@ -45,7 +49,19 @@ export interface RouteDoc {
 export class ApiDocumentation {
   private readonly registry = new OpenAPIRegistry();
 
-  constructor(@Inject(APP_CONFIG) private readonly config: AppConfig) {}
+  constructor(@Inject(APP_CONFIG) private readonly config: AppConfig) {
+    this.registry.registerComponent('securitySchemes', 'bearer', {
+      type: 'http',
+      scheme: 'bearer',
+      description: 'Service-Token (Maschinen, z. B. Node-RED) oder Sitzungstoken',
+    });
+    this.registry.registerComponent('securitySchemes', 'session', {
+      type: 'apiKey',
+      in: 'cookie',
+      name: 'wms_session',
+      description: 'Sitzungs-Cookie nach POST /v1/auth/login (Oberfläche)',
+    });
+  }
 
   registerPath(route: RouteConfig): void {
     this.registry.registerPath(route);
@@ -57,14 +73,23 @@ export class ApiDocumentation {
         ? { description: doc.response.description, content: { 'application/json': { schema: doc.response.schema } } }
         : { description: doc.response.description },
     };
-    for (const status of doc.errors ?? []) {
+    const errors: number[] = [...(doc.errors ?? []), ...(doc.public ? [] : [401, 403])];
+    for (const status of errors) {
       responses[status] = { description: ERROR_DESCRIPTIONS[status] ?? 'Fehler', content: { 'application/json': { schema: ApiErrorSchema } } };
     }
     const request: NonNullable<RouteConfig['request']> = {};
     if (doc.params) request.params = doc.params;
     if (doc.query) request.query = doc.query;
     if (doc.body) request.body = { content: { 'application/json': { schema: doc.body } } };
-    this.registry.registerPath({ method: doc.method, path: doc.path, summary: doc.summary, tags: doc.tags, request, responses });
+    this.registry.registerPath({
+      method: doc.method,
+      path: doc.path,
+      summary: doc.summary,
+      tags: doc.tags,
+      request,
+      responses,
+      security: doc.public ? [] : [{ bearer: [] }, { session: [] }],
+    });
   }
 
   generate(): ReturnType<OpenApiGeneratorV31['generateDocument']> {

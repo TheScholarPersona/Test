@@ -3,6 +3,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router';
 import { App } from './App';
+import { SessionProvider } from './auth/session';
 import { LiveEventsProvider } from './live/events';
 import './styles.css';
 
@@ -13,11 +14,13 @@ const queryClient = new QueryClient({
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <LiveEventsProvider>
-        <BrowserRouter basename="/ui">
-          <App />
-        </BrowserRouter>
-      </LiveEventsProvider>
+      <SessionProvider>
+        <LiveEventsProvider>
+          <BrowserRouter basename="/ui">
+            <App />
+          </BrowserRouter>
+        </LiveEventsProvider>
+      </SessionProvider>
     </QueryClientProvider>
   </StrictMode>,
 );

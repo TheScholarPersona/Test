@@ -49,6 +49,8 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Geheimnisse für die Testumgebung erzeugen (.env)
+        run: pnpm env:init
       - name: Umgebung starten (PostgreSQL, Mosquitto, API, Node-RED)
         run: docker compose up -d --build --wait
       - name: Szenarien ausführen

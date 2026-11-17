@@ -13,10 +13,26 @@ if (existsSync(new URL('../.env', import.meta.url))) process.loadEnvFile(new URL
 const base = (process.env.WMS_API_URL ?? `http://localhost:${process.env.WMS_API_PORT ?? '3000'}`).replace(/\/$/, '');
 const inDays = (d) => new Date(Date.now() + d * 86_400_000).toISOString().slice(0, 10);
 
+// Als admin anmelden (Passwort aus der .env, siehe `pnpm env:init`); die Sitzung läuft über das Cookie.
+if (!process.env.WMS_ADMIN_PASSWORD) {
+  console.error('WMS_ADMIN_PASSWORD fehlt – pnpm env:init ausführen');
+  process.exit(1);
+}
+const login = await fetch(`${base}/v1/auth/login`, {
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({ username: 'admin', password: process.env.WMS_ADMIN_PASSWORD }),
+});
+if (login.status !== 200) {
+  console.error(`Anmeldung als admin fehlgeschlagen: HTTP ${login.status} ${await login.text()}`);
+  process.exit(1);
+}
+const cookie = (login.headers.get('set-cookie') ?? '').split(';')[0];
+
 let created = 0;
 let skipped = 0;
 async function call(method, path, body, { allowConflict = true } = {}) {
-  const res = await fetch(`${base}${path}`, { method, headers: body ? { 'content-type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined });
+  const res = await fetch(`${base}${path}`, { method, headers: { cookie, ...(body ? { 'content-type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined });
   const text = await res.text();
   const data = text ? JSON.parse(text) : null;
   if (res.status === 409 && allowConflict) {

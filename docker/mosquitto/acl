@@ -1,0 +1,14 @@
+# Rechte je MQTT-Benutzer (alles andere ist verboten).
+
+# WMS-API: veröffentlicht Ereignisse und liest sie für die Live-Anzeige der Oberfläche
+user wms-api
+topic readwrite wms/#
+
+# Node-RED: liest WMS-Ereignisse; eigene Topics für Anlagen-Adapter unter plant/
+user node-red
+topic read wms/#
+topic readwrite plant/#
+
+# Healthcheck des Brokers
+user health
+topic write health/check

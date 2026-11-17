@@ -6,7 +6,7 @@ import type { INestApplication } from '@nestjs/common';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { databaseOptions } from '../../src/database.js';
 import { runMigrations } from '../../src/infrastructure/database/migrate.js';
-import { configFor, httpClient, startApp } from './support/app.js';
+import { authHeaders, configFor, httpClient, startApp } from './support/app.js';
 import { startEnvironment, type TestEnvironment } from './support/environment.js';
 
 /** OpenAPI-Beschreibung für die Oberfläche (apps/web erzeugt daraus seine Typen). */
@@ -17,7 +17,7 @@ async function readEvents(url: string, until: (events: { event: string; data: an
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   const events: { event: string; data: any }[] = [];
-  const response = await fetch(url, { headers: { accept: 'text/event-stream' }, signal: controller.signal });
+  const response = await fetch(url, { headers: { ...authHeaders, accept: 'text/event-stream' }, signal: controller.signal });
   expect(response.headers.get('content-type')).toContain('text/event-stream');
   const reader = response.body!.getReader();
   const decoder = new TextDecoder();

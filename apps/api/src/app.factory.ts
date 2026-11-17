@@ -5,6 +5,7 @@ import { type INestApplication, Logger, type LogLevel } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module.js';
+import { requestContext } from './common/request-context.js';
 import type { AppConfig } from './config.js';
 
 export interface CreateAppOptions {
@@ -42,6 +43,8 @@ export async function createApp(config: AppConfig, options: CreateAppOptions = {
     logger: options.logger ?? ['log', 'warn', 'error'],
   });
   app.enableShutdownHooks();
+  // Je Anfrage ein eigener Kontext (Akteur für die Ereignisse).
+  app.use((_req: unknown, _res: unknown, next: () => void) => requestContext.run(next));
   if (config.webDistDir) serveWeb(app, config.webDistDir);
   return app;
 }

@@ -4,6 +4,7 @@ import { api, unwrap } from '../api/client';
 import { Feedback } from '../components/Feedback';
 import { Empty, ErrorMessage, Panel } from '../components/ui';
 import { useAction } from '../components/useAction';
+import { useCan } from '../auth/session';
 
 type Lock = { own: boolean; blocked: boolean; blockedBy: { kind: string; name: string } | null };
 
@@ -17,6 +18,7 @@ function LockBadge({ lock, label }: { lock: Lock; label: string }) {
 }
 
 export function LocationsPage() {
+  const canLock = useCan()('leitstand');
   const [group, setGroup] = useState('');
   const groups = useQuery({ queryKey: ['locations', 'groups'], queryFn: () => unwrap(api.GET('/v1/location-groups')) });
   const locations = useQuery({
@@ -59,9 +61,9 @@ export function LocationsPage() {
                     <td><LockBadge lock={g.locks.inbound as Lock} label="Ein" /></td>
                     <td><LockBadge lock={g.locks.outbound as Lock} label="Aus" /></td>
                     <td className="row">
-                      <button className="secondary" onClick={() => lockGroup.run({ name: g.name, direction: 'inbound', value: !(g.locks.inbound as Lock).own })}>
+                      {canLock && <button className="secondary" onClick={() => lockGroup.run({ name: g.name, direction: 'inbound', value: !(g.locks.inbound as Lock).own })}>
                         {(g.locks.inbound as Lock).own ? 'Einlagern frei' : 'Einlagern sperren'}
-                      </button>
+                      </button>}
                     </td>
                   </tr>
                 ))}
@@ -96,12 +98,14 @@ export function LocationsPage() {
                       <td className="num">{unitsAt.get(l.id) ?? 0} / {l.capacity.maxTransportUnits}</td>
                       <td className="row"><LockBadge lock={inbound} label="Ein" /> <LockBadge lock={outbound} label="Aus" /></td>
                       <td className="row">
+                        {canLock && <>
                         <button className="secondary" disabled={lock.pending} onClick={() => lock.run({ id: l.id, direction: 'inbound', value: !inbound.own })}>
                           {inbound.own ? 'Ein frei' : 'Ein sperren'}
                         </button>
                         <button className="secondary" disabled={lock.pending} onClick={() => lock.run({ id: l.id, direction: 'outbound', value: !outbound.own })}>
                           {outbound.own ? 'Aus frei' : 'Aus sperren'}
                         </button>
+                        </>}
                       </td>
                     </tr>
                   );

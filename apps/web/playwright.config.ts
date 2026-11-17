@@ -1,20 +1,15 @@
-import { existsSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { defineConfig, devices } from '@playwright/test';
+import { ADMIN_STATE, apiUrl } from './e2e/env';
 
-// Ports aus der .env im Projektverzeichnis (dieselbe Datei wie für docker compose).
-const envFile = fileURLToPath(new URL('../../.env', import.meta.url));
-if (existsSync(envFile)) process.loadEnvFile(envFile);
-const api = process.env['WMS_API_URL'] ?? `http://localhost:${process.env['WMS_API_PORT'] ?? '3000'}`;
-
-/** Browser-Tests der Oberfläche gegen die laufende Umgebung (`pnpm stack:up`). */
+/** Browser-Tests der Oberfläche gegen die laufende Umgebung (`pnpm stack:up`), angemeldet als admin. */
 export default defineConfig({
   testDir: 'e2e',
+  globalSetup: './e2e/global-setup.ts',
   fullyParallel: false,
   workers: 1,
   retries: 0,
   reporter: [['list'], ['junit', { outputFile: '../../reports/web-e2e-junit.xml' }]],
-  use: { baseURL: `${api}/ui/`, trace: 'off', locale: 'de-DE' },
+  use: { baseURL: `${apiUrl}/ui/`, trace: 'off', locale: 'de-DE', storageState: ADMIN_STATE },
   projects: [
     { name: 'leitstand', use: { ...devices['Desktop Chrome'] }, testIgnore: /scanner/ },
     { name: 'scanner', use: { ...devices['Pixel 7'] }, testMatch: /scanner/ },

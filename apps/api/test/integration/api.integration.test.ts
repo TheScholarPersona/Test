@@ -10,6 +10,7 @@ import type { EventPublisher } from '../../src/infrastructure/messaging/event-pu
 import { OutboxMessage } from '../../src/infrastructure/outbox/outbox-message.entity.js';
 import { OutboxRelayService } from '../../src/infrastructure/outbox/outbox-relay.service.js';
 import { OutboxService } from '../../src/infrastructure/outbox/outbox.service.js';
+import { authHeaders, TEST_TOKEN } from './support/app.js';
 import { MessageCollector, startEnvironment, type TestEnvironment } from './support/environment.js';
 
 let env: TestEnvironment;
@@ -27,6 +28,7 @@ function configFor(overrides: Record<string, string>): AppConfig {
     DATABASE_URL: env.databaseUrl,
     MQTT_URL: env.mqttUrl,
     OUTBOX_POLL_INTERVAL_MS: '100',
+    AUTH_SERVICE_TOKENS: `tests:admin:${TEST_TOKEN}`,
     ...overrides,
   });
 }
@@ -39,7 +41,7 @@ async function startApp(config: AppConfig): Promise<{ app: INestApplication; bas
 
 const json = (body: unknown): RequestInit => ({
   method: 'POST',
-  headers: { 'content-type': 'application/json' },
+  headers: { ...authHeaders, 'content-type': 'application/json' },
   body: JSON.stringify(body),
 });
 

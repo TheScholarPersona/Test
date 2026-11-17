@@ -63,8 +63,9 @@ export class Fixtures {
 }
 
 export const test = base.extend<{ fx: Fixtures }>({
-  fx: async ({ request }, use) => {
-    const fx = new Fixtures(request);
+  // page.request teilt die Cookies (admin-Sitzung) mit dem Browser-Kontext.
+  fx: async ({ page }, use) => {
+    const fx = new Fixtures(page.request);
     await use(fx);
     await fx.cleanup();
   },
