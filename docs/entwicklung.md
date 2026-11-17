@@ -4,6 +4,7 @@
 
 ```
 apps/api/                  WMS-Kern (NestJS)
+apps/web/                  Oberfläche: Leitstand und Scanner (React, Vite), ausgeliefert von der API unter /ui/
   src/config.ts            Konfiguration aus Umgebungsvariablen (Zod-geprüft)
   src/app.module.ts        bindet Infrastruktur und Fachmodule ein
   src/http/                Validierung (ZodValidationPipe), OpenAPI-Dokumentation
@@ -46,6 +47,9 @@ docker/                    Konfiguration für Hilfsdienste (Mosquitto)
 | `pnpm lint:deps` | Architekturregeln (dependency-cruiser, `.dependency-cruiser.cjs`) |
 | `pnpm test:integration` | Integrationstests; braucht Docker |
 | `pnpm stack:up` / `pnpm stack:down` | Umgebung mit API, PostgreSQL, Mosquitto, Node-RED |
+| `pnpm demo:data` | Demo-Daten über die API anlegen (Lager, Bestand, Aufträge, Route; wiederholbar) |
+| `pnpm test:web` | Oberfläche im Browser testen (Playwright) gegen die laufende Umgebung |
+| `pnpm web:dev` | Entwicklungsserver der Oberfläche (Vite) gegen die laufende API |
 | `pnpm test:e2e` | Node-RED-Szenarien gegen die laufende Umgebung (`NODE_RED_URL`, Standard `http://localhost:1880`) |
 | `pnpm --filter @wms/api db:migrate` | offene Migrationen ausführen (nach `pnpm build`) |
 | `pnpm --filter @wms/api db:migration:create` | neue Migration aus Entity-Änderungen erzeugen |
@@ -545,6 +549,44 @@ Palette „WMS“ in Node-RED, siehe auch `packages/node-red-nodes/README.md`:
 | Szenario: nodes-selftest | Testframework | Szenario aus Test-Nodes statt Schrittliste |
 
 Szenario `node-red-examples` prüft die Beispiel-Flows; Schritt-Szenarien erreichen Endpunkte dieses Node-RED mit `service: 'node-red'` (eigene Header über `headers`).
+
+## Oberfläche (`apps/web`)
+
+**Aufrufen:** http://localhost:3000/ui/ (Port `WMS_API_PORT`). Die API liefert die gebaute Oberfläche selbst aus (`WEB_DIST_DIR`, im Image `/app/web`); `/` leitet dorthin weiter. Mit `pnpm demo:data` gibt es gleich etwas zu sehen.
+
+| Seite | Inhalt |
+|---|---|
+| Übersicht | Kennzahlen, Systemzustand (API, Datenbank, MQTT, Live-Verbindung), letzte Ereignisse |
+| Lagerplätze | Gruppen und Plätze mit Belegung, wirksame Sperren (eigene oder geerbte), Sperren setzen/aufheben |
+| Bestand | Summen je Produkt oder Platz, Posten mit verfügbarer Menge, Buchungsjournal |
+| Wareneingang | Avis anlegen, Positionen, Ware erfassen, abschließen/stornieren |
+| Auslagerung | Auftrag anlegen, zuteilen (optional mit Bewegung/Transportauftrag), Picks quittieren oder Fehlmenge melden |
+| Transport | offene Transportaufträge und Lagerbewegungen mit den erlaubten Aktionen |
+| Materialfluss | Geräte-Ereignis senden (auch als Probelauf) mit Begründung, Entscheidungen, Routen, Action-Matrix |
+| Ereignisse | Live-Protokoll mit Filter |
+| Scanner | für Handy/Handscanner: TU bewegen, Picks quittieren, Wareneingang; Fokus springt nach jedem Scan zurück |
+
+**Aufbau:** React 19, React Router, TanStack Query, `openapi-fetch`. Die Typen des API-Clients erzeugt `openapi-typescript` aus `apps/web/src/api/openapi.json` (Skript `generate`, läuft vor `dev`, `build`, `typecheck`). Diese Datei ist die Beschreibung der API zum Zeitpunkt des Commits; der Integrationstest `live.integration.test.ts` schlägt fehl, wenn die API davon abweicht – dann mit `UPDATE_OPENAPI=1 pnpm test:integration` neu schreiben. So kann die Oberfläche nicht unbemerkt von der API abweichen.
+
+**Live-Ereignisse:** `GET /v1/events/stream?types=stock.*,…` liefert Ereignisse als Server-Sent Events (Ereignisname `wms`, alle 20 s `ping`). Die API abonniert dafür `wms/#` beim Broker, nicht ihr eigenes Outbox-Relay – so sehen Clients jeder API-Instanz alle Ereignisse. Die Oberfläche lädt bei jedem Ereignis die betroffenen Ansichten neu (`src/live/events.tsx`).
+
+**Entwickeln:** Umgebung starten, dann `pnpm web:dev` (Vite auf `WMS_WEB_DEV_PORT`, Standard 5174, Aufrufe an die API werden weitergeleitet): http://localhost:5174/ui/.
+
+**Tests:** `pnpm --filter @wms/web test` (Hilfsfunktionen), `pnpm test:web` (Playwright: Leitstand am Desktop, Scanner im Handyformat; Testdaten mit eigenem Präfix, danach aufgeräumt). Der Test „Auslagerauftrag“ braucht einen aktiven Auslager-Regelsatz und wird sonst übersprungen.
+
+Noch nicht enthalten: Anmeldung und Rollen, Bearbeiten von Stammdaten (Plätze, Produkte, Regelsätze) in der Oberfläche, Druck (Etiketten, Picklisten).
+
+## Ports der lokalen Umgebung
+
+Die Compose-Umgebung belegt auf dem Rechner `3000` (API), `1880` (Node-RED), `5432` (PostgreSQL) und `1883` (MQTT), jeweils nur auf `127.0.0.1` (es gibt noch keine Anmeldung). Ist ein Port belegt, z. B. durch eine andere Node-RED-Instanz:
+
+```bash
+cp .env.example .env     # dann z. B. WMS_NODE_RED_PORT=1881 eintragen
+pnpm stack:up
+pnpm test:e2e            # liest dieselbe .env (oder NODE_RED_URL setzen)
+```
+
+Innerhalb der Umgebung sprechen die Dienste über ihre Containernamen und festen Ports miteinander; die Einstellung betrifft nur den Zugriff vom Rechner aus. Für die API außerhalb von Docker (nächster Abschnitt) die geänderten Ports in `DATABASE_URL` und `MQTT_URL` verwenden.
 
 ## API außerhalb von Docker gegen die Compose-Umgebung
 

@@ -3,6 +3,7 @@ import { type DynamicModule, Global, Module } from '@nestjs/common';
 import { APP_CONFIG, type AppConfig } from './config.js';
 import { HttpModule } from './http/http.module.js';
 import { databaseOptions } from './database.js';
+import { LiveModule } from './infrastructure/live/live.module.js';
 import { OutboxModule } from './infrastructure/outbox/outbox.module.js';
 import { HealthModule } from './modules/health/index.js';
 import { InventoryModule } from './modules/inventory/index.js';
@@ -43,6 +44,7 @@ export class AppModule {
         MikroOrmModule.forRoot(databaseOptions(config)),
         HttpModule,
         OutboxModule,
+        LiveModule,
         HealthModule,
         LayoutModule,
         TransportModule,
