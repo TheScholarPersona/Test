@@ -24,7 +24,7 @@
       "wms-test-result": "nodes/wms-test-result.js"
     }
   },
-  "files": ["lib", "nodes", "examples"],
+  "files": ["lib", "nodes"],
   "scripts": {
     "typecheck": "node --check lib/*.js && for f in nodes/*.js; do node --check \"$f\" || exit 1; done",
     "test": "vitest run"
