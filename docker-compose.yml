@@ -1,0 +1,88 @@
+# Lokale Entwicklungs- und Testumgebung – NICHT für den Betrieb.
+# Die API läuft im Profil "test" (Test-Endpunkte aktiv), Mosquitto und
+# Node-RED ohne Anmeldung.
+#
+#   pnpm stack:up     # bauen und starten, wartet auf Healthchecks
+#   pnpm test:e2e     # Node-RED-Szenarien ausführen
+#   pnpm stack:down   # stoppen und Daten löschen
+#
+# Hinter einem TLS-Proxy mit eigener Zertifizierungsstelle das API-Image
+# vorher selbst bauen und Compose ohne Build starten:
+#   docker build --secret id=extra_ca,src=/pfad/ca.crt -f apps/api/Dockerfile -t wms-api:dev .
+#   docker compose up -d --wait --no-build
+name: wms
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: wms
+      POSTGRES_PASSWORD: wms
+      POSTGRES_DB: wms
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wms -d wms"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    volumes:
+      - ./docker/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    ports:
+      - "1883:1883"
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_pub -h localhost -t health/check -m ok -q 0"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    image: wms-api:dev
+    environment:
+      APP_PROFILE: ${APP_PROFILE:-test}
+      DATABASE_URL: postgresql://wms:wms@postgres:5432/wms
+      MQTT_URL: mqtt://mosquitto:1883
+      DB_MIGRATE_ON_START: "true"
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mosquitto:
+        condition: service_healthy
+
+  node-red:
+    image: nodered/node-red:5.0.9
+    environment:
+      TZ: Europe/Berlin
+      WMS_API_URL: ${WMS_API_URL:-http://api:3000}
+      MQTT_HOST: mosquitto
+      MQTT_PORT: "1883"
+      SCENARIO_EVENT_TIMEOUT_MS: "10000"
+      SIMULATOR_ENABLED: ${SIMULATOR_ENABLED:-true}
+    ports:
+      - "1880:1880"
+    volumes:
+      - node-red-data:/data
+      - ./flows/node-red/flows.json:/data/flows.json:ro
+      # Eigene WMS-Nodes (packages/node-red-nodes) ohne Entwicklungsabhängigkeiten
+      - ./packages/node-red-nodes/package.json:/data/node_modules/@wms/node-red-nodes/package.json:ro
+      - ./packages/node-red-nodes/lib:/data/node_modules/@wms/node-red-nodes/lib:ro
+      - ./packages/node-red-nodes/nodes:/data/node_modules/@wms/node-red-nodes/nodes:ro
+    depends_on:
+      api:
+        condition: service_healthy
+      mosquitto:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
+  node-red-data:

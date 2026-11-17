@@ -1,0 +1,15 @@
+node_modules/
+dist/
+coverage/
+reports/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+
+# Node-RED Laufzeitdateien (Flows selbst sind versioniert)
+flows/node-red/.config.*
+flows/node-red/.flows*.backup
+flows/node-red/flows_cred.json
+flows/node-red/node_modules/
+flows/node-red/lib/

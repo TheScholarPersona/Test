@@ -1,0 +1,8 @@
+{
+  "$comment": "Anlagensimulator: Fahrzeiten je Zielplatz (plcCode) und welche Plätze 'arrived' statt 'request' melden. Änderungen: danach node flows/scripts/build-flows.mjs.",
+  "deviceId": "SIM",
+  "defaultTravelMs": 200,
+  "travelMs": {},
+  "arrivedPatterns": ["(^|-)HRL\\d*$"],
+  "logSize": 200
+}

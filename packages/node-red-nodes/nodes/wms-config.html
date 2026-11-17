@@ -1,0 +1,53 @@
+<!-- Generiert von scripts/build-html.mjs – dort ändern. -->
+<script type="text/javascript">
+  RED.nodes.registerType('wms-config', {
+    category: 'config',
+    color: '#7FB7DF',
+    defaults: {
+      "name": {
+            "value": ""
+      },
+      "url": {
+            "value": "${WMS_API_URL}",
+            "required": true
+      },
+      "broker": {
+            "value": "",
+            "type": "mqtt-broker",
+            "required": false
+      },
+      "prefix": {
+            "value": "wms"
+      },
+      "timeout": {
+            "value": 10000
+      }
+    },
+    inputs: 0,
+    outputs: 0,
+    
+    icon: 'bridge.svg',
+    paletteLabel: 'WMS-Verbindung',
+    label: function () {
+      return this.name || 'WMS ' + this.url;
+    },
+    oneditprepare: function () {
+    },
+    oneditsave: function () {
+    },
+  });
+</script>
+
+<script type="text/html" data-template-name="wms-config">
+    <div class="form-row"><label for="node-config-input-url">URL</label><input type="text" id="node-config-input-url" placeholder="${WMS_API_URL} oder http://api:3000"></div>
+    <div class="form-row"><label for="node-config-input-broker">MQTT-Broker</label><input type="text" id="node-config-input-broker"></div>
+    <div class="form-row"><label for="node-config-input-prefix">Topic-Präfix</label><input type="text" id="node-config-input-prefix" placeholder="wms"></div>
+    <div class="form-row"><label for="node-config-input-timeout">Timeout (ms)</label><input type="text" id="node-config-input-timeout" placeholder="10000"></div>
+    <div class="form-row"><label for="node-config-input-name">Name</label><input type="text" id="node-config-input-name"></div>
+</script>
+
+<script type="text/html" data-help-name="wms-config">
+<p>Verbindung zum WMS: REST-API und (optional) MQTT-Broker für Ereignisse.</p>
+<p>Die URL darf Umgebungsvariablen enthalten, z. B. <code>${WMS_API_URL}</code>. Ereignisse kommen über den gewählten
+MQTT-Broker unter <code>&lt;Präfix&gt;/#</code>; doppelt gelieferte Ereignisse (gleiche <code>id</code>) werden verworfen.</p>
+</script>

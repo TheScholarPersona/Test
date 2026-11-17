@@ -1,0 +1,67 @@
+<!-- Generiert von scripts/build-html.mjs – dort ändern. -->
+<script type="text/javascript">
+  RED.nodes.registerType('wms-move-tu', {
+    category: 'WMS',
+    color: '#7FB7DF',
+    defaults: {
+      "name": {
+            "value": ""
+      },
+      "server": {
+            "value": "",
+            "type": "wms-config",
+            "required": true
+      },
+      "errorOutput": {
+            "value": false
+      },
+      "outputs": {
+            "value": 1
+      },
+      "barcode": {
+            "value": "msg.payload.barcode"
+      },
+      "locationKind": {
+            "value": "erpCode"
+      },
+      "location": {
+            "value": "msg.payload.location"
+      },
+      "mode": {
+            "value": "checked"
+      }
+    },
+    inputs: 1,
+    outputs: 1,
+    outputLabels: ["Erfolg","Fehler"],
+    icon: 'arrow-in.svg',
+    paletteLabel: 'TU bewegen',
+    label: function () {
+      return this.name || 'TU bewegen';
+    },
+    oneditprepare: function () {
+    },
+    oneditsave: function () {
+      this.outputs = $('#node-input-errorOutput').is(':checked') ? 2 : 1;
+    },
+  });
+</script>
+
+<script type="text/html" data-template-name="wms-move-tu">
+    <div class="form-row"><label for="node-input-server">Verbindung</label><input type="text" id="node-input-server"></div>
+    <div class="form-row"><label for="node-input-barcode">Barcode</label><input type="text" id="node-input-barcode" placeholder="msg.payload.barcode"></div>
+    <div class="form-row"><label for="node-input-locationKind">Platz über</label><select id="node-input-locationKind"><option value="erpCode">ERP-Code</option><option value="plcCode">Anlagen-Code (plcCode)</option><option value="locationId">Koordinate</option><option value="id">Platz-id</option></select></div>
+    <div class="form-row"><label for="node-input-location">Platz</label><input type="text" id="node-input-location" placeholder="msg.payload.location"></div>
+    <div class="form-row"><label for="node-input-mode">Modus</label><select id="node-input-mode"><option value="checked">geprüft (Regeln durchsetzen)</option><option value="physical">physisch (Tatsache buchen, Verstöße melden)</option></select></div>
+    <div class="form-row"><label for="node-input-errorOutput">Fehlerausgang</label><input type="checkbox" id="node-input-errorOutput" style="width:auto"></div>
+    <div class="form-row"><label for="node-input-name">Name</label><input type="text" id="node-input-name"></div>
+</script>
+
+<script type="text/html" data-help-name="wms-move-tu">
+<p>Bewegt eine TU (samt Stapel) auf einen Platz, z. B. nach einem Scan. Alle Felder: Fester Wert oder <code>msg.…</code> (z. B. <code>msg.payload.barcode</code>).</p>
+<p>Im Modus <i>geprüft</i> lehnt das WMS Regelverletzungen ab (Kapazität, Sperre, Platzierung); im Modus <i>physisch</i> bucht es und meldet sie.</p>
+<h3>Fehler</h3>
+<p>Antwortet das WMS mit einem Fehler (z. B. <code>409 PLACEMENT_REJECTED</code>), steht er in <code>msg.wmsError</code>
+(<code>code</code>, <code>message</code>, <code>statusCode</code>, <code>details</code>). Ohne <i>Fehlerausgang</i> ist er ein
+Node-RED-Fehler, den ein <b>Catch</b>-Node abfängt; mit <i>Fehlerausgang</i> geht die Nachricht an Ausgang 2.</p>
+</script>

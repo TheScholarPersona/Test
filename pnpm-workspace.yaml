@@ -1,0 +1,17 @@
+packages:
+  - apps/*
+  - packages/*
+
+# Installationsskripte nur für ausdrücklich freigegebene Pakete.
+# Diese gehören zu optionalen Testcontainers-Funktionen (SSH) und werden nicht benötigt.
+ignoredBuiltDependencies:
+  - cpu-features
+  - protobufjs
+  - ssh2
+
+# node-red-node-test-helper sucht @node-red/registry direkt neben node-red
+# (npm-Layout). pnpm legt es nur bei @node-red/runtime ab; hier ergänzt.
+packageExtensions:
+  node-red@5.0.9:
+    dependencies:
+      '@node-red/registry': 5.0.9

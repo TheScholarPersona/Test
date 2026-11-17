@@ -1,0 +1,66 @@
+<!-- Generiert von scripts/build-html.mjs – dort ändern. -->
+<script type="text/javascript">
+  RED.nodes.registerType('wms-api', {
+    category: 'WMS',
+    color: '#7FB7DF',
+    defaults: {
+      "name": {
+            "value": ""
+      },
+      "server": {
+            "value": "",
+            "type": "wms-config",
+            "required": true
+      },
+      "errorOutput": {
+            "value": false
+      },
+      "outputs": {
+            "value": 1
+      },
+      "method": {
+            "value": "GET"
+      },
+      "path": {
+            "value": ""
+      },
+      "body": {
+            "value": "msg.payload"
+      }
+    },
+    inputs: 1,
+    outputs: 1,
+    outputLabels: ["Erfolg","Fehler"],
+    icon: 'white-globe.svg',
+    paletteLabel: 'WMS-API',
+    label: function () {
+      return this.name || (this.method || 'GET') + ' ' + (this.path || '');
+    },
+    oneditprepare: function () {
+    },
+    oneditsave: function () {
+      this.outputs = $('#node-input-errorOutput').is(':checked') ? 2 : 1;
+    },
+  });
+</script>
+
+<script type="text/html" data-template-name="wms-api">
+    <div class="form-row"><label for="node-input-server">Verbindung</label><input type="text" id="node-input-server"></div>
+    <div class="form-row"><label for="node-input-method">Methode</label><select id="node-input-method"><option value="GET">GET</option><option value="POST">POST</option><option value="PUT">PUT</option><option value="PATCH">PATCH</option><option value="DELETE">DELETE</option></select></div>
+    <div class="form-row"><label for="node-input-path">Pfad</label><input type="text" id="node-input-path" placeholder="/v1/transport-units/{barcode}"></div>
+    <div class="form-row"><label for="node-input-body">Body</label><input type="text" id="node-input-body" placeholder="msg.payload"></div>
+    <div class="form-row"><label for="node-input-errorOutput">Fehlerausgang</label><input type="checkbox" id="node-input-errorOutput" style="width:auto"></div>
+    <div class="form-row"><label for="node-input-name">Name</label><input type="text" id="node-input-name"></div>
+</script>
+
+<script type="text/html" data-help-name="wms-api">
+<p>Beliebiger Aufruf der WMS-API (siehe <code>/openapi.json</code>).</p>
+<h3>Eingabe</h3><dl class="message-properties">
+<dt class="optional">params <span class="property-type">object</span></dt><dd>Werte für Platzhalter <code>{name}</code> im Pfad (sonst aus <code>msg.payload</code>)</dd>
+<dt class="optional">method, path</dt><dd>überschreiben die Einstellungen</dd></dl>
+<h3>Ausgabe</h3><dl class="message-properties"><dt>payload</dt><dd>Antwort der API</dd><dt>statusCode</dt><dd>HTTP-Status</dd></dl>
+<h3>Fehler</h3>
+<p>Antwortet das WMS mit einem Fehler (z. B. <code>409 PLACEMENT_REJECTED</code>), steht er in <code>msg.wmsError</code>
+(<code>code</code>, <code>message</code>, <code>statusCode</code>, <code>details</code>). Ohne <i>Fehlerausgang</i> ist er ein
+Node-RED-Fehler, den ein <b>Catch</b>-Node abfängt; mit <i>Fehlerausgang</i> geht die Nachricht an Ausgang 2.</p>
+</script>

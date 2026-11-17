@@ -1,0 +1,64 @@
+<!-- Generiert von scripts/build-html.mjs – dort ändern. -->
+<script type="text/javascript">
+  RED.nodes.registerType('wms-event', {
+    category: 'WMS',
+    color: '#7FB7DF',
+    defaults: {
+      "name": {
+            "value": ""
+      },
+      "server": {
+            "value": "",
+            "type": "wms-config",
+            "required": true
+      },
+      "types": {
+            "value": "*"
+      },
+      "conditions": {
+            "value": []
+      }
+    },
+    inputs: 0,
+    outputs: 1,
+    
+    icon: 'bridge.svg',
+    paletteLabel: 'WMS-Ereignis',
+    label: function () {
+      return this.name || 'Ereignis ' + (this.types || '*');
+    },
+    oneditprepare: function () {
+      const list = $('#node-input-conditions-list').css('min-height', '120px').editableList({
+        addItem: function (container, i, item) {
+          $('<input type="text" class="col-path" placeholder="payload.barcode" style="width:45%; margin-right:4px">').val(item.path || '').appendTo(container);
+          $('<input type="text" class="col-value" placeholder="Wert" style="width:45%; margin-right:4px">').val(item.value || '').appendTo(container);
+        },
+        removable: true,
+        sortable: true,
+      });
+      (this.conditions || []).forEach((item) => list.editableList('addItem', item));
+    },
+    oneditsave: function () {
+      const items = [];
+      $('#node-input-conditions-list').editableList('items').each(function () {
+        const item = {};
+        item.path = $(this).find('.col-path').val(); item.value = $(this).find('.col-value').val();
+        if (item.path) items.push(item);
+      });
+      this.conditions = items;
+    },
+  });
+</script>
+
+<script type="text/html" data-template-name="wms-event">
+    <div class="form-row"><label for="node-input-server">Verbindung</label><input type="text" id="node-input-server"></div>
+    <div class="form-row"><label for="node-input-types">Typen</label><input type="text" id="node-input-types" placeholder="stock.*, transport-order.finished"></div>
+    <div class="form-row node-input-conditions-row"><label>Bedingungen</label><ol id="node-input-conditions-list"></ol></div>
+    <div class="form-row"><label for="node-input-name">Name</label><input type="text" id="node-input-name"></div>
+</script>
+
+<script type="text/html" data-help-name="wms-event">
+<p>Gibt WMS-Ereignisse aus (über den MQTT-Broker der Verbindung). <i>Typen</i>: kommagetrennt, <code>*</code> als Platzhalter.
+<i>Bedingungen</i>: Feld des Ereignisses (z. B. <code>payload.barcode</code>) muss dem Wert entsprechen.</p>
+<h3>Ausgabe</h3><dl class="message-properties"><dt>payload</dt><dd>Ereignis (<code>id</code>, <code>type</code>, <code>occurredAt</code>, <code>payload</code>)</dd><dt>topic</dt><dd>MQTT-Topic</dd></dl>
+</script>

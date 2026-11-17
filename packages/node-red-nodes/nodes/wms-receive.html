@@ -1,0 +1,96 @@
+<!-- Generiert von scripts/build-html.mjs – dort ändern. -->
+<script type="text/javascript">
+  RED.nodes.registerType('wms-receive', {
+    category: 'WMS',
+    color: '#7FB7DF',
+    defaults: {
+      "name": {
+            "value": ""
+      },
+      "server": {
+            "value": "",
+            "type": "wms-config",
+            "required": true
+      },
+      "errorOutput": {
+            "value": false
+      },
+      "outputs": {
+            "value": 1
+      },
+      "mode": {
+            "value": "blind"
+      },
+      "orderId": {
+            "value": "msg.payload.orderId"
+      },
+      "sku": {
+            "value": "msg.payload.sku"
+      },
+      "amount": {
+            "value": "msg.payload.amount"
+      },
+      "unit": {
+            "value": "msg.payload.unit"
+      },
+      "unitBarcode": {
+            "value": "msg.payload.barcode"
+      },
+      "typeCode": {
+            "value": "msg.payload.typeCode"
+      },
+      "locationKind": {
+            "value": "erpCode"
+      },
+      "location": {
+            "value": "msg.payload.location"
+      },
+      "lot": {
+            "value": "msg.payload.lot"
+      },
+      "bestBefore": {
+            "value": "msg.payload.bestBefore"
+      }
+    },
+    inputs: 1,
+    outputs: 1,
+    outputLabels: ["Erfolg","Fehler"],
+    icon: 'inject.svg',
+    paletteLabel: 'Wareneingang',
+    label: function () {
+      return this.name || this.mode === 'order' ? 'Wareneingang (Avis)' : 'Wareneingang (blind)';
+    },
+    oneditprepare: function () {
+    },
+    oneditsave: function () {
+      this.outputs = $('#node-input-errorOutput').is(':checked') ? 2 : 1;
+    },
+  });
+</script>
+
+<script type="text/html" data-template-name="wms-receive">
+    <div class="form-row"><label for="node-input-server">Verbindung</label><input type="text" id="node-input-server"></div>
+    <div class="form-row"><label for="node-input-mode">Art</label><select id="node-input-mode"><option value="blind">ohne Avis</option><option value="order">gegen Auftrag (Avis)</option></select></div>
+    <div class="form-row"><label for="node-input-orderId">Auftrag</label><input type="text" id="node-input-orderId" placeholder="msg.payload.orderId"></div>
+    <div class="form-row"><label for="node-input-sku">SKU</label><input type="text" id="node-input-sku" placeholder="msg.payload.sku"></div>
+    <div class="form-row"><label for="node-input-amount">Menge</label><input type="text" id="node-input-amount" placeholder="msg.payload.amount"></div>
+    <div class="form-row"><label for="node-input-unit">Einheit</label><input type="text" id="node-input-unit" placeholder="msg.payload.unit"></div>
+    <div class="form-row"><label for="node-input-unitBarcode">TU-Barcode</label><input type="text" id="node-input-unitBarcode" placeholder="msg.payload.barcode"></div>
+    <div class="form-row"><label for="node-input-typeCode">TU-Typ (neue TU)</label><input type="text" id="node-input-typeCode" placeholder="EURO"></div>
+    <div class="form-row"><label for="node-input-locationKind">Platz über</label><select id="node-input-locationKind"><option value="erpCode">ERP-Code</option><option value="plcCode">Anlagen-Code (plcCode)</option><option value="locationId">Koordinate</option><option value="id">Platz-id</option></select></div>
+    <div class="form-row"><label for="node-input-location">Platz</label><input type="text" id="node-input-location" placeholder="msg.payload.location"></div>
+    <div class="form-row"><label for="node-input-lot">Charge</label><input type="text" id="node-input-lot" placeholder="msg.payload.lot"></div>
+    <div class="form-row"><label for="node-input-bestBefore">MHD</label><input type="text" id="node-input-bestBefore" placeholder="msg.payload.bestBefore"></div>
+    <div class="form-row"><label for="node-input-errorOutput">Fehlerausgang</label><input type="checkbox" id="node-input-errorOutput" style="width:auto"></div>
+    <div class="form-row"><label for="node-input-name">Name</label><input type="text" id="node-input-name"></div>
+</script>
+
+<script type="text/html" data-help-name="wms-receive">
+<p>Erfasst Ware im Wareneingang – gegen einen Auftrag (Avis) oder ohne Avis. Ohne TU-Barcode legt das WMS eine neue TU
+des angegebenen Typs an. Alle Felder: Fester Wert oder <code>msg.…</code> (z. B. <code>msg.payload.barcode</code>); leere Charge/MHD werden weggelassen.</p>
+<p>Überlieferung ohne Freigabe, unbekannte Einheit u. ä. kommen als Fehler (z. B. <code>OVERDELIVERY_NOT_ALLOWED</code>).</p>
+<h3>Fehler</h3>
+<p>Antwortet das WMS mit einem Fehler (z. B. <code>409 PLACEMENT_REJECTED</code>), steht er in <code>msg.wmsError</code>
+(<code>code</code>, <code>message</code>, <code>statusCode</code>, <code>details</code>). Ohne <i>Fehlerausgang</i> ist er ein
+Node-RED-Fehler, den ein <b>Catch</b>-Node abfängt; mit <i>Fehlerausgang</i> geht die Nachricht an Ausgang 2.</p>
+</script>

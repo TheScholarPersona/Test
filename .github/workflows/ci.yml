@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Build, Typprüfung, Architektur, Unit- und Integrationstests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Node-RED-Flows sind aus dem Generator erzeugt
+        run: |
+          node flows/scripts/build-flows.mjs
+          git diff --exit-code flows/node-red/flows.json
+      - run: pnpm build
+      - run: pnpm typecheck
+      - run: pnpm lint:deps
+      - name: Unit-Tests
+        run: pnpm test
+      - name: Integrationstests (Testcontainers mit PostgreSQL und Mosquitto)
+        run: pnpm test:integration
+
+  e2e:
+    name: Node-RED-Szenarien gegen die vollständige Umgebung
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Umgebung starten (PostgreSQL, Mosquitto, API, Node-RED)
+        run: docker compose up -d --build --wait
+      - name: Szenarien ausführen
+        run: pnpm test:e2e
+        env:
+          NODE_RED_URL: http://localhost:1880
+      - name: Container-Protokolle bei Fehler
+        if: failure()
+        run: docker compose logs --no-color
+      - name: Testbericht sichern
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-junit
+          path: reports/e2e-junit.xml
+          if-no-files-found: warn
+      - name: Umgebung abbauen
+        if: always()
+        run: docker compose down -v

@@ -1,0 +1,83 @@
+<!-- Generiert von scripts/build-html.mjs – dort ändern. -->
+<script type="text/javascript">
+  RED.nodes.registerType('wms-device-event', {
+    category: 'WMS',
+    color: '#7FB7DF',
+    defaults: {
+      "name": {
+            "value": ""
+      },
+      "server": {
+            "value": "",
+            "type": "wms-config",
+            "required": true
+      },
+      "errorOutput": {
+            "value": false
+      },
+      "outputs": {
+            "value": 1
+      },
+      "eventType": {
+            "value": "request"
+      },
+      "locationKind": {
+            "value": "plcCode"
+      },
+      "location": {
+            "value": "msg.payload.location"
+      },
+      "barcode": {
+            "value": "msg.payload.barcode"
+      },
+      "deviceId": {
+            "value": ""
+      },
+      "code": {
+            "value": ""
+      },
+      "message": {
+            "value": ""
+      },
+      "dryRun": {
+            "value": false
+      }
+    },
+    inputs: 1,
+    outputs: 1,
+    outputLabels: ["Erfolg","Fehler"],
+    icon: 'serial.svg',
+    paletteLabel: 'Geräte-Ereignis',
+    label: function () {
+      return this.name || 'Gerät: ' + (this.eventType || 'request');
+    },
+    oneditprepare: function () {
+    },
+    oneditsave: function () {
+      this.outputs = $('#node-input-errorOutput').is(':checked') ? 2 : 1;
+    },
+  });
+</script>
+
+<script type="text/html" data-template-name="wms-device-event">
+    <div class="form-row"><label for="node-input-server">Verbindung</label><input type="text" id="node-input-server"></div>
+    <div class="form-row"><label for="node-input-eventType">Ereignis</label><select id="node-input-eventType"><option value="request">request (Zielanfrage)</option><option value="arrived">arrived (angekommen)</option><option value="location-status">location-status</option><option value="error">error (Störung)</option></select></div>
+    <div class="form-row"><label for="node-input-locationKind">Platz über</label><select id="node-input-locationKind"><option value="plcCode">Anlagen-Code (plcCode)</option><option value="erpCode">ERP-Code</option><option value="locationId">Koordinate</option><option value="id">Platz-id</option></select></div>
+    <div class="form-row"><label for="node-input-location">Platz</label><input type="text" id="node-input-location" placeholder="msg.payload.location"></div>
+    <div class="form-row"><label for="node-input-barcode">Barcode</label><input type="text" id="node-input-barcode" placeholder="msg.payload.barcode"></div>
+    <div class="form-row"><label for="node-input-deviceId">Geräte-ID</label><input type="text" id="node-input-deviceId" placeholder="SPS1"></div>
+    <div class="form-row"><label for="node-input-code">Fehlercode</label><input type="text" id="node-input-code" placeholder="msg.payload.code"></div>
+    <div class="form-row"><label for="node-input-message">Meldung</label><input type="text" id="node-input-message" placeholder="msg.payload.message"></div>
+    <div class="form-row"><label for="node-input-dryRun">Probelauf</label><input type="checkbox" id="node-input-dryRun" style="width:auto"></div>
+    <div class="form-row"><label for="node-input-errorOutput">Fehlerausgang</label><input type="checkbox" id="node-input-errorOutput" style="width:auto"></div>
+    <div class="form-row"><label for="node-input-name">Name</label><input type="text" id="node-input-name"></div>
+</script>
+
+<script type="text/html" data-help-name="wms-device-event">
+<p>Meldet ein Geräte-Ereignis an den Materialfluss (Protokoll-Adapter einer Anlage). Die Antwort in <code>msg.payload</code>
+enthält die Entscheidung mit Begründung (<code>decision.trace</code>) und ggf. den Fahrbefehl (<code>command</code>).</p>
+<h3>Fehler</h3>
+<p>Antwortet das WMS mit einem Fehler (z. B. <code>409 PLACEMENT_REJECTED</code>), steht er in <code>msg.wmsError</code>
+(<code>code</code>, <code>message</code>, <code>statusCode</code>, <code>details</code>). Ohne <i>Fehlerausgang</i> ist er ein
+Node-RED-Fehler, den ein <b>Catch</b>-Node abfängt; mit <i>Fehlerausgang</i> geht die Nachricht an Ausgang 2.</p>
+</script>
