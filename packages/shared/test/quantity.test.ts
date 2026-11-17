@@ -40,3 +40,15 @@ describe('Quantity', () => {
     expect(Quantity.fromDto({ amount: '3', unit: Quantity.of('1', 'PCS').unit }).toString()).toBe('3 PCS');
   });
 });
+
+describe('Quantity.convert', () => {
+  it('rechnet exakt dezimal in die Basiseinheit um', () => {
+    expect(Quantity.of('3', 'KAR').convert('12', 'PCS').toDto()).toEqual({ amount: '36', unit: 'PCS' });
+    expect(Quantity.of('0.1', 'BEU').convert('0.2', 'KG').toDto()).toEqual({ amount: '0.02', unit: 'KG' });
+    expect(Quantity.of('1.25', 'KAR').convert('2.5', 'PCS').decimalPlaces()).toBe(3);
+  });
+
+  it('negiert ohne Rundung', () => {
+    expect(Quantity.of('2.5', 'PCS').negate().toDto()).toEqual({ amount: '-2.5', unit: 'PCS' });
+  });
+});

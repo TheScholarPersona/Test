@@ -63,6 +63,24 @@ export class Quantity {
     return new Quantity(this.value.minus(other.value), this.unit);
   }
 
+  /**
+   * Umrechnen in eine andere Einheit: `factor` Basiseinheiten je Einheit dieser
+   * Menge, z. B. 3 KAR mit Faktor 12 → 36 PCS. Exakt dezimal, ohne Rundung.
+   */
+  convert(factor: string, toUnit: string): Quantity {
+    const f = new Decimal(QuantitySchema.shape.amount.parse(factor));
+    return new Quantity(this.value.times(f), UnitCodeSchema.parse(toUnit));
+  }
+
+  /** Anzahl Nachkommastellen (für Prüfungen gegen die Speichergenauigkeit). */
+  decimalPlaces(): number {
+    return this.value.decimalPlaces();
+  }
+
+  negate(): Quantity {
+    return new Quantity(this.value.negated(), this.unit);
+  }
+
   /** -1, 0 oder 1 */
   compareTo(other: Quantity): -1 | 0 | 1 {
     this.assertSameUnit(other);

@@ -2909,6 +2909,130 @@
       "comment": null
     },
     {
+      "name": "product_unit",
+      "schema": "public",
+      "columns": {
+        "factor": {
+          "name": "factor",
+          "type": "numeric(15,6)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": 15,
+          "scale": 6,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "decimal"
+        },
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": true,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "product_id": {
+          "name": "product_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": true,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "unit_code": {
+          "name": "unit_code",
+          "type": "varchar(10)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 10,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        }
+      },
+      "indexes": [
+        {
+          "columnNames": [
+            "id"
+          ],
+          "composite": false,
+          "constraint": true,
+          "keyName": "product_unit_pkey",
+          "primary": true,
+          "unique": true
+        },
+        {
+          "columnNames": [
+            "product_id"
+          ],
+          "composite": false,
+          "constraint": false,
+          "keyName": "product_unit_product_id_index",
+          "primary": false,
+          "unique": false
+        },
+        {
+          "columnNames": [
+            "product_id",
+            "unit_code"
+          ],
+          "composite": true,
+          "constraint": true,
+          "keyName": "product_unit_unique",
+          "primary": false,
+          "unique": true
+        }
+      ],
+      "checks": [],
+      "triggers": [],
+      "foreignKeys": {
+        "product_unit_product_id_foreign": {
+          "columnNames": [
+            "product_id"
+          ],
+          "constraintName": "product_unit_product_id_foreign",
+          "localTableName": "public.product_unit",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.product",
+          "deleteRule": "cascade"
+        }
+      },
+      "comment": null
+    },
+    {
       "name": "receiving_capture",
       "schema": "public",
       "columns": {
@@ -3904,7 +4028,10 @@
           "collation": null,
           "enumItems": [
             "RECEIPT",
-            "CORRECTION"
+            "CORRECTION",
+            "ISSUE",
+            "TRANSFER_OUT",
+            "TRANSFER_IN"
           ],
           "mappedType": "enum"
         },
@@ -3971,13 +4098,486 @@
       "checks": [
         {
           "name": "stock_booking_type_check",
-          "expression": "\"type\" in ('RECEIPT', 'CORRECTION')",
-          "definition": "check (\"type\" in ('RECEIPT', 'CORRECTION'))",
+          "expression": "\"type\" in ('RECEIPT', 'CORRECTION', 'ISSUE', 'TRANSFER_OUT', 'TRANSFER_IN')",
+          "definition": "check (\"type\" in ('RECEIPT', 'CORRECTION', 'ISSUE', 'TRANSFER_OUT', 'TRANSFER_IN'))",
           "columnName": "type"
         }
       ],
       "triggers": [],
       "foreignKeys": {},
+      "comment": null
+    },
+    {
+      "name": "stock_count",
+      "schema": "public",
+      "columns": {
+        "barcode": {
+          "name": "barcode",
+          "type": "varchar(64)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 64,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "closed_at": {
+          "name": "closed_at",
+          "type": "timestamptz(6)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": 6,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "datetime"
+        },
+        "counted_at": {
+          "name": "counted_at",
+          "type": "timestamptz(6)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": 6,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "datetime"
+        },
+        "counted_by": {
+          "name": "counted_by",
+          "type": "varchar(100)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": 100,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamptz(6)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 6,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "datetime"
+        },
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": true,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "number": {
+          "name": "number",
+          "type": "varchar(20)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": true,
+          "length": 20,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "reference": {
+          "name": "reference",
+          "type": "varchar(120)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": 120,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "state": {
+          "name": "state",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": "'OPEN'",
+          "comment": null,
+          "collation": null,
+          "enumItems": [
+            "OPEN",
+            "COUNTED",
+            "CLOSED",
+            "CANCELLED"
+          ],
+          "mappedType": "enum"
+        },
+        "unit_id": {
+          "name": "unit_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": true,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamptz(6)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 6,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "datetime"
+        },
+        "version": {
+          "name": "version",
+          "type": "int",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": "1",
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "integer"
+        }
+      },
+      "indexes": [
+        {
+          "columnNames": [
+            "barcode"
+          ],
+          "composite": false,
+          "constraint": false,
+          "keyName": "stock_count_barcode_index",
+          "primary": false,
+          "unique": false
+        },
+        {
+          "columnNames": [
+            "number"
+          ],
+          "composite": false,
+          "constraint": true,
+          "keyName": "stock_count_number_unique",
+          "primary": false,
+          "unique": true
+        },
+        {
+          "columnNames": [
+            "unit_id"
+          ],
+          "composite": false,
+          "constraint": false,
+          "keyName": "stock_count_one_open_per_unit",
+          "primary": false,
+          "unique": true,
+          "where": "\"state\" in ('OPEN', 'COUNTED')"
+        },
+        {
+          "columnNames": [
+            "id"
+          ],
+          "composite": false,
+          "constraint": true,
+          "keyName": "stock_count_pkey",
+          "primary": true,
+          "unique": true
+        },
+        {
+          "columnNames": [
+            "unit_id"
+          ],
+          "composite": false,
+          "constraint": false,
+          "keyName": "stock_count_unit_id_index",
+          "primary": false,
+          "unique": false
+        }
+      ],
+      "checks": [
+        {
+          "name": "stock_count_state_check",
+          "expression": "\"state\" in ('OPEN', 'COUNTED', 'CLOSED', 'CANCELLED')",
+          "definition": "check (\"state\" in ('OPEN', 'COUNTED', 'CLOSED', 'CANCELLED'))",
+          "columnName": "state"
+        }
+      ],
+      "triggers": [],
+      "foreignKeys": {
+        "stock_count_unit_id_foreign": {
+          "columnNames": [
+            "unit_id"
+          ],
+          "constraintName": "stock_count_unit_id_foreign",
+          "localTableName": "public.stock_count",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.transport_unit",
+          "deleteRule": "set null"
+        }
+      },
+      "comment": null
+    },
+    {
+      "name": "stock_count_line",
+      "schema": "public",
+      "columns": {
+        "best_before": {
+          "name": "best_before",
+          "type": "date",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "date"
+        },
+        "count_id": {
+          "name": "count_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "counted": {
+          "name": "counted",
+          "type": "numeric(15,3)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": null,
+          "precision": 15,
+          "scale": 3,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "decimal"
+        },
+        "expected": {
+          "name": "expected",
+          "type": "numeric(15,3)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": 15,
+          "scale": 3,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "decimal"
+        },
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": true,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "lot": {
+          "name": "lot",
+          "type": "varchar(64)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": 64,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "sku": {
+          "name": "sku",
+          "type": "varchar(64)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 64,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "unit_code": {
+          "name": "unit_code",
+          "type": "varchar(10)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 10,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        }
+      },
+      "indexes": [
+        {
+          "columnNames": [
+            "count_id"
+          ],
+          "composite": false,
+          "constraint": false,
+          "keyName": "stock_count_line_count_id_index",
+          "primary": false,
+          "unique": false
+        },
+        {
+          "columnNames": [
+            "id"
+          ],
+          "composite": false,
+          "constraint": true,
+          "keyName": "stock_count_line_pkey",
+          "primary": true,
+          "unique": true
+        }
+      ],
+      "checks": [],
+      "triggers": [],
+      "foreignKeys": {
+        "stock_count_line_count_id_foreign": {
+          "columnNames": [
+            "count_id"
+          ],
+          "constraintName": "stock_count_line_count_id_foreign",
+          "localTableName": "public.stock_count_line",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.stock_count",
+          "deleteRule": "cascade"
+        }
+      },
       "comment": null
     },
     {
@@ -4086,6 +4686,23 @@
           "enumItems": [],
           "mappedType": "decimal"
         },
+        "reserved": {
+          "name": "reserved",
+          "type": "numeric(15,3)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": 15,
+          "scale": 3,
+          "default": "0",
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "decimal"
+        },
         "unit_code": {
           "name": "unit_code",
           "type": "varchar(10)",
@@ -4187,7 +4804,13 @@
           "unique": false
         }
       ],
-      "checks": [],
+      "checks": [
+        {
+          "name": "stock_item_reserved_check",
+          "expression": "reserved >= 0 and reserved <= quantity",
+          "definition": "check (reserved >= 0 and reserved <= quantity)"
+        }
+      ],
       "triggers": [],
       "foreignKeys": {
         "stock_item_product_id_foreign": {
@@ -4212,6 +4835,163 @@
             "id"
           ],
           "referencedTableName": "public.transport_unit",
+          "deleteRule": "restrict"
+        }
+      },
+      "comment": null
+    },
+    {
+      "name": "stock_reservation",
+      "schema": "public",
+      "columns": {
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamptz(6)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 6,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "datetime"
+        },
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": true,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "item_id": {
+          "name": "item_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "quantity": {
+          "name": "quantity",
+          "type": "numeric(15,3)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": 15,
+          "scale": 3,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "decimal"
+        },
+        "reference": {
+          "name": "reference",
+          "type": "varchar(120)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 120,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "unit_code": {
+          "name": "unit_code",
+          "type": "varchar(10)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 10,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        }
+      },
+      "indexes": [
+        {
+          "columnNames": [
+            "item_id"
+          ],
+          "composite": false,
+          "constraint": false,
+          "keyName": "stock_reservation_item_id_index",
+          "primary": false,
+          "unique": false
+        },
+        {
+          "columnNames": [
+            "id"
+          ],
+          "composite": false,
+          "constraint": true,
+          "keyName": "stock_reservation_pkey",
+          "primary": true,
+          "unique": true
+        },
+        {
+          "columnNames": [
+            "reference"
+          ],
+          "composite": false,
+          "constraint": false,
+          "keyName": "stock_reservation_reference_index",
+          "primary": false,
+          "unique": false
+        }
+      ],
+      "checks": [],
+      "triggers": [],
+      "foreignKeys": {
+        "stock_reservation_item_id_foreign": {
+          "columnNames": [
+            "item_id"
+          ],
+          "constraintName": "stock_reservation_item_id_foreign",
+          "localTableName": "public.stock_reservation",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.stock_item",
           "deleteRule": "restrict"
         }
       },

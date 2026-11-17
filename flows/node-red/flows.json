@@ -649,15 +649,15 @@
   {
     "id": "f506000000000000",
     "type": "tab",
-    "label": "Szenario: transport-order-flow",
+    "label": "Szenario: stock-flow",
     "disabled": false,
-    "info": "Schrittliste aus flows/scenarios/transport-order-flow.js; ausgeführt vom Tab „Schritt-Engine“."
+    "info": "Schrittliste aus flows/scenarios/stock-flow.js; ausgeführt vom Tab „Schritt-Engine“."
   },
   {
     "id": "f506000000000001",
     "type": "comment",
     "z": "f506000000000000",
-    "name": "Definition: flows/scenarios/transport-order-flow.js (im Repository bearbeiten, dann Flows neu erzeugen)",
+    "name": "Definition: flows/scenarios/stock-flow.js (im Repository bearbeiten, dann Flows neu erzeugen)",
     "info": "",
     "x": 380,
     "y": 40,
@@ -667,6 +667,39 @@
     "id": "f506000000000002",
     "type": "function",
     "z": "f506000000000000",
+    "name": "Szenario stock-flow anmelden",
+    "func": "return msg;\n",
+    "outputs": 0,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "const registerScenario = (definition) => {\n  const all = global.get('stepScenarios') || {};\n  all[definition.id] = definition;\n  global.set('stepScenarios', all);\n};\n/**\n * Szenario: Bestandsführung.\n *\n * Zugang (Blind-Erfassung) in Stück, Reservierung in Kartons, Abgang gegen\n * die Reservierung, Umbuchung auf eine zweite TU, Inventur dieser TU mit\n * Differenz, Inventursperre, Abschluss bucht die Differenz. Zum Aufräumen wird\n * der Restbestand ausgebucht. Das Produkt bleibt als Stammdatum erhalten.\n * Schrittformat: siehe flows/scenarios/layout-locks.js.\n */\nregisterScenario({\n  id: 'stock-flow',\n  description: 'Bestand: Reservierung und Abgang in Kartons, Umbuchung zwischen TUs, Inventur mit Sperre und Differenzbuchung.',\n  init: (runId) => {\n    const s = runId.replace(/[^a-z0-9]/gi, '').slice(-8).toUpperCase();\n    return {\n      locationType: `SB-${s}`,\n      group: `SB-${s}-G`,\n      unitType: `SB-${s}`,\n      sku: `SB-${s}-ART`,\n      coords: { a: `B${s}/0001/0001/0001/0000`, b: `B${s}/0002/0001/0001/0000` },\n      loc: {},\n      tu: { a: `SB-${s}-A`, b: `SB-${s}-B` },\n      itemA: null,\n      itemB: null,\n      reservation: null,\n      count: null,\n    };\n  },\n  steps: [\n    { name: 'Platztyp anlegen', request: (v) => ({ method: 'POST', path: '/v1/location-types', body: { code: v.locationType } }), expectStatus: 201 },\n    { name: 'Gruppe anlegen', request: (v) => ({ method: 'POST', path: '/v1/location-groups', body: { name: v.group } }), expectStatus: 201 },\n    ...['a', 'b'].map((key) => ({\n      name: `Platz ${key} anlegen`,\n      request: (v) => ({ method: 'POST', path: '/v1/locations', body: { locationId: v.coords[key], typeCode: v.locationType, groupName: v.group, maxTransportUnits: 10 } }),\n      expectStatus: 201,\n      save: (body, v) => {\n        v.loc[key] = body.id;\n      },\n    })),\n    { name: 'TU-Typ anlegen', request: (v) => ({ method: 'POST', path: '/v1/transport-unit-types', body: { code: v.unitType } }), expectStatus: 201 },\n    {\n      name: 'Produkt in PCS mit Karton (12 PCS) anlegen',\n      request: (v) => ({ method: 'POST', path: '/v1/products', body: { sku: v.sku, baseUnit: 'PCS', units: [{ unit: 'KAR', factor: '12' }] } }),\n      expectStatus: 201,\n    },\n    {\n      name: 'Zugang 60 PCS auf TU A',\n      request: (v) => ({\n        method: 'POST',\n        path: '/v1/receiving-blind-captures',\n        body: { sku: v.sku, quantity: { amount: '60', unit: 'PCS' }, unit: { barcode: v.tu.a, typeCode: v.unitType }, location: { id: v.loc.a } },\n      }),\n      expectStatus: 201,\n    },\n    {\n      name: 'Bestandsposten auf TU A lesen',\n      request: (v) => ({ method: 'GET', path: `/v1/stock?barcode=${v.tu.a}` }),\n      expectStatus: 200,\n      check: (body) => (body.total === 1 && body.items[0].available.amount === '60' ? null : `Unerwartet: ${JSON.stringify(body)}`),\n      save: (body, v) => {\n        v.itemA = body.items[0].id;\n      },\n    },\n    {\n      name: '3 Kartons reservieren (36 PCS)',\n      request: (v) => ({ method: 'POST', path: `/v1/stock/${v.itemA}/reservations`, body: { quantity: { amount: '3', unit: 'KAR' }, reference: 'SZ-KOMM' } }),\n      expectStatus: 201,\n      check: (body) => (body.quantity.amount === '36' ? null : `Unerwartet: ${JSON.stringify(body)}`),\n      save: (body, v) => {\n        v.reservation = body.id;\n      },\n    },\n    { name: 'Event stock.reserved', event: (e, v) => e.type === 'stock.reserved' && e.payload.reservationId === v.reservation },\n    {\n      name: 'Abgang über die verfügbare Menge wird abgelehnt (STOCK_RESERVED)',\n      request: (v) => ({ method: 'POST', path: `/v1/stock/${v.itemA}/issues`, body: { quantity: { amount: '25', unit: 'PCS' }, reference: 'SZ-X' } }),\n      expectStatus: 409,\n      check: (body) => (body.code === 'STOCK_RESERVED' ? null : `Erwartet STOCK_RESERVED, erhalten ${body.code}`),\n    },\n    {\n      name: 'Abgang 3 Kartons gegen die Reservierung',\n      request: (v) => ({ method: 'POST', path: `/v1/stock/${v.itemA}/issues`, body: { quantity: { amount: '3', unit: 'KAR' }, reference: 'SZ-KOMM', reservationId: v.reservation } }),\n      expectStatus: 200,\n      check: (body) => (body.onHand.amount === '24' ? null : `Unerwartet: ${JSON.stringify(body)}`),\n    },\n    { name: 'Event stock.issued', event: (e, v) => e.type === 'stock.issued' && e.payload.reservationId === v.reservation },\n    {\n      name: 'TU B anlegen',\n      request: (v) => ({ method: 'POST', path: '/v1/transport-units', body: { barcode: v.tu.b, typeCode: v.unitType, location: { id: v.loc.b } } }),\n      expectStatus: 201,\n    },\n    {\n      name: '1 Karton auf TU B umbuchen',\n      request: (v) => ({ method: 'POST', path: `/v1/stock/${v.itemA}/transfers`, body: { to: v.tu.b, quantity: { amount: '1', unit: 'KAR' }, reference: 'SZ-UMPACK' } }),\n      expectStatus: 200,\n      check: (body) => (body.from.onHand.amount === '12' && body.to.onHand.amount === '12' ? null : `Unerwartet: ${JSON.stringify(body)}`),\n      save: (body, v) => {\n        v.itemB = body.to.id;\n      },\n    },\n    { name: 'Event stock.transferred', event: (e, v) => e.type === 'stock.transferred' && e.payload.from === v.tu.a && e.payload.to === v.tu.b },\n    {\n      name: 'Summe je Platz: je 12 PCS auf A und B',\n      request: (v) => ({ method: 'GET', path: `/v1/stock/summary?by=location&sku=${v.sku}` }),\n      expectStatus: 200,\n      check: (body) => (body.total === 2 && body.items.every((r) => r.onHand.amount === '12') ? null : `Unerwartet: ${JSON.stringify(body.items)}`),\n    },\n    {\n      name: 'Inventur für TU B öffnen',\n      request: (v) => ({ method: 'POST', path: '/v1/stock-counts', body: { barcode: v.tu.b, reference: 'Szenario' } }),\n      expectStatus: 201,\n      check: (body) => (body.state === 'OPEN' && body.lines.length === 1 && body.lines[0].expected.amount === '12' ? null : `Unerwartet: ${JSON.stringify(body)}`),\n      save: (body, v) => {\n        v.count = body.number;\n      },\n    },\n    {\n      name: 'Buchung auf TU B während der Inventur wird abgelehnt (COUNT_IN_PROGRESS)',\n      request: (v) => ({ method: 'POST', path: `/v1/stock/${v.itemB}/issues`, body: { quantity: { amount: '1', unit: 'PCS' }, reference: 'SZ-X' } }),\n      expectStatus: 409,\n      check: (body) => (body.code === 'COUNT_IN_PROGRESS' ? null : `Erwartet COUNT_IN_PROGRESS, erhalten ${body.code}`),\n    },\n    {\n      name: 'Gezählt: 10 PCS',\n      request: (v) => ({ method: 'POST', path: `/v1/stock-counts/${v.count}/result`, body: { lines: [{ sku: v.sku, quantity: { amount: '10', unit: 'PCS' } }], countedBy: 'node-red' } }),\n      expectStatus: 200,\n      check: (body) => (body.state === 'COUNTED' && body.lines[0].difference.amount === '-2' ? null : `Unerwartet: ${JSON.stringify(body.lines)}`),\n    },\n    {\n      name: 'Inventur abschließen',\n      request: (v) => ({ method: 'POST', path: `/v1/stock-counts/${v.count}/close` }),\n      expectStatus: 200,\n      check: (body) => (body.state === 'CLOSED' ? null : `Unerwartet: ${body.state}`),\n    },\n    { name: 'Event stock-count.changed (CLOSED, 1 Differenz)', event: (e, v) => e.type === 'stock-count.changed' && e.payload.number === v.count && e.payload.state === 'CLOSED' && e.payload.differences === 1 },\n    {\n      name: 'Journal: Differenz -2 mit Bezug auf die Inventur',\n      request: (v) => ({ method: 'GET', path: `/v1/stock-bookings?reference=count:${v.count}` }),\n      expectStatus: 200,\n      check: (body) => (body.total === 1 && body.items[0].type === 'CORRECTION' && body.items[0].quantity.amount === '-2' ? null : `Unerwartet: ${JSON.stringify(body.items)}`),\n    },\n    {\n      name: 'Bestand auf TU B: 10 PCS, wieder buchbar',\n      request: (v) => ({ method: 'POST', path: `/v1/stock/${v.itemB}/issues`, body: { quantity: { amount: '10', unit: 'PCS' }, reference: 'SZ-RAUS' } }),\n      expectStatus: 200,\n      check: (body) => (body.removed === true ? null : `Unerwartet: ${JSON.stringify(body)}`),\n      save: (body, v) => {\n        v.itemB = null;\n      },\n    },\n    {\n      name: 'Aufräumen: Inventur abbrechen (falls offen)',\n      cleanup: true,\n      request: (v) => (v.count ? { method: 'POST', path: `/v1/stock-counts/${v.count}/cancel` } : null),\n    },\n    {\n      name: 'Aufräumen: Reservierung aufheben (falls noch vorhanden)',\n      cleanup: true,\n      request: (v) => (v.reservation ? { method: 'DELETE', path: `/v1/stock-reservations/${v.reservation}` } : null),\n    },\n    ...['a', 'b'].map((key) => ({\n      name: `Aufräumen: Bestand auf TU ${key} lesen`,\n      cleanup: true,\n      request: (v) => ({ method: 'GET', path: `/v1/stock?barcode=${v.tu[key]}` }),\n      save: (body, v) => {\n        v[`rest_${key}`] = (body.items || []).map((i) => ({ id: i.id, amount: i.quantity.amount }));\n      },\n    })),\n    ...['a', 'b'].flatMap((key) =>\n      [0, 1].map((i) => ({\n        name: `Aufräumen: Restbestand ${i + 1} auf TU ${key} ausbuchen`,\n        cleanup: true,\n        request: (v) => {\n          const rest = (v[`rest_${key}`] || [])[i];\n          return rest ? { method: 'POST', path: `/v1/stock/${rest.id}/corrections`, body: { delta: { amount: `-${rest.amount}`, unit: 'PCS' }, reason: 'Aufräumen' } } : null;\n        },\n      })),\n    ),\n    ...['a', 'b'].map((key) => ({ name: `Aufräumen: TU ${key} löschen`, cleanup: true, request: (v) => ({ method: 'DELETE', path: `/v1/transport-units/${v.tu[key]}` }) })),\n    ...['a', 'b'].map((key) => ({\n      name: `Aufräumen: Platz ${key} löschen`,\n      cleanup: true,\n      request: (v) => (v.loc[key] ? { method: 'DELETE', path: `/v1/locations/${v.loc[key]}` } : null),\n      expectStatus: 204,\n    })),\n    { name: 'Aufräumen: Gruppe löschen', cleanup: true, request: (v) => ({ method: 'DELETE', path: `/v1/location-groups/${v.group}` }), expectStatus: 204 },\n    { name: 'Aufräumen: TU-Typ löschen', cleanup: true, request: (v) => ({ method: 'DELETE', path: `/v1/transport-unit-types/${v.unitType}` }), expectStatus: 204 },\n    { name: 'Aufräumen: Platztyp löschen', cleanup: true, request: (v) => ({ method: 'DELETE', path: `/v1/location-types/${v.locationType}` }), expectStatus: 204 },\n  ],\n});\n",
+    "finalize": "",
+    "libs": [],
+    "x": 200,
+    "y": 100,
+    "wires": []
+  },
+  {
+    "id": "f507000000000000",
+    "type": "tab",
+    "label": "Szenario: transport-order-flow",
+    "disabled": false,
+    "info": "Schrittliste aus flows/scenarios/transport-order-flow.js; ausgeführt vom Tab „Schritt-Engine“."
+  },
+  {
+    "id": "f507000000000001",
+    "type": "comment",
+    "z": "f507000000000000",
+    "name": "Definition: flows/scenarios/transport-order-flow.js (im Repository bearbeiten, dann Flows neu erzeugen)",
+    "info": "",
+    "x": 380,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "f507000000000002",
+    "type": "function",
+    "z": "f507000000000000",
     "name": "Szenario transport-order-flow anmelden",
     "func": "return msg;\n",
     "outputs": 0,
@@ -680,16 +713,16 @@
     "wires": []
   },
   {
-    "id": "f507000000000000",
+    "id": "f508000000000000",
     "type": "tab",
     "label": "Szenario: tu-placement",
     "disabled": false,
     "info": "Schrittliste aus flows/scenarios/tu-placement.js; ausgeführt vom Tab „Schritt-Engine“."
   },
   {
-    "id": "f507000000000001",
+    "id": "f508000000000001",
     "type": "comment",
-    "z": "f507000000000000",
+    "z": "f508000000000000",
     "name": "Definition: flows/scenarios/tu-placement.js (im Repository bearbeiten, dann Flows neu erzeugen)",
     "info": "",
     "x": 380,
@@ -697,9 +730,9 @@
     "wires": []
   },
   {
-    "id": "f507000000000002",
+    "id": "f508000000000002",
     "type": "function",
-    "z": "f507000000000000",
+    "z": "f508000000000000",
     "name": "Szenario tu-placement anmelden",
     "func": "return msg;\n",
     "outputs": 0,

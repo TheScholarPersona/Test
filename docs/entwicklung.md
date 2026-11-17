@@ -19,7 +19,7 @@ apps/api/                  WMS-Kern (NestJS)
     transport/             Transporteinheiten: Typen, Regeln, TUs, Bewegen, Stapeln
     strategy/              Strategie-Kern: Regelsätze, Entscheidungen; Einlagerung (putaway/)
     movement/              Lagerbewegungen mit Zustandsautomat
-    inventory/             Bestand: Produkte, Bestand je TU, Buchungsjournal, Korrekturen
+    inventory/             Bestand: Produkte/Einheiten, Bestand je TU, Buchungen, Reservierung, Inventur
     receiving/             Wareneingang: Avis, Erfassung, Blind-Erfassung
     transport-order/       Transportaufträge: Zustandsautomat, Start-Steuerung, Zielumleitung
     flow/                  Materialfluss: Routen, Schritte, Action-Matrix, Geräte-Ereignisse
@@ -220,19 +220,43 @@ Events: `movement.created|started|released|completed|cancelled` (Schemas in `pac
 
 Noch nicht enthalten: Bewegungsgruppen (Zuteilung an Bediener), automatischer Abschluss, wenn die TU ohne Quittung am Ziel gebucht wird.
 
-## Modul Bestand (`/v1/products`, `/v1/stock`, `/v1/stock-bookings`)
+## Modul Bestand (`/v1/products`, `/v1/stock…`, `/v1/stock-counts`)
 
-Bestand wird **je Transporteinheit** geführt (keine Mandanten). Ein Bestandsposten ist die Menge eines Produkts auf einer TU, getrennt nach Charge (`lot`) und Mindesthaltbarkeit (`bestBefore`); gleiche Merkmale werden zusammengeführt.
+Bestand wird **je Transporteinheit** geführt (keine Mandanten). Ein Bestandsposten ist die Menge eines Produkts auf einer TU, getrennt nach Charge (`lot`) und Mindesthaltbarkeit (`bestBefore`); gleiche Merkmale werden zusammengeführt. Der Platzbestand ergibt sich aus den TUs auf dem Platz.
 
-- **Produkte** `POST /v1/products` `{ sku, description?, baseUnit, overdeliveryAllowed? }`; Bestand wird in der Basiseinheit geführt und erfasst (`UNIT_MISMATCH` sonst). Die Basiseinheit ist nur änderbar, solange kein Bestand existiert (`PRODUCT_UNIT_IN_USE`). Produkte werden nicht gelöscht.
-- **Bestand** `GET /v1/stock?barcode=…|sku=…` – Posten mit TU, Platz, Menge, Charge, MHD.
-- **Journal** `GET /v1/stock-bookings?sku=…&barcode=…&reference=…` – jede Änderung, neueste zuerst; SKU und Barcode bleiben als Text erhalten. Typen: `RECEIPT` (Zugang), `CORRECTION`.
-- **Korrektur** `POST /v1/stock/{id}/corrections` `{ "delta": { "amount": "-2", "unit": "PCS" }, "reason": "Bruch" }` – vorzeichenbehaftet, Grund Pflicht; negativer Bestand wird abgelehnt (`STOCK_INSUFFICIENT`), ein Posten auf 0 wird entfernt (`removed: true`).
-- **Löschschutz:** Eine TU mit Bestand kann nicht gelöscht werden (Einwand `stock`).
+**Produkte und Einheiten:** `POST /v1/products` `{ sku, baseUnit, units: [{ unit: "KAR", factor: "12" }] }`. Bestand wird immer in der Basiseinheit geführt; Abgang, Umbuchung, Reservierung, Korrektur und Inventur nehmen auch alternative Einheiten an und rechnen exakt um (höchstens 3 Nachkommastellen, sonst `INVALID_QUANTITY`). Der Wareneingang bucht in der Basiseinheit. `PUT /v1/products/{sku}/units` ersetzt die Einheiten; die Basiseinheit ist nur ohne Bestand änderbar (`PRODUCT_UNIT_IN_USE`).
 
-Zugänge entstehen nur über den Wareneingang. Buchungen sperren die TU-Zeile (`FOR UPDATE`), parallele Zugänge auf dieselbe TU gehen nicht verloren.
+**Buchungen** auf einen Posten (`{id}` aus `GET /v1/stock`):
 
-Events: `product.created|updated`, `stock.received`, `stock.corrected` (`packages/shared/src/inventory-events.ts`).
+| Buchung | Endpunkt | Journal-Typ | Regeln |
+|---|---|---|---|
+| Zugang | über den Wareneingang | `RECEIPT` | – |
+| Abgang | `POST /v1/stock/{id}/issues` `{ quantity, reference, reservationId? }` | `ISSUE` | höchstens verfügbar; mit `reservationId` wird die Reservierung verbraucht (`EXCEEDS_RESERVATION`) |
+| Umbuchung | `POST /v1/stock/{id}/transfers` `{ to, quantity, reference? }` | `TRANSFER_OUT` / `TRANSFER_IN` | Charge und MHD bleiben; auf der Ziel-TU zusammengeführt |
+| Korrektur | `POST /v1/stock/{id}/corrections` `{ delta, reason }` | `CORRECTION` | vorzeichenbehaftet, mit Grund |
+
+Kein negativer Bestand (`STOCK_INSUFFICIENT`) und nie unter die Reservierung (`STOCK_RESERVED`); ein Posten auf 0 wird entfernt.
+
+**Reservierung:** `POST /v1/stock/{id}/reservations` `{ quantity, reference }` reserviert verfügbaren Bestand (`STOCK_NOT_AVAILABLE`); `GET /v1/stock-reservations?reference=…`, `DELETE /v1/stock-reservations/{id}`. Jeder Posten zeigt `quantity`, `reserved` und `available`. Die Datenbank sichert zusätzlich `0 ≤ reserved ≤ quantity` ab.
+
+**Abfragen:** `GET /v1/stock?barcode|sku|lot|location|group=…` (Gruppe inkl. Untergruppen); `GET /v1/stock/summary?by=product|location&sku=…&group=…` liefert Summen mit Reservierung, verfügbarer Menge, Anzahl Posten und TUs; `GET /v1/stock-bookings` ist das Journal (neueste zuerst).
+
+**Inventur je TU** (`/v1/stock-counts`):
+
+| Schritt | Endpunkt | Wirkung |
+|---|---|---|
+| öffnen | `POST /v1/stock-counts` `{ barcode, reference? }` | Soll-Bestand wird festgehalten; **Inventursperre**: andere Buchungen auf der TU → `COUNT_IN_PROGRESS` |
+| zählen | `POST …/{number}/result` `{ lines: [{ sku, lot?, bestBefore?, quantity }], countedBy? }` | auch mehrfach; nicht genannte Soll-Zeilen gelten als 0, unbekannte als Fund |
+| abschließen | `POST …/{number}/close` | Differenzen als `CORRECTION` mit Bezug `count:<Nummer>`, Sperre aufgehoben |
+| abbrechen | `POST …/{number}/cancel` | ohne Buchung |
+
+**Nebenläufigkeit:** Jede Buchung sperrt zuerst die betroffenen TU-Zeilen in fester Reihenfolge (nach id). Gleichzeitige Buchungen auf dieselbe TU laufen dadurch nacheinander, gegenläufige Umbuchungen verklemmen sich nicht, und die Inventursperre wird an genau dieser Stelle geprüft.
+
+**Löschschutz:** Eine TU mit Bestand oder laufender Inventur kann nicht gelöscht werden (Einwände `stock`, `stock-count`).
+
+Events: `product.created|updated`, `stock.received|issued|transferred|corrected|reserved|reservation-released`, `stock-count.changed` (`packages/shared/src/inventory-events.ts`).
+
+Noch nicht enthalten: Seriennummern, Reservierung über mehrere Posten (Bedarf je Produkt – folgt mit der Auslagerung in Schritt 8), zyklische Inventurplanung.
 
 ## Modul Wareneingang (`/v1/receiving-orders`, `/v1/receiving-blind-captures`)
 
