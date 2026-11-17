@@ -80,7 +80,7 @@ features:
     title: Scanner-Ansicht im Handyformat
     group: oberflaeche.scanner
     summary: Eine Oberfläche für Handscanner und Smartphones mit großen Feldern und verständlichen Meldungen.
-    description: Die Scanner-Ansicht bündelt die Arbeit im Lager (TU bewegen, Wareneingang ohne Avis) und übersetzt Regelverstöße in verständliche Meldungen.
+    description: Die Scanner-Ansicht bündelt die Arbeit im Lager (TU bewegen, Picken, Packen, Verladen, Wareneingang ohne Avis) und übersetzt Regelverstöße in verständliche Meldungen.
     usage:
       - channel: scanner
         text: "`/ui/scanner` auf dem Gerät öffnen."

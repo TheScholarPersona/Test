@@ -634,7 +634,7 @@ Szenario `node-red-examples` prüft die Beispiel-Flows; Schritt-Szenarien erreic
 | Transport | offene Transportaufträge und Lagerbewegungen mit den erlaubten Aktionen |
 | Materialfluss | Geräte-Ereignis senden (auch als Probelauf) mit Begründung, Entscheidungen, Routen, Action-Matrix |
 | Ereignisse | Live-Protokoll mit Filter |
-| Scanner | für Handy/Handscanner: TU bewegen, Picks quittieren, Wareneingang; Fokus springt nach jedem Scan zurück |
+| Scanner | für Handy/Handscanner: TU bewegen, Picks quittieren, Packen (Pick-TU → Versand-TU), Verladen mit Ladekontrolle, Wareneingang; Fokus springt nach jedem Scan zurück |
 
 **Aufbau:** React 19, React Router, TanStack Query, `openapi-fetch`. Die Typen des API-Clients erzeugt `openapi-typescript` aus `apps/web/src/api/openapi.json` (Skript `generate`, läuft vor `dev`, `build`, `typecheck`). Diese Datei ist die Beschreibung der API zum Zeitpunkt des Commits; der Integrationstest `live.integration.test.ts` schlägt fehl, wenn die API davon abweicht – dann mit `UPDATE_OPENAPI=1 pnpm test:integration` neu schreiben. So kann die Oberfläche nicht unbemerkt von der API abweichen.
 
@@ -667,7 +667,7 @@ Jeder Zugang braucht eine Anmeldung. Alle Geheimnisse stehen in der `.env` (nich
 |---|---|
 | `admin` | Alles, auch Stammdaten, Regelsätze, Materialfluss-Konfiguration und Benutzer |
 | `leitstand` | Aufträge steuern (Wareneingang, Auslagerung, Transport), Sperren, Korrekturen, Inventur |
-| `lager` | Ausführen am Scanner: TUs bewegen, Ware erfassen, Picks quittieren, Bewegungen bearbeiten |
+| `lager` | Ausführen am Scanner: TUs bewegen, Ware erfassen, Picks quittieren und packen, verladen, Bewegungen bearbeiten |
 | `anlage` | Anlagen und Adapter (Node-RED): Geräte-Ereignisse, Fahrbefehle, Transportaufträge |
 | `lesen` | Nur ansehen |
 

@@ -11,7 +11,7 @@ export type Role = (typeof ROLES)[number];
 export const ROLE_DESCRIPTIONS: Record<Role, string> = {
   admin: 'Alles, auch Stammdaten, Regelsätze, Materialfluss-Konfiguration und Benutzer',
   leitstand: 'Aufträge steuern (Wareneingang, Auslagerung, Transport), Sperren, Korrekturen, Inventur',
-  lager: 'Ausführen am Scanner: TUs bewegen, Ware erfassen, Picks quittieren, Bewegungen bearbeiten',
+  lager: 'Ausführen am Scanner: TUs bewegen, Ware erfassen, Picks quittieren und packen, verladen, Bewegungen bearbeiten',
   anlage: 'Anlagen und Adapter (Node-RED): Geräte-Ereignisse, Fahrbefehle, Transportaufträge',
   lesen: 'Nur ansehen',
 };

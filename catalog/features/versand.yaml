@@ -69,6 +69,8 @@ features:
         text: "Seite **Versand** – in der Sendung „Ladekontrolle: Barcode scannen“ und „Verladen“ (auch Rolle lager)."
       - channel: api
         text: "`POST /v1/shipments/{number}/load` mit `barcode` und optional `loadedBy`."
+      - channel: scanner
+        text: Ansicht **Verladen** – Sendung scannen, dann jede TU; Fortschritt „n von m“, fremde TUs werden abgelehnt.
     rules:
       - Fremde TU → 409 `WRONG_UNIT`; doppelt gescannt → 409 `UNIT_ALREADY_LOADED`; nur offene Sendungen (`SHIPMENT_STATE`).
       - Verladen darf auch die Rolle lager.
@@ -77,11 +79,12 @@ features:
       components:
         - apps/api/src/modules/shipping/application/shipment.service.ts
         - apps/web/src/pages/ShippingPage.tsx
+        - apps/web/src/pages/ScannerPage.tsx
       endpoints:
         - POST /v1/shipments/{number}/load
       events:
         emits: [shipment.changed]
-      uiRoutes: [/versand]
+      uiRoutes: [/versand, /scanner/*]
     evidence:
       - kind: integration
         file: apps/api/test/integration/shipping.integration.test.ts
@@ -89,6 +92,9 @@ features:
       - kind: web-e2e
         file: apps/web/e2e/seiten.spec.ts
         test: "Versand: am Packplatz packen, mit Ladekontrolle verladen, Warenausgang buchen"
+      - kind: web-e2e
+        file: apps/web/e2e/scanner.spec.ts
+        test: "Scanner: am Packplatz packen und mit Ladekontrolle verladen"
     comparisons:
       openwms:
         status: nicht-einsehbar

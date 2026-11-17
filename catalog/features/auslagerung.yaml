@@ -177,6 +177,8 @@ features:
         text: Seite **Auslagerung** – im Auftrag „Packen auf Versand-TU“ ausfüllen und Picks quittieren.
       - channel: api
         text: "`POST /v1/outbound-orders/{orderId}/picks/{pickId}/confirm` mit `packInto`; der Pick liefert `packedInto`."
+      - channel: scanner
+        text: Ansicht **Packen** – Pick-TU scannen, Versand-TU scannen, Menge bestätigen.
     rules:
       - Ohne Ziel am Auftrag → 409 `PACK_STATION_MISSING`; Versand-TU nicht am Packplatz → 409 `PACK_UNIT_NOT_AT_STATION`.
       - Ganze Palette nur vollständig (`PACK_IN_PLACE_PARTIAL`).
@@ -187,11 +189,12 @@ features:
         - apps/api/src/modules/outbound/application/outbound.service.ts
         - apps/api/src/modules/inventory/application/inventory.service.ts
         - apps/web/src/pages/OutboundPage.tsx
+        - apps/web/src/pages/ScannerPage.tsx
       endpoints:
         - POST /v1/outbound-orders/{orderId}/picks/{pickId}/confirm
       events:
         emits: [outbound-pick.confirmed, stock.transferred, stock.reservation-released]
-      uiRoutes: [/auslagerung]
+      uiRoutes: [/auslagerung, /scanner/*]
       notes:
         - Spalte `packed_into` an `outbound_pick`.
     evidence:
@@ -207,6 +210,9 @@ features:
       - kind: web-e2e
         file: apps/web/e2e/seiten.spec.ts
         test: "Versand: am Packplatz packen, mit Ladekontrolle verladen, Warenausgang buchen"
+      - kind: web-e2e
+        file: apps/web/e2e/scanner.spec.ts
+        test: "Scanner: am Packplatz packen und mit Ladekontrolle verladen"
     comparisons:
       openwms:
         status: nicht-einsehbar
