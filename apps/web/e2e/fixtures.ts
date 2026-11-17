@@ -5,7 +5,7 @@ export class Fixtures {
   readonly s = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`.toUpperCase();
   private readonly undo: (() => Promise<unknown>)[] = [];
 
-  constructor(private readonly request: APIRequestContext) {}
+  constructor(readonly request: APIRequestContext) {}
 
   /** Absolute API-URL (baseURL zeigt auf /ui/). */
   url(path: string): string {

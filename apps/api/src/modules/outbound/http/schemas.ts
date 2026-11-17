@@ -51,6 +51,9 @@ export const ConfirmPickSchema = z
   .strictObject({
     quantity: QuantitySchema.optional().meta({ description: 'Entnommene Menge; ohne Angabe die zugeteilte. Weniger = Fehlmenge, Rest wird freigegeben' }),
     pickedBy: z.string().trim().min(1).max(100).optional(),
+    packInto: BarcodeSchema.optional().meta({
+      description: 'Versand-TU am Packplatz (Ziel des Auftrags): Ware wird umgebucht statt ausgebucht. Gleich der Pick-TU: die ganze TU wird versendet',
+    }),
   })
   .meta({ id: 'ConfirmPick' });
 export type ConfirmPickInput = z.infer<typeof ConfirmPickSchema>;
@@ -92,6 +95,7 @@ export const PickDtoSchema = z
     transportNote: z.string().nullable(),
     pickedBy: z.string().nullable(),
     pickedAt: z.iso.datetime().nullable(),
+    packedInto: z.string().nullable(),
   })
   .meta({ id: 'OutboundPick' });
 export type PickDto = z.infer<typeof PickDtoSchema>;

@@ -15,6 +15,10 @@ export function summarize(type: string, p: Record<string, any>): string {
       return `${p.barcode}: ${p.from?.locationId ?? '?'} → ${p.location?.locationId ?? '?'}`;
     case 'transport-unit.error-reported':
       return `${p.barcode}: ${p.code}${p.message ? ` – ${p.message}` : ''}`;
+    case 'shipment.changed':
+      return `${p.number}: ${p.change}${p.barcode ? ` ${p.barcode}` : ''}`;
+    case 'shipment.shipped':
+      return `${p.number} ausgeliefert (${(p.units ?? []).length} TUs)`;
     case 'partner.created':
       return `${p.code} ${p.name}`;
     case 'partner.changed':

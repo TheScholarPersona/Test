@@ -167,6 +167,22 @@ areas:
         title: Kommissionierung
         summary: Entnahmen quittieren.
 
+  - id: versand
+    title: Versand
+    summary: Gepackte TUs zu Sendungen bündeln, beim Verladen per Scan kontrollieren und mit dem Warenausgang ausbuchen.
+    status: katalogisiert
+    owns:
+      endpoints: [/v1/shipments]
+      events: [shipment]
+      uiRoutes: [/versand]
+    groups:
+      - id: versand.sendungen
+        title: Sendungen und Verladen
+        summary: Versand-TUs einer Sendung zuordnen und mit Ladekontrolle verladen.
+      - id: versand.warenausgang
+        title: Warenausgang
+        summary: Bestand ausbuchen und die Historie behalten.
+
   - id: partner
     title: Geschäftspartner
     summary: Kunden, Lieferanten und Spediteure als Stammdaten mit Anschrift – Grundlage für Avis, Auslagerauftrag und Lieferadresse.

@@ -219,3 +219,55 @@ test('Geschäftspartner: anlegen, im Auslagerauftrag verwenden, deaktivieren', a
   await table.getByRole('row', { name: new RegExp(code) }).getByRole('button', { name: 'Deaktivieren' }).click();
   await expect(table.getByRole('row', { name: new RegExp(code) })).toContainText('inaktiv');
 });
+
+test('Versand: am Packplatz packen, mit Ladekontrolle verladen, Warenausgang buchen', async ({ page, fx }) => {
+  const w = await fx.warehouse();
+  const source = `PW-${fx.s}-Q`;
+  const box = `PW-${fx.s}-VE`;
+  await fx.stockedUnit(source, w.sku, w.unitType, w.a, '10');
+  const active = (await fx.api('GET', '/v1/strategy-rule-sets?decisionPoint=allocation')).items.some((r: { status: string }) => r.status === 'ACTIVE');
+  test.skip(!active, 'Kein aktiver Auslager-Regelsatz (pnpm demo:data oder das Szenario outbound-flow legen einen an)');
+  await fx.api('POST', '/v1/transport-units', { barcode: box, typeCode: w.unitType, location: { erpCode: w.ship } });
+  fx.onCleanup(async () => {
+    const stock = await fx.api('GET', `/v1/stock?barcode=${box}`).catch(() => ({ items: [] }));
+    for (const item of stock.items) await fx.api('POST', `/v1/stock/${item.id}/corrections`, { delta: { amount: `-${item.quantity.amount}`, unit: 'PCS' }, reason: 'Aufräumen' });
+    await fx.api('DELETE', `/v1/transport-units/${box}`).catch(() => undefined);
+  });
+  const orderId = `PW-${fx.s}-VS`;
+  await fx.api('POST', '/v1/outbound-orders', { orderId, target: { erpCode: w.ship }, lines: [{ sku: w.sku, quantity: { amount: '3', unit: 'PCS' } }] });
+  fx.onCleanup(() => fx.api('POST', `/v1/outbound-orders/${orderId}/cancel`, {}).catch(() => undefined));
+  await fx.api('POST', `/v1/outbound-orders/${orderId}/allocate`, { transport: 'none' });
+
+  await page.goto('./auslagerung');
+  await page.getByRole('row', { name: new RegExp(orderId) }).click();
+  const detail = page.locator('section', { hasText: `Auftrag ${orderId}` });
+  await detail.getByLabel('Packen auf Versand-TU').fill(box);
+  await detail.getByRole('button', { name: 'Quittieren' }).click();
+  await expect(page.getByText(`Pick quittiert und auf ${box} gepackt`)).toBeVisible();
+  expect((await fx.api('GET', `/v1/stock?barcode=${box}`)).items[0].quantity.amount).toBe('3');
+
+  await page.goto('./versand');
+  const form = page.locator('section', { hasText: 'Sendung anlegen' });
+  await form.getByLabel('Auslagerauftrag').fill(orderId);
+  await form.getByLabel('Versand-TUs').fill(box);
+  await form.getByRole('button', { name: 'Anlegen' }).click();
+  await expect(page.getByText(/Sendung SH\d{8} angelegt/)).toBeVisible();
+  const row = page.getByRole('table', { name: 'Sendungen' }).getByRole('row', { name: new RegExp(orderId) });
+  const number = (await row.locator('td').first().textContent())!.trim();
+  fx.onCleanup(() => fx.api('POST', `/v1/shipments/${number}/cancel`, {}).catch(() => undefined));
+  await row.click();
+
+  const shipment = page.locator('section', { hasText: `Sendung ${number}` });
+  await shipment.getByLabel('Ladekontrolle: Barcode scannen').fill(source);
+  await shipment.getByRole('button', { name: 'Verladen' }).click();
+  await expect(shipment.getByText(`TU ${source} gehört nicht zur Sendung ${number}`)).toBeVisible();
+  await shipment.getByLabel('Ladekontrolle: Barcode scannen').fill(box);
+  await shipment.getByRole('button', { name: 'Verladen' }).click();
+  await expect(shipment.getByText(`${box} verladen – Sendung vollständig verladen`)).toBeVisible();
+
+  await shipment.getByRole('button', { name: 'Warenausgang buchen' }).click();
+  await expect(shipment.getByText('Warenausgang gebucht')).toBeVisible();
+  await expect(row).toContainText('SHIPPED');
+  await expect(shipment.getByRole('table', { name: 'TUs der Sendung' })).toContainText(`3 PCS ${w.sku}`);
+  expect((await fx.request.get(fx.url(`/v1/transport-units/${box}`))).status()).toBe(404);
+});

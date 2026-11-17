@@ -1,3 +1,4 @@
+import type { EntityManager } from '@mikro-orm/postgresql';
 import { Injectable } from '@nestjs/common';
 
 export interface TransportUnitRef {
@@ -5,8 +6,11 @@ export interface TransportUnitRef {
   barcode: string;
 }
 
-/** Liefert einen Grund, warum die TU nicht gelöscht werden darf, sonst `null`. */
-export type TransportUnitRemovalCheck = (unit: TransportUnitRef) => Promise<string | null>;
+/**
+ * Liefert einen Grund, warum die TU nicht gelöscht werden darf, sonst `null`. `em` ist der
+ * EntityManager der löschenden Transaktion, damit die Prüfung deren Änderungen sieht.
+ */
+export type TransportUnitRemovalCheck = (unit: TransportUnitRef, em: EntityManager) => Promise<string | null>;
 
 /**
  * Andere Module melden hier Einwände gegen das Löschen einer TU an
@@ -20,8 +24,10 @@ export class TransportUnitRemovalPolicy {
     this.checks.set(name, check);
   }
 
-  async objections(unit: TransportUnitRef): Promise<{ check: string; reason: string }[]> {
-    const results = await Promise.all([...this.checks.entries()].map(async ([check, fn]) => ({ check, reason: await fn(unit) })));
+  async objections(unit: TransportUnitRef, em: EntityManager): Promise<{ check: string; reason: string }[]> {
+    const results: { check: string; reason: string | null }[] = [];
+    // nacheinander: dieselbe Verbindung der Transaktion verträgt keine parallelen Abfragen
+    for (const [check, fn] of this.checks) results.push({ check, reason: await fn(unit, em) });
     return results.filter((r): r is { check: string; reason: string } => r.reason !== null);
   }
 }

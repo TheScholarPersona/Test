@@ -67,10 +67,11 @@ gaps:
     title: Versand (Shipping)
     area: auslagerung
     summary: Packen, Versandeinheiten, Versandpapiere.
-    status: fehlt
+    status: teilweise
     source: privat
+    note: Packen am Packplatz, Sendungen mit Ladekontrolle und Warenausgang sind vorhanden; Versandpapiere fehlen noch.
     refs: [Analyse 1.1 private Repositories]
-    related: [auslagerung.kommissionierung]
+    related: [auslagerung.packen, versand.sendungen, versand.ladekontrolle, versand.warenausgang]
 
   - id: openwms.druck
     title: Druck (Printing)

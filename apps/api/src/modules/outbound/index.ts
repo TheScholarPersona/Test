@@ -6,5 +6,6 @@ import { OutboundLine, OutboundOrder, OutboundPick } from './entities/outbound.e
 
 export { OutboundModule } from './outbound.module.js';
 export { OutboundService } from './application/outbound.service.js';
+export { OutboundOrder };
 
 export const outboundEntities = [OutboundOrder, OutboundLine, OutboundPick];

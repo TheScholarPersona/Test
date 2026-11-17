@@ -79,6 +79,8 @@ const OutboundPickSchema = defineEntity({
     transportNote: p.string().length(200).nullable(),
     pickedBy: p.string().length(100).nullable(),
     pickedAt: p.datetime().nullable(),
+    /** Versand-TU, auf die am Packplatz gepackt wurde (gleich `barcode`, wenn die ganze TU versendet wird). */
+    packedInto: p.string().length(64).nullable().index(),
     createdAt: p.datetime().onCreate(() => new Date()),
   },
 });

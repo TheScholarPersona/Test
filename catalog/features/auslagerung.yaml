@@ -163,6 +163,57 @@ features:
         refs:
           - Analyse 1.1
 
+  - id: auslagerung.packen
+    title: Am Packplatz auf Versand-TUs packen
+    group: auslagerung.kommissionierung
+    summary: Bucht die entnommene Ware bei der Quittung auf eine Versand-TU am Packplatz um, statt sie auszubuchen – ganze Paletten gehen unverändert in den Versand.
+    description: |
+      Wird beim Quittieren eine Versand-TU angegeben, wird die entnommene Menge aus der Reservierung auf diese TU
+      umgebucht (Charge und MHD bleiben). Die Versand-TU muss am Ziel des Auftrags stehen, das als Packplatz dient.
+      Ist die Versand-TU die Pick-TU selbst, wird die ganze Palette versendet; das geht nur, wenn der Pick den
+      gesamten Posten umfasst. Der Pick merkt sich, wohin gepackt wurde.
+    usage:
+      - channel: leitstand
+        text: Seite **Auslagerung** – im Auftrag „Packen auf Versand-TU“ ausfüllen und Picks quittieren.
+      - channel: api
+        text: "`POST /v1/outbound-orders/{orderId}/picks/{pickId}/confirm` mit `packInto`; der Pick liefert `packedInto`."
+    rules:
+      - Ohne Ziel am Auftrag → 409 `PACK_STATION_MISSING`; Versand-TU nicht am Packplatz → 409 `PACK_UNIT_NOT_AT_STATION`.
+      - Ganze Palette nur vollständig (`PACK_IN_PLACE_PARTIAL`).
+      - Buchungen `TRANSFER_OUT`/`TRANSFER_IN` mit dem Bezug `outbound:<orderId>/<Position>`.
+    dependsOn: [auslagerung.kommissionierung, bestand.umbuchung]
+    technical:
+      components:
+        - apps/api/src/modules/outbound/application/outbound.service.ts
+        - apps/api/src/modules/inventory/application/inventory.service.ts
+        - apps/web/src/pages/OutboundPage.tsx
+      endpoints:
+        - POST /v1/outbound-orders/{orderId}/picks/{pickId}/confirm
+      events:
+        emits: [outbound-pick.confirmed, stock.transferred, stock.reservation-released]
+      uiRoutes: [/auslagerung]
+      notes:
+        - Spalte `packed_into` an `outbound_pick`.
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/shipping.integration.test.ts
+        test: lehnt Versand-TUs außerhalb des Packplatzes und Aufträge ohne Packplatz ab
+      - kind: integration
+        file: apps/api/test/integration/shipping.integration.test.ts
+        test: bucht die entnommene Menge aus der Reservierung auf die Versand-TU um
+      - kind: integration
+        file: apps/api/test/integration/shipping.integration.test.ts
+        test: versendet eine ganze Palette an Ort und Stelle, aber nur vollständig
+      - kind: web-e2e
+        file: apps/web/e2e/seiten.spec.ts
+        test: "Versand: am Packplatz packen, mit Ladekontrolle verladen, Warenausgang buchen"
+    comparisons:
+      openwms:
+        status: nicht-einsehbar
+        note: Packen gehört in OpenWMS zum privaten Dienst Shipping.
+        refs:
+          - Analyse 1.1
+
   - id: auslagerung.abschluss
     title: Auslageraufträge abschließen oder stornieren
     group: auslagerung.auftraege

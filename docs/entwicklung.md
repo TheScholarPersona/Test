@@ -485,7 +485,23 @@ Mengen werden in die Basiseinheit umgerechnet. `target` ist das Ziel für Bewegu
 
 Events: `outbound-order.created|allocated|state-changed`, `outbound-pick.confirmed`, `allocation.decided` (`packages/shared/src/outbound-events.ts`).
 
-Noch nicht enthalten: Wellenbildung, Wegoptimierung der Pick-Liste, Packen und Versand, Teilmengen aus einer TU auf eine Versand-TU umbuchen (geht bereits über die Bestandsumbuchung).
+**Packen am Packplatz:** `confirm` mit `packInto: "<Versand-TU>"` bucht die entnommene Menge aus der Reservierung auf die Versand-TU um (`TRANSFER_OUT`/`TRANSFER_IN`), statt sie auszubuchen. Der Packplatz ist das Ziel des Auftrags (`target`); die Versand-TU muss dort stehen (`PACK_STATION_MISSING`, `PACK_UNIT_NOT_AT_STATION`). Ist `packInto` die Pick-TU selbst, geht die ganze Palette in den Versand – nur wenn der Pick den gesamten Posten umfasst (`PACK_IN_PLACE_PARTIAL`). Der Pick zeigt `packedInto`.
+
+Noch nicht enthalten: Wellenbildung, Wegoptimierung der Pick-Liste.
+
+## Modul Versand (`/v1/shipments`)
+
+Sendungen bündeln gepackte TUs eines Auslagerauftrags (`apps/api/src/modules/shipping`):
+
+| Aktion | Endpunkt | Rollen | Wirkung |
+|---|---|---|---|
+| anlegen | `POST /v1/shipments` `{ orderId, carrierCode?, units? }` | admin, leitstand | Nummer `SH00000001` …, Kunde und Lieferadresse vom Auftrag, Spediteur (Partnerrolle `CARRIER`) |
+| TU aufnehmen / herausnehmen | `POST …/{number}/units` `{ barcode }`, `DELETE …/{number}/units/{barcode}` | admin, leitstand | TU muss am Packplatz stehen, Bestand tragen und in keiner anderen offenen Sendung sein |
+| verladen | `POST …/{number}/load` `{ barcode, loadedBy? }` | admin, leitstand, lager | Ladekontrolle: fremde TU → `WRONG_UNIT`; alle gescannt → `LOADED` |
+| Warenausgang | `POST …/{number}/ship` `{ shippedBy? }` | admin, leitstand | nur `LOADED`: Bestand jeder TU mit Buchungsart `SHIP` (Bezug `shipment:<Nummer>`) ausbuchen, TU löschen, Inhalt in `units[].contents` behalten |
+| stornieren | `POST …/{number}/cancel` `{ reason? }` | admin, leitstand | `OPEN`/`LOADED`; TUs und Bestand bleiben |
+
+Zustände `OPEN → LOADED → SHIPPED` (`CANCELLED`). Der Warenausgang läuft in einer Transaktion; die Löschprüfungen der TUs (laufende Bewegungen, Transportaufträge, Inventur, Bestand) sehen dabei die Buchungen derselben Transaktion. Events: `shipment.created`, `shipment.changed` (`change`: `unit-added`, `unit-removed`, `unit-loaded`, `loaded`, `cancelled`), `shipment.shipped` mit Inhalt (`packages/shared/src/shipping-events.ts`).
 
 ## Events
 

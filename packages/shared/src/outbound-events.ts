@@ -34,5 +34,5 @@ export const OutboundOrderAllocatedEvent = defineEvent(
 export const OutboundPickConfirmedEvent = defineEvent(
   'outbound-pick.confirmed',
   1,
-  z.object({ orderId: z.string(), pickId: z.uuid(), lineNo: z.number().int(), sku: z.string(), barcode: z.string(), quantity: QuantitySchema, short: z.boolean() }),
+  z.object({ orderId: z.string(), pickId: z.uuid(), lineNo: z.number().int(), sku: z.string(), barcode: z.string(), quantity: QuantitySchema, short: z.boolean(), packedInto: z.string().nullable().optional() }),
 );

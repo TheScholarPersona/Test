@@ -53,6 +53,7 @@ export function toPickDto(p: OutboundPick): PickDto {
     transportOrderNumber: p.transportOrderNumber ?? null,
     transportNote: p.transportNote ?? null,
     pickedBy: p.pickedBy ?? null,
+    packedInto: p.packedInto ?? null,
     pickedAt: p.pickedAt?.toISOString() ?? null,
   };
 }

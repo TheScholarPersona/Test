@@ -52,8 +52,8 @@ export class MovementService implements OnModuleInit {
       const open = await em.findOne(Movement, { unit: unit.id, state: { $in: [...ACTIVE_STATES] } });
       return open ? `offene Lagerbewegung ${open.number}` : null;
     });
-    this.unitRemoval.register('open-movements', async (unit) => {
-      const open = await this.em.fork().findOne(Movement, { unit: unit.id, state: { $in: [...ACTIVE_STATES] } });
+    this.unitRemoval.register('open-movements', async (unit, em) => {
+      const open = await em.findOne(Movement, { unit: unit.id, state: { $in: [...ACTIVE_STATES] } });
       return open ? `Offene Lagerbewegung ${open.number}` : null;
     });
     this.locationRemoval.register('open-movements', async (location) => {

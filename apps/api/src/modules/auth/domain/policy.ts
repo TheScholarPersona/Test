@@ -77,6 +77,9 @@ export const RULES: readonly Rule[] = [
   // Auslagerung
   { methods: ['POST'], path: new RegExp(`^/v1/outbound-orders/${ID}/picks/${ID}/confirm$`), access: FLOOR, note: 'Pick quittieren' },
   { methods: WRITE, path: /^\/v1\/outbound-orders(\/.*)?$/, access: OPERATIONS, note: 'Auslageraufträge' },
+  // Versand
+  { methods: ['POST'], path: new RegExp(`^/v1/shipments/${ID}/load$`), access: FLOOR, note: 'Ladekontrolle (TU verladen)' },
+  { methods: WRITE, path: /^\/v1\/shipments(\/.*)?$/, access: OPERATIONS, note: 'Sendungen bilden, Warenausgang, Storno' },
   { methods: ['POST'], path: /^\/v1\/allocation\/simulations$/, access: OPERATIONS, note: 'Auslagerung simulieren' },
   { methods: ['POST'], path: /^\/v1\/putaway\/(decisions|simulations)$/, access: OPERATIONS, note: 'Einlagerplatz bestimmen' },
   // Lagerbewegungen
