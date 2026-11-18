@@ -64,7 +64,7 @@ export type LockReceivingOrder = z.infer<typeof LockReceivingOrderSchema>;
 export const CreateReceivingOrderSchema = z
   .strictObject({
     orderId: OrderIdSchema,
-    supplier: z.string().trim().min(1).max(100).optional().meta({ description: 'Freitext; mit supplierCode ohne Angabe die Partnernummer' }),
+    supplier: z.string().trim().min(1).max(100).optional().meta({ description: 'Freitext; mit supplierCode ohne Angabe der Name des Partners' }),
     supplierCode: PartnerCodeSchema.optional().meta({ description: 'Geschäftspartner mit Rolle SUPPLIER' }),
     priority: PrioritySchema.default('NORMAL'),
     details: DetailsSchema.optional(),
