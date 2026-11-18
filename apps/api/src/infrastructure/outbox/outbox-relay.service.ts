@@ -2,6 +2,7 @@ import { LockMode, MikroORM } from '@mikro-orm/postgresql';
 import { Inject, Injectable, Logger, type OnApplicationBootstrap, type OnApplicationShutdown } from '@nestjs/common';
 import { APP_CONFIG, type AppConfig } from '../../config.js';
 import { EVENT_PUBLISHER, type EventPublisher } from '../messaging/event-publisher.js';
+import { MetricsService } from '../metrics/metrics.service.js';
 import { OutboxMessage } from './outbox-message.entity.js';
 import { retryDelayMs, withTimeout } from './retry-policy.js';
 
@@ -31,6 +32,7 @@ export class OutboxRelayService implements OnApplicationBootstrap, OnApplication
     private readonly orm: MikroORM,
     @Inject(EVENT_PUBLISHER) private readonly publisher: EventPublisher,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
+    private readonly metrics: MetricsService,
   ) {}
 
   onApplicationBootstrap(): void {
@@ -76,11 +78,13 @@ export class OutboxRelayService implements OnApplicationBootstrap, OnApplication
           message.publishedAt = new Date();
           message.lastError = null;
           published++;
+          this.metrics.outboxPublished.inc({ type: message.eventType });
         } catch (error: unknown) {
           message.attempts += 1;
           message.lastError = error instanceof Error ? error.message : String(error);
           message.nextAttemptAt = new Date(Date.now() + retryDelayMs(message.attempts));
           failed++;
+          this.metrics.outboxFailed.inc({ type: message.eventType });
           this.logger.warn(`Event ${message.id} (${message.eventType}) nicht veröffentlicht, Versuch ${message.attempts}: ${message.lastError}`);
         }
       }

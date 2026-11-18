@@ -12,7 +12,7 @@ describe('loadConfig', () => {
       port: 3000,
       dbMigrateOnStart: false,
       mqttUrl: 'mqtt://localhost:1883',
-      outbox: { relayEnabled: true, pollIntervalMs: 500, batchSize: 50, publishTimeoutMs: 5000 },
+      outbox: { relayEnabled: true, pollIntervalMs: 500, batchSize: 50, publishTimeoutMs: 5000, retentionHours: 168, cleanupIntervalMs: 3_600_000 },
     });
   });
 

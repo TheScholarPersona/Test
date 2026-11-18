@@ -53,3 +53,21 @@ export const MovementCancelledEvent = defineEvent(
   1,
   MovementSnapshotSchema.extend({ reason: z.string().optional(), releasedTarget: z.boolean() }),
 );
+
+/** Bewegungsgruppe: mehrere Lagerbewegungen, gemeinsam einem Bediener zugeteilt. Zustand aus den Bewegungen abgeleitet. */
+export const MovementGroupStateSchema = z.enum(['OPEN', 'IN_PROGRESS', 'DONE', 'CANCELLED']);
+export const MovementGroupSnapshotSchema = z.object({
+  number: z.string(),
+  description: z.string().nullable(),
+  assignedTo: z.string().nullable(),
+  state: MovementGroupStateSchema,
+  movements: z.array(z.string()),
+});
+export const MovementGroupCreatedEvent = defineEvent('movement-group.created', 1, MovementGroupSnapshotSchema);
+/** Zuteilung, Beginn, Rückgabe oder Mitglieder geändert (`change`). */
+export const MovementGroupChangedEvent = defineEvent(
+  'movement-group.changed',
+  1,
+  MovementGroupSnapshotSchema.extend({ change: z.enum(['assigned', 'started', 'released', 'members', 'description']) }),
+);
+

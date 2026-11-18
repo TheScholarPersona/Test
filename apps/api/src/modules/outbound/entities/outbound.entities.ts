@@ -11,6 +11,14 @@ const OutboundOrderSchema = defineEntity({
     id: p.uuid().primary(),
     orderId: p.string().length(40).unique(),
     customer: p.string().length(100).nullable(),
+    /** Geschäftspartner (Kunde); Nummer statt Verweis, damit der Auftrag ihn überdauert. */
+    customerCode: p.string().length(40).nullable().index(),
+    /** Lieferadresse als Momentaufnahme bei Anlage. */
+    shipToName: p.string().length(100).nullable(),
+    shipToStreet: p.string().length(100).nullable(),
+    shipToPostalCode: p.string().length(20).nullable(),
+    shipToCity: p.string().length(100).nullable(),
+    shipToCountry: p.string().length(2).nullable(),
     priority: p.enum(OUTBOUND_PRIORITIES).default('NORMAL'),
     /** Ziel der Lagerbewegungen/Transportaufträge (z. B. Versandplatz); `null`, wenn gelöscht oder nicht angegeben. */
     target: () => p.manyToOne(Location).nullable().deleteRule('set null').index(),
@@ -71,6 +79,8 @@ const OutboundPickSchema = defineEntity({
     transportNote: p.string().length(200).nullable(),
     pickedBy: p.string().length(100).nullable(),
     pickedAt: p.datetime().nullable(),
+    /** Versand-TU, auf die am Packplatz gepackt wurde (gleich `barcode`, wenn die ganze TU versendet wird). */
+    packedInto: p.string().length(64).nullable().index(),
     createdAt: p.datetime().onCreate(() => new Date()),
   },
 });

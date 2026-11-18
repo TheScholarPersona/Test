@@ -9,6 +9,7 @@ import {
   TransportUnitTypeCodeSchema,
 } from '@wms/shared';
 import { z } from 'zod';
+import { PartnerCodeSchema } from '../../partner/index.js';
 import { pageOf } from '../../../http/common-schemas.js';
 import { LocationReferenceSchema } from '../../layout/index.js';
 
@@ -34,10 +35,39 @@ const UnitPositionInput = z.strictObject({
   barcode: BarcodeSchema.optional().meta({ description: 'Erwarteter Barcode, z. B. SSCC der avisierten Palette' }),
 });
 
+const PrioritySchema = z.enum(['HIGHEST', 'HIGH', 'NORMAL', 'LOW', 'LOWEST']).meta({ description: 'Bearbeitungsreihenfolge im Wareneingang' });
+const DetailKey = z.string().regex(/^[A-Za-z0-9_.-]{1,40}$/, 'Attributname: Buchstaben, Ziffern, _ . - (max. 40)');
+const DetailValue = z.string().trim().min(1).max(200);
+const MAX_DETAILS = 30;
+export const DetailsSchema = z
+  .record(DetailKey, DetailValue)
+  .refine((d) => Object.keys(d).length <= MAX_DETAILS, { message: `Höchstens ${MAX_DETAILS} Attribute` })
+  .meta({ description: 'Frei definierbare Detailattribute, z. B. { "rampe": "3", "frachtbrief": "FB-1" }' });
+
+export const ChangeReceivingOrderSchema = z
+  .strictObject({
+    priority: PrioritySchema.optional(),
+    expectedAt: z.iso.datetime({ offset: true }).nullable().optional(),
+    details: z
+      .record(DetailKey, DetailValue.nullable())
+      .refine((d) => Object.keys(d).length <= MAX_DETAILS, { message: `Höchstens ${MAX_DETAILS} Attribute` })
+      .optional()
+      .meta({ description: 'Wird zusammengeführt; null löscht ein Attribut' }),
+  })
+  .refine((v) => v.priority !== undefined || v.expectedAt !== undefined || v.details !== undefined, { message: 'priority, expectedAt oder details angeben' })
+  .meta({ id: 'ChangeReceivingOrder' });
+export type ChangeReceivingOrder = z.infer<typeof ChangeReceivingOrderSchema>;
+
+export const LockReceivingOrderSchema = z.strictObject({ reason: z.string().trim().min(1).max(200).optional() }).meta({ id: 'LockReceivingOrder' });
+export type LockReceivingOrder = z.infer<typeof LockReceivingOrderSchema>;
+
 export const CreateReceivingOrderSchema = z
   .strictObject({
     orderId: OrderIdSchema,
-    supplier: z.string().trim().min(1).max(100).optional(),
+    supplier: z.string().trim().min(1).max(100).optional().meta({ description: 'Freitext; mit supplierCode ohne Angabe die Partnernummer' }),
+    supplierCode: PartnerCodeSchema.optional().meta({ description: 'Geschäftspartner mit Rolle SUPPLIER' }),
+    priority: PrioritySchema.default('NORMAL'),
+    details: DetailsSchema.optional(),
     expectedAt: z.iso.datetime({ offset: true }).optional(),
     positions: z.array(z.discriminatedUnion('kind', [QuantityPositionInput, UnitPositionInput])).min(1).max(500),
   })
@@ -84,6 +114,12 @@ export const ReasonSchema = z.strictObject({ reason: z.string().trim().min(1).ma
 export const ReceivingQuerySchema = z.object({
   state: ReceivingOrderStateSchema.optional(),
   supplier: z.string().min(1).max(100).optional(),
+  priority: PrioritySchema.optional(),
+  locked: z
+    .enum(['true', 'false'])
+    .transform((v) => v === 'true')
+    .optional(),
+  sort: z.enum(['created', 'priority']).default('created').meta({ description: 'created: neueste zuerst; priority: höchste Priorität, dann frühester Termin' }),
   limit: z.coerce.number().int().min(1).max(1000).default(100),
   offset: z.coerce.number().int().min(0).default(0),
 });
@@ -107,6 +143,11 @@ export const ReceivingOrderDtoSchema = z
   .object({
     orderId: z.string(),
     supplier: z.string().nullable(),
+    supplierCode: z.string().nullable(),
+    priority: PrioritySchema,
+    details: z.record(z.string(), z.string()),
+    locked: z.boolean(),
+    lockReason: z.string().nullable(),
     expectedAt: z.iso.datetime().nullable(),
     state: ReceivingOrderStateSchema,
     positions: z.array(PositionDtoSchema),

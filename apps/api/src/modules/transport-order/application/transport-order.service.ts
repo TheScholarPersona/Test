@@ -54,8 +54,8 @@ export class TransportOrderService implements OnModuleInit {
       const active = await em.findOne(TransportOrder, { unit: unit.id, state: { $in: [...ACTIVE_STATES] } });
       return active ? `laufender Transportauftrag ${active.number}` : null;
     });
-    this.unitRemoval.register('transport-orders', async (unit) => {
-      const open = await this.em.fork().count(TransportOrder, { unit: unit.id, state: { $in: [...OPEN_STATES] } });
+    this.unitRemoval.register('transport-orders', async (unit, em) => {
+      const open = await em.count(TransportOrder, { unit: unit.id, state: { $in: [...OPEN_STATES] } });
       return open > 0 ? `${open} offene(r) Transportauftrag/-aufträge` : null;
     });
     this.locationRemoval.register('transport-orders', async (location) => {

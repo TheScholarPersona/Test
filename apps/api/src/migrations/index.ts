@@ -12,6 +12,10 @@ import { Migration20261117300000_stock } from './Migration20261117300000_stock.j
 import { Migration20261117400000_outbound } from './Migration20261117400000_outbound.js';
 import { Migration20261117500000_auth } from './Migration20261117500000_auth.js';
 import { Migration20261117600000_unit_errors_plc_state } from './Migration20261117600000_unit_errors_plc_state.js';
+import { Migration20261117700000_movement_groups } from './Migration20261117700000_movement_groups.js';
+import { Migration20261117800000_partners } from './Migration20261117800000_partners.js';
+import { Migration20261117900000_shipping } from './Migration20261117900000_shipping.js';
+import { Migration20261118000000_receiving_priority_lock } from './Migration20261118000000_receiving_priority_lock.js';
 
 /**
  * Registrierte Migrationen in Ausführungsreihenfolge.
@@ -32,4 +36,8 @@ export const migrations: MigrationObject[] = [
   { name: Migration20261117400000_outbound.name, class: Migration20261117400000_outbound },
   { name: Migration20261117500000_auth.name, class: Migration20261117500000_auth },
   { name: Migration20261117600000_unit_errors_plc_state.name, class: Migration20261117600000_unit_errors_plc_state },
+  { name: Migration20261117700000_movement_groups.name, class: Migration20261117700000_movement_groups },
+  { name: Migration20261117800000_partners.name, class: Migration20261117800000_partners },
+  { name: Migration20261117900000_shipping.name, class: Migration20261117900000_shipping },
+  { name: Migration20261118000000_receiving_priority_lock.name, class: Migration20261118000000_receiving_priority_lock },
 ];

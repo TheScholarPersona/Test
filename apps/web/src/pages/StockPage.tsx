@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api, unwrap } from '../api/client';
-import { Empty, ErrorMessage, Panel, Quantity, dateTime } from '../components/ui';
+import { Empty, ErrorMessage, Panel, PdfLink, Quantity, dateTime } from '../components/ui';
 
 export function StockPage() {
   const [by, setBy] = useState<'product' | 'location'>('product');
@@ -32,6 +32,7 @@ export function StockPage() {
           TU-Barcode
           <input value={barcode} onChange={(e) => setBarcode(e.target.value.trim())} placeholder="alle" />
         </label>
+        {barcode && items.data?.items.length ? <PdfLink href={`/v1/documents/unit-label/${encodeURIComponent(barcode)}`}>Palettenetikett {barcode}</PdfLink> : null}
         <label>
           Summen
           <select value={by} onChange={(e) => setBy(e.target.value as 'product' | 'location')}>

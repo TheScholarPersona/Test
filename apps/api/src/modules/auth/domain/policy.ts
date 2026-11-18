@@ -11,7 +11,7 @@ export type Role = (typeof ROLES)[number];
 export const ROLE_DESCRIPTIONS: Record<Role, string> = {
   admin: 'Alles, auch Stammdaten, Regelsätze, Materialfluss-Konfiguration und Benutzer',
   leitstand: 'Aufträge steuern (Wareneingang, Auslagerung, Transport), Sperren, Korrekturen, Inventur',
-  lager: 'Ausführen am Scanner: TUs bewegen, Ware erfassen, Picks quittieren, Bewegungen bearbeiten',
+  lager: 'Ausführen am Scanner: TUs bewegen, Ware erfassen, Picks quittieren und packen, verladen, Bewegungen bearbeiten',
   anlage: 'Anlagen und Adapter (Node-RED): Geräte-Ereignisse, Fahrbefehle, Transportaufträge',
   lesen: 'Nur ansehen',
 };
@@ -49,9 +49,15 @@ export const RULES: readonly Rule[] = [
   { methods: '*', path: /^\/test(\/.*)?$/, access: roles('admin'), note: 'Test-Endpunkte (nur Testprofil)' },
   // Lesen: jede angemeldete Rolle
   { methods: ['GET'], path: /^\/v1\/.*/, access: anyone, note: 'Lesen' },
+  { methods: ['GET'], path: /^\/metrics$/, access: anyone, note: 'Metriken (Prometheus, z. B. Service-Token mit Rolle lesen)' },
   // Sperren (vor den Stammdaten-Regeln, die sonst greifen)
   { methods: ['PATCH'], path: new RegExp(`^/v1/(locations|location-groups)/${ID}/locks$`), access: OPERATIONS, note: 'Platz- und Gruppensperren' },
   { methods: ['PATCH'], path: new RegExp(`^/v1/locations/${ID}/plc-state$`), access: PLANT, note: 'Zustand laut Anlage' },
+  // Bewegungsgruppen
+  { methods: ['POST'], path: /^\/v1\/movement-groups$/, access: OPERATIONS, note: 'Bewegungsgruppe bilden' },
+  { methods: ['PATCH'], path: new RegExp(`^/v1/movement-groups/${ID}$`), access: OPERATIONS, note: 'Bewegungsgruppe ändern' },
+  { methods: ['POST'], path: new RegExp(`^/v1/movement-groups/${ID}/assign$`), access: OPERATIONS, note: 'Bewegungsgruppe zuteilen' },
+  { methods: ['POST'], path: new RegExp(`^/v1/movement-groups/${ID}/(start|release)$`), access: FLOOR, note: 'Bewegungsgruppe beginnen/zurückgeben' },
   // Bestand
   { methods: ['POST'], path: new RegExp(`^/v1/stock/${ID}/(issues|transfers)$`), access: FLOOR, note: 'Abgang, Umbuchung' },
   { methods: ['POST'], path: new RegExp(`^/v1/stock/${ID}/(corrections|reservations)$`), access: OPERATIONS, note: 'Korrektur, Reservierung' },
@@ -72,6 +78,9 @@ export const RULES: readonly Rule[] = [
   // Auslagerung
   { methods: ['POST'], path: new RegExp(`^/v1/outbound-orders/${ID}/picks/${ID}/confirm$`), access: FLOOR, note: 'Pick quittieren' },
   { methods: WRITE, path: /^\/v1\/outbound-orders(\/.*)?$/, access: OPERATIONS, note: 'Auslageraufträge' },
+  // Versand
+  { methods: ['POST'], path: new RegExp(`^/v1/shipments/${ID}/load$`), access: FLOOR, note: 'Ladekontrolle (TU verladen)' },
+  { methods: WRITE, path: /^\/v1\/shipments(\/.*)?$/, access: OPERATIONS, note: 'Sendungen bilden, Warenausgang, Storno' },
   { methods: ['POST'], path: /^\/v1\/allocation\/simulations$/, access: OPERATIONS, note: 'Auslagerung simulieren' },
   { methods: ['POST'], path: /^\/v1\/putaway\/(decisions|simulations)$/, access: OPERATIONS, note: 'Einlagerplatz bestimmen' },
   // Lagerbewegungen

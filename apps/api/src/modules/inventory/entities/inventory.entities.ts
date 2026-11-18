@@ -48,7 +48,7 @@ const StockItemSchema = defineEntity({
 export class StockItem extends StockItemSchema.class {}
 StockItemSchema.setClass(StockItem);
 
-export const BOOKING_TYPES = ['RECEIPT', 'CORRECTION', 'ISSUE', 'TRANSFER_OUT', 'TRANSFER_IN'] as const;
+export const BOOKING_TYPES = ['RECEIPT', 'CORRECTION', 'ISSUE', 'TRANSFER_OUT', 'TRANSFER_IN', 'SHIP'] as const;
 
 /**
  * Buchungsjournal: jede Bestandsänderung mit Bezug. Unveränderlich; Barcode

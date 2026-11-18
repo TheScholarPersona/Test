@@ -113,6 +113,128 @@ function PickTab() {
   );
 }
 
+/**
+ * Packen am Packplatz: Pick-TU scannen (zeigt ihre offenen Picks), Versand-TU scannen, Menge bestätigen.
+ * Die Ware wird auf die Versand-TU umgebucht; gleiche TU = ganze Palette geht in den Versand.
+ */
+function PackTab() {
+  const [source, setSource] = useState('');
+  const [target, setTarget] = useState('');
+  const [amount, setAmount] = useState('');
+  const [result, setResult] = useState<Result>(null);
+  const first = useRef<HTMLInputElement>(null);
+  const picks = useQuery({
+    queryKey: ['picks', 'open', 'pack', source],
+    queryFn: () => unwrap(api.GET('/v1/outbound-picks', { params: { query: { state: 'OPEN', barcode: source, limit: 20 } } })),
+    enabled: source.length > 0,
+  });
+  const pick = picks.data?.items[0];
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!pick) {
+      setResult({ kind: 'error', text: `Kein offener Pick auf ${source}` });
+      return;
+    }
+    try {
+      await unwrap(
+        api.POST('/v1/outbound-orders/{orderId}/picks/{pickId}/confirm', {
+          params: { path: { orderId: pick.orderId, pickId: pick.id } },
+          body: { quantity: { amount: amount || pick.quantity.amount, unit: pick.quantity.unit }, pickedBy: 'scanner', packInto: target },
+        }),
+      );
+      setResult({ kind: 'success', text: `${amount || pick.quantity.amount} ${pick.quantity.unit} ${pick.sku} auf ${target} gepackt` });
+      setSource('');
+      setTarget('');
+      setAmount('');
+    } catch (error) {
+      setResult({ kind: 'error', text: describeError(error) });
+    } finally {
+      first.current?.focus();
+    }
+  };
+  return (
+    <form className="stack" onSubmit={submit}>
+      <Result result={result} />
+      <label>Pick-TU scannen<input ref={first} value={source} onChange={(e) => setSource(e.target.value.trim())} autoFocus required autoComplete="off" /></label>
+      {pick && (
+        <div className="panel" aria-label="Pick">
+          <div style={{ fontSize: '1.2rem', fontWeight: 650 }}>{pick.sku}</div>
+          <div>Menge <Quantity q={pick.quantity} /></div>
+          <div className="muted">Auftrag {pick.orderId}, Position {pick.lineNo}{picks.data && picks.data.items.length > 1 ? ` (+${picks.data.items.length - 1} weitere)` : ''}</div>
+        </div>
+      )}
+      {source && picks.isSuccess && !pick && <p className="muted">Kein offener Pick auf dieser TU.</p>}
+      <label>Versand-TU scannen<input value={target} onChange={(e) => setTarget(e.target.value.trim())} required autoComplete="off" /></label>
+      <label>Menge{pick ? ` (${pick.quantity.unit})` : ''}<input value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={pick?.quantity.amount ?? ''} inputMode="decimal" /></label>
+      <button disabled={!pick}>Packen</button>
+    </form>
+  );
+}
+
+/** Verladen mit Ladekontrolle: Sendung scannen, dann jede TU; fremde TUs werden abgelehnt. */
+function LoadTab() {
+  const [number, setNumber] = useState('');
+  const [active, setActive] = useState<string | null>(null);
+  const [barcode, setBarcode] = useState('');
+  const [result, setResult] = useState<Result>(null);
+  const scanField = useRef<HTMLInputElement>(null);
+  const shipment = useQuery({
+    queryKey: ['shipments', 'scanner', active],
+    queryFn: () => unwrap(api.GET('/v1/shipments/{number}', { params: { path: { number: active ?? '' } } })),
+    enabled: active !== null,
+  });
+  const open = async (e: FormEvent) => {
+    e.preventDefault();
+    setResult(null);
+    setActive(number);
+  };
+  const load = async (e: FormEvent) => {
+    e.preventDefault();
+    try {
+      const s = await unwrap(api.POST('/v1/shipments/{number}/load', { params: { path: { number: active ?? '' } }, body: { barcode, loadedBy: 'scanner' } }));
+      setResult({ kind: 'success', text: s.state === 'LOADED' ? `${barcode} verladen – Sendung ${s.number} vollständig verladen` : `${barcode} verladen (${s.counts.loaded} von ${s.counts.units})` });
+      await shipment.refetch();
+    } catch (error) {
+      setResult({ kind: 'error', text: describeError(error) });
+    } finally {
+      setBarcode('');
+      scanField.current?.focus();
+    }
+  };
+  if (!active || shipment.isError) {
+    return (
+      <form className="stack" onSubmit={open}>
+        <Result result={shipment.isError ? { kind: 'error', text: describeError(shipment.error) } : result} />
+        <label>Sendung scannen<input value={number} onChange={(e) => setNumber(e.target.value.trim().toUpperCase())} autoFocus required autoComplete="off" /></label>
+        <button>Öffnen</button>
+      </form>
+    );
+  }
+  const s = shipment.data;
+  return (
+    <form className="stack" onSubmit={load}>
+      <Result result={result} />
+      {s && (
+        <div className="panel" aria-label="Sendung">
+          <div style={{ fontSize: '1.2rem', fontWeight: 650 }}>{s.number}</div>
+          <div>Auftrag {s.orderId}{s.carrierCode ? ` · Spediteur ${s.carrierCode}` : ''}</div>
+          <div>Verladen {s.counts.loaded} von {s.counts.units} · {s.state}</div>
+          <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+            {s.units.map((u) => <li key={u.barcode} className="mono">{u.loaded ? '✓' : '○'} {u.barcode}</li>)}
+          </ul>
+        </div>
+      )}
+      {s?.state === 'OPEN' && (
+        <>
+          <label>TU scannen (Verladen)<input ref={scanField} value={barcode} onChange={(e) => setBarcode(e.target.value.trim())} autoFocus required autoComplete="off" /></label>
+          <button>Verladen</button>
+        </>
+      )}
+      <button type="button" className="secondary" onClick={() => { setActive(null); setNumber(''); setResult(null); }}>Andere Sendung</button>
+    </form>
+  );
+}
+
 /** Wareneingang ohne Avis: Ware auf eine TU erfassen. */
 function ReceiveTab() {
   const [sku, setSku] = useState('');
@@ -165,11 +287,15 @@ export function ScannerPage() {
         {/* Absolute Pfade: relative Links in einer Platzhalter-Route (/scanner/*) beziehen sich auf die volle URL. */}
         <NavLink to="/scanner/bewegen">Bewegen</NavLink>
         <NavLink to="/scanner/picken">Picken</NavLink>
+        <NavLink to="/scanner/packen">Packen</NavLink>
+        <NavLink to="/scanner/verladen">Verladen</NavLink>
         <NavLink to="/scanner/wareneingang">Eingang</NavLink>
       </nav>
       <Routes>
         <Route path="bewegen" element={<MoveTab />} />
         <Route path="picken" element={<PickTab />} />
+        <Route path="packen" element={<PackTab />} />
+        <Route path="verladen" element={<LoadTab />} />
         <Route path="wareneingang" element={<ReceiveTab />} />
         <Route path="*" element={<Navigate to="/scanner/bewegen" replace />} />
       </Routes>

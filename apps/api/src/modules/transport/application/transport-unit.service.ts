@@ -249,13 +249,19 @@ export class TransportUnitService implements OnModuleInit {
   }
 
   delete(barcode: string): Promise<void> {
-    return this.em.transactional(async (tx) => {
+    return this.em.transactional((tx) => this.deleteIn(tx, barcode));
+  }
+
+  /** Wie `delete`, innerhalb der Transaktion des Aufrufers (z. B. Warenausgang). */
+  async deleteIn(tx: EntityManager, barcode: string): Promise<void> {
+    {
       const unit = await this.load(tx, barcode);
       const children = await tx.count(TransportUnit, { parent: unit });
       if (children > 0) {
         throw new ConflictError('TU_HAS_CHILDREN', `Auf TU ${barcode} stehen noch ${children} TUs`, { barcode, children });
       }
-      const objections = await this.unitRemoval.objections({ id: unit.id, barcode });
+      await tx.flush();
+      const objections = await this.unitRemoval.objections({ id: unit.id, barcode }, tx);
       if (objections.length > 0) {
         throw new ConflictError(
           'TU_IN_USE',
@@ -266,7 +272,7 @@ export class TransportUnitService implements OnModuleInit {
       const locationId = (unit.location as Location).locationId;
       tx.remove(unit);
       this.outbox.record(tx, TransportUnitDeletedEvent, { barcode, locationId });
-    });
+    }
   }
 
   /** Lädt eine TU im übergebenen EntityManager (z. B. innerhalb der Transaktion eines anderen Moduls). */

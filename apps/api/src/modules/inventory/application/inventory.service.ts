@@ -51,6 +51,21 @@ export interface ReceiveInput {
   reference: string;
 }
 
+export interface TransferResult {
+  transferId: string;
+  from: StockItem;
+  to: StockItem;
+  fromRemoved: boolean;
+}
+
+/** Inhalt einer TU zum Zeitpunkt des Warenausgangs. */
+export interface ShippedContent {
+  sku: string;
+  quantity: QuantityDto;
+  lot: string | null;
+  bestBefore: string | null;
+}
+
 export interface SummaryRow {
   sku: string;
   location: { id: string; locationId: string } | null;
@@ -99,12 +114,12 @@ export class InventoryService implements OnModuleInit {
 
   /** TUs mit Bestand oder laufender Inventur dürfen nicht gelöscht werden. */
   onModuleInit(): void {
-    this.unitRemoval.register('stock', async (unit) => {
-      const items = await this.em.fork().count(StockItem, { unit: unit.id });
+    this.unitRemoval.register('stock', async (unit, em) => {
+      const items = await em.count(StockItem, { unit: unit.id });
       return items > 0 ? `${items} Bestandsposten auf der TU` : null;
     });
-    this.unitRemoval.register('stock-count', async (unit) => {
-      const open = await this.em.fork().findOne(StockCount, {
+    this.unitRemoval.register('stock-count', async (unit, em) => {
+      const open = await em.findOne(StockCount, {
         unit: unit.id,
         state: { $in: ['OPEN', 'COUNTED'] },
       });
@@ -337,41 +352,7 @@ export class InventoryService implements OnModuleInit {
       const product = item.product as Product;
       const unit = item.unit as TransportUnit;
       const quantity = await this.toBase(tx, product, input.quantity);
-      let reservation: StockReservation | null = null;
-      if (input.reservationId) {
-        reservation = await tx.findOne(StockReservation, {
-          id: input.reservationId,
-          item: item.id,
-        });
-        if (!reservation) {
-          throw new NotFoundError('RESERVATION_NOT_FOUND', `Reservierung [${input.reservationId}] gehört nicht zu diesem Posten`, {
-            reservationId: input.reservationId,
-          });
-        }
-        const reserved = Quantity.of(normalizeDecimal(reservation.quantity), reservation.unitCode);
-        if (quantity.compareTo(reserved) > 0) {
-          throw new RuleViolationError(
-            'EXCEEDS_RESERVATION',
-            `Abgang ${quantity.toString()} übersteigt die Reservierung ${reserved.toString()}`,
-            {
-              quantity: quantity.amount,
-              reserved: reserved.amount,
-            },
-          );
-        }
-        // Reservierung zuerst verringern, dann ist der Abgang innerhalb der verfügbaren Menge.
-        this.changeReserved(item, quantity.negate());
-        const rest = reserved.subtract(quantity);
-        if (rest.isZero()) tx.remove(reservation);
-        else reservation.quantity = rest.amount;
-        this.outbox.record(tx, StockReservationReleasedEvent, {
-          reservationId: reservation.id,
-          sku: product.sku,
-          barcode: unit.barcode,
-          quantity: quantity.toDto(),
-          consumed: true,
-        });
-      }
+      const reservation = input.reservationId ? await this.consumeReservation(tx, item, input.reservationId, quantity) : null;
       const { onHand, removed } = this.applyDelta(tx, item, quantity.negate());
       const booking = this.book(tx, 'ISSUE', item, quantity.negate(), input.reference);
       this.outbox.record(tx, StockIssuedEvent, {
@@ -387,50 +368,125 @@ export class InventoryService implements OnModuleInit {
     }
   }
 
+  /** Aktueller Inhalt je TU (z. B. für Etiketten und Lieferscheine), mit Produktbeschreibung. */
+  async contentsOf(em: EntityManager, barcodes: string[]): Promise<Map<string, (ShippedContent & { description: string })[]>> {
+    const result = new Map<string, (ShippedContent & { description: string })[]>(barcodes.map((b) => [b, []]));
+    if (!barcodes.length) return result;
+    const items = await em.find(StockItem, { unit: { barcode: { $in: barcodes } } }, { populate: ['product', 'unit'], orderBy: { createdAt: 'asc', id: 'asc' } });
+    for (const item of items) {
+      const product = item.product as Product;
+      result.get((item.unit as TransportUnit).barcode)?.push({ sku: product.sku, description: product.description, quantity: onHandOf(item).toDto(), lot: item.lot ?? null, bestBefore: isoDate(item.bestBefore) });
+    }
+    return result;
+  }
+
+  /** Produktbeschreibungen zu SKUs. */
+  async descriptionsOf(em: EntityManager, skus: string[]): Promise<Map<string, string>> {
+    const products = skus.length ? await em.find(Product, { sku: { $in: [...new Set(skus)] } }) : [];
+    return new Map(products.map((p) => [p.sku, p.description]));
+  }
+
+  /** Liegt Bestand auf der TU? */
+  async hasStockIn(em: EntityManager, unitId: string): Promise<boolean> {
+    return (await em.count(StockItem, { unit: unitId })) > 0;
+  }
+
+  /** Bestand eines Postens innerhalb der Transaktion des Aufrufers. */
+  async stockItemIn(tx: EntityManager, id: string): Promise<{ quantity: Quantity; reserved: Quantity }> {
+    const item = await this.peekItem(tx, id);
+    return { quantity: onHandOf(item), reserved: reservedOf(item) };
+  }
+
+  /**
+   * Verbraucht `quantity` einer Reservierung des Postens (Reservierung sinkt, Bestand bleibt) –
+   * vor einem Abgang oder einer Umbuchung, oder beim Packen einer ganzen TU an Ort und Stelle.
+   */
+  async consumeReservationIn(tx: EntityManager, itemId: string, reservationId: string, quantity: Quantity): Promise<void> {
+    const item = await this.lockItem(tx, itemId);
+    await this.consumeReservation(tx, item, reservationId, quantity);
+  }
+
+  private async consumeReservation(tx: EntityManager, item: StockItem, reservationId: string, quantity: Quantity): Promise<StockReservation> {
+    const product = item.product as Product;
+    const unit = item.unit as TransportUnit;
+    const reservation = await tx.findOne(StockReservation, { id: reservationId, item: item.id });
+    if (!reservation) {
+      throw new NotFoundError('RESERVATION_NOT_FOUND', `Reservierung [${reservationId}] gehört nicht zu diesem Posten`, { reservationId });
+    }
+    const reserved = Quantity.of(normalizeDecimal(reservation.quantity), reservation.unitCode);
+    if (quantity.compareTo(reserved) > 0) {
+      throw new RuleViolationError('EXCEEDS_RESERVATION', `Menge ${quantity.toString()} übersteigt die Reservierung ${reserved.toString()}`, {
+        quantity: quantity.amount,
+        reserved: reserved.amount,
+      });
+    }
+    this.changeReserved(item, quantity.negate());
+    const rest = reserved.subtract(quantity);
+    if (rest.isZero()) tx.remove(reservation);
+    else reservation.quantity = rest.amount;
+    this.outbox.record(tx, StockReservationReleasedEvent, { reservationId: reservation.id, sku: product.sku, barcode: unit.barcode, quantity: quantity.toDto(), consumed: true });
+    return reservation;
+  }
+
   /**
    * Umbuchung einer Teilmenge auf eine andere TU (z. B. Umpacken). Charge und
    * MHD bleiben erhalten; auf der Ziel-TU wird gleichartiger Bestand zusammengeführt.
    */
-  transfer(
-    id: string,
-    input: TransferInput,
-  ): Promise<{
-    transferId: string;
-    from: StockItem;
-    to: StockItem;
-    fromRemoved: boolean;
-  }> {
+  transfer(id: string, input: TransferInput): Promise<TransferResult> {
     return this.em.transactional(async (tx) => {
       const peek = await this.peekItem(tx, id);
       const target = await this.units.loadIn(tx, input.to);
-      const sourceUnit = peek.unit as TransportUnit;
-      if (target.id === sourceUnit.id) {
-        throw new RuleViolationError('SAME_UNIT', `Quelle und Ziel sind dieselbe TU ${target.barcode}`, { barcode: target.barcode });
-      }
-      await this.lockUnits(tx, [sourceUnit.id, target.id]);
-      const item = await this.reloadItem(tx, id);
-      const product = item.product as Product;
-      const quantity = await this.toBase(tx, product, input.quantity);
-      const transferId = randomUUID();
-      const reference = input.reference ?? `transfer:${transferId}`;
-      const lot = item.lot ?? null;
-      const bestBefore = isoDate(item.bestBefore);
-      const { removed } = this.applyDelta(tx, item, quantity.negate());
-      this.book(tx, 'TRANSFER_OUT', item, quantity.negate(), reference, sourceUnit.barcode);
-      const to = await this.addTo(tx, product, target, quantity, lot, bestBefore);
-      this.book(tx, 'TRANSFER_IN', to, quantity, reference, target.barcode);
-      this.outbox.record(tx, StockTransferredEvent, {
-        transferId,
-        sku: product.sku,
-        from: sourceUnit.barcode,
-        to: target.barcode,
-        quantity: quantity.toDto(),
-        lot,
-        bestBefore,
-        reference,
-      });
-      return { transferId, from: item, to, fromRemoved: removed };
+      const quantity = await this.toBase(tx, peek.product as Product, input.quantity);
+      return this.transferIn(tx, id, { to: target, quantity, reference: input.reference });
     });
+  }
+
+  /**
+   * Wie `transfer`, innerhalb der Transaktion des Aufrufers (z. B. Packen beim Pick). Mit `reservationId`
+   * wird die Menge zuerst aus der Reservierung genommen; `quantity` ist bereits in der Basiseinheit.
+   */
+  async transferIn(tx: EntityManager, id: string, input: { to: TransportUnit; quantity: Quantity; reference?: string | undefined; reservationId?: string | undefined }): Promise<TransferResult> {
+    const peek = await this.peekItem(tx, id);
+    const target = input.to;
+    const sourceUnit = peek.unit as TransportUnit;
+    if (target.id === sourceUnit.id) {
+      throw new RuleViolationError('SAME_UNIT', `Quelle und Ziel sind dieselbe TU ${target.barcode}`, { barcode: target.barcode });
+    }
+    await this.lockUnits(tx, [sourceUnit.id, target.id]);
+    const item = await this.reloadItem(tx, id);
+    const product = item.product as Product;
+    const quantity = input.quantity;
+    const transferId = randomUUID();
+    const reference = input.reference ?? `transfer:${transferId}`;
+    const lot = item.lot ?? null;
+    const bestBefore = isoDate(item.bestBefore);
+    if (input.reservationId) await this.consumeReservation(tx, item, input.reservationId, quantity);
+    const { removed } = this.applyDelta(tx, item, quantity.negate());
+    this.book(tx, 'TRANSFER_OUT', item, quantity.negate(), reference, sourceUnit.barcode);
+    const to = await this.addTo(tx, product, target, quantity, lot, bestBefore);
+    this.book(tx, 'TRANSFER_IN', to, quantity, reference, target.barcode);
+    this.outbox.record(tx, StockTransferredEvent, { transferId, sku: product.sku, from: sourceUnit.barcode, to: target.barcode, quantity: quantity.toDto(), lot, bestBefore, reference });
+    return { transferId, from: item, to, fromRemoved: removed };
+  }
+
+  /**
+   * Warenausgang: bucht den gesamten Bestand einer TU mit der Buchungsart SHIP aus und liefert ihn als
+   * Momentaufnahme. Reservierter Bestand blockiert (`STOCK_RESERVED`).
+   */
+  async shipUnitIn(tx: EntityManager, unit: TransportUnit, reference: string): Promise<ShippedContent[]> {
+    await this.lockUnits(tx, [unit.id]);
+    await tx.flush();
+    const items = await tx.find(StockItem, { unit: unit.id }, { populate: ['product', 'unit'], refresh: true, orderBy: { createdAt: 'asc', id: 'asc' } });
+    const contents: ShippedContent[] = [];
+    for (const item of items) {
+      const product = item.product as Product;
+      const quantity = onHandOf(item);
+      const { onHand } = this.applyDelta(tx, item, quantity.negate());
+      const booking = this.book(tx, 'SHIP', item, quantity.negate(), reference);
+      this.outbox.record(tx, StockIssuedEvent, { bookingId: booking.id, sku: product.sku, barcode: unit.barcode, quantity: quantity.toDto(), onHand: onHand.toDto(), reference, reservationId: null });
+      contents.push({ sku: product.sku, quantity: quantity.toDto(), lot: item.lot ?? null, bestBefore: isoDate(item.bestBefore) });
+    }
+    return contents;
   }
 
   /** Reserviert verfügbaren Bestand eines Postens. */

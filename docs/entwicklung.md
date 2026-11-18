@@ -250,9 +250,21 @@ Andere Übergänge werden mit `409 INVALID_STATE_TRANSITION` abgelehnt; jede Ant
 
 **Löschschutz und Historie:** Eine TU mit offener Bewegung und ein Platz, der Ziel einer offenen Bewegung ist, können nicht gelöscht werden (Einwand `open-movements`). Bewegungen selbst werden nie gelöscht: Barcode und Platzkoordinaten bleiben gespeichert, auch wenn TU oder Platz später gelöscht werden (`id: null`).
 
-Events: `movement.created|started|released|completed|cancelled` (Schemas in `packages/shared/src/movement-events.ts`).
+**Bewegungsgruppen** (`/v1/movement-groups`, Nummer `MG00000001`): mehrere offene oder laufende Bewegungen gemeinsam einem Bediener zuteilen.
 
-Noch nicht enthalten: Bewegungsgruppen (Zuteilung an Bediener), automatischer Abschluss, wenn die TU ohne Quittung am Ziel gebucht wird.
+| Aktion | Endpunkt | Wirkung |
+|---|---|---|
+| bilden | `POST /v1/movement-groups` `{ movements, assignedTo?, description? }` | je Bewegung höchstens eine Gruppe (`MOVEMENT_GROUPED`), nur offene/laufende (`MOVEMENT_CLOSED`) |
+| ändern | `PATCH …/{number}` `{ add?, remove?, description? }` | nicht mehr, wenn alle Bewegungen beendet sind (`GROUP_CLOSED`) |
+| zuteilen | `POST …/{number}/assign` `{ assignedTo \| null }` | laufende Bewegungen wechseln mit zum neuen Bediener |
+| beginnen | `POST …/{number}/start` `{ assignedTo? }` | alle offenen Bewegungen starten (Bediener: Angabe, zugeteilter oder Angemeldeter) |
+| zurückgeben | `POST …/{number}/release` | alle laufenden Bewegungen wieder öffnen, Zuteilung aufheben |
+
+Abschließen und Stornieren bleiben je Bewegung. Der Zustand der Gruppe wird abgeleitet (`IN_PROGRESS`, sobald eine läuft; `DONE`/`CANCELLED`, wenn alle beendet sind). Die Arbeitsliste filtert mit `GET /v1/movements?group=MG…`. Rechte: bilden, ändern, zuteilen leitstand; beginnen, zurückgeben auch lager.
+
+Events: `movement.created|started|released|completed|cancelled`, `movement-group.created|changed` (Schemas in `packages/shared/src/movement-events.ts`).
+
+Noch nicht enthalten: automatischer Abschluss, wenn die TU ohne Quittung am Ziel gebucht wird.
 
 ## Modul Bestand (`/v1/products`, `/v1/stock…`, `/v1/stock-counts`)
 
@@ -303,6 +315,8 @@ Noch nicht enthalten: Seriennummern, Reservierung über mehrere Posten (Bedarf j
 ```
 
 Mengenpositionen erwarten eine Menge eines Produkts, TU-Positionen eine ganze TU eines Typs (`typeCode` Pflicht, erwarteter `barcode` z. B. SSCC optional). Positionsnummern werden vergeben, wenn sie fehlen.
+
+**Priorität, Detailattribute, Sperre:** `priority` (`HIGHEST` … `LOWEST`, Standard `NORMAL`) und `details` (bis zu 30 Attribute `{ "rampe": "3" }`) beim Anlegen; ändern mit `PATCH /v1/receiving-orders/{orderId}` `{ priority?, expectedAt?, details? }` (Attribute werden zusammengeführt, `null` löscht). `POST …/{orderId}/lock` `{ reason? }` sperrt die Erfassung (`409 ORDER_LOCKED`), `POST …/{orderId}/unlock` gibt sie frei. Nur offene Avise (`ORDER_CLOSED`). Liste mit `?priority=…&locked=true|false&sort=priority` (höchste Priorität, dann frühester Termin). Event `receiving-order.changed` mit `fields`.
 
 **Erfassen** `POST /v1/receiving-orders/{orderId}/captures`:
 
@@ -430,12 +444,31 @@ Schritt-Szenarien erreichen diese Endpunkte mit `request: () => ({ service: 'sim
 
 **Regelsätze in Szenarien:** Szenarien ersetzen nie einen aktiven Regelsatz; Strategien prüfen sie per Simulation mit einem Entwurf, der danach gelöscht wird. Einzige Ausnahme: `outbound-flow` legt einen FIFO-Standard für `allocation` an und aktiviert ihn, **nur wenn** noch keiner aktiv ist – ohne aktiven Regelsatz kann nicht zugeteilt werden. Dieser Standard bleibt danach bestehen.
 
+## Modul Geschäftspartner (`/v1/partners`)
+
+Kunden, Lieferanten und Spediteure als Stammdaten (`apps/api/src/modules/partner`):
+
+```json
+{ "code": "K-1000", "name": "Musterkunde GmbH", "roles": ["CUSTOMER"],
+  "address": { "street": "Musterstraße 1", "postalCode": "12345", "city": "Musterstadt", "country": "DE" }, "email": "versand@example.com" }
+```
+
+| Aktion | Endpunkt | Hinweis |
+|---|---|---|
+| anlegen | `POST /v1/partners` | Nummer eindeutig, mind. eine Rolle (`CUSTOMER`, `SUPPLIER`, `CARRIER`), Land als ISO-3166-Alpha-2 |
+| ändern | `PATCH /v1/partners/{code}` | einzelne Felder, `null` löscht; `active: false` deaktiviert (gelöscht wird nicht) |
+| suchen | `GET /v1/partners?role=…&active=true&q=…` | `q` sucht in Nummer, Name und Ort |
+
+Schreiben ist Stammdatenpflege und damit `admin`. Verwendung: `customerCode` am Auslagerauftrag (Rolle Kunde; Name und Anschrift werden als `shipTo` kopiert, einzelne Felder per `shipTo` überschreibbar) und `supplierCode` am Avis (Rolle Lieferant). Unbekannt → 404 `PARTNER_NOT_FOUND`, deaktiviert → 409 `PARTNER_INACTIVE`, falsche Rolle → 409 `PARTNER_ROLE_MISSING`. Aufträge speichern die Nummer und eine Momentaufnahme der Adresse, keinen Fremdschlüssel – spätere Änderungen am Partner ändern bestehende Aufträge nicht. Der Freitext `customer`/`supplier` bleibt erhalten (für Auslagerstrategien `order.customer`) und ist ohne Angabe die Partnernummer.
+
+Events: `partner.created`, `partner.changed` mit `fields` (`packages/shared/src/partner-events.ts`).
+
 ## Modul Auslagerung (`/v1/outbound-orders`, `/v1/outbound-picks`)
 
 **Auftrag** `POST /v1/outbound-orders`:
 
 ```json
-{ "orderId": "K-4711", "customer": "FRISCH", "priority": "HIGH", "target": { "erpCode": "VERSAND-1" },
+{ "orderId": "K-4711", "customer": "FRISCH", "customerCode": "K-1000", "priority": "HIGH", "target": { "erpCode": "VERSAND-1" },
   "lines": [ { "sku": "MILCH", "quantity": { "amount": "4", "unit": "KAR" } }, { "sku": "MEHL", "quantity": { "amount": "50", "unit": "KG" }, "lot": "L7" } ] }
 ```
 
@@ -454,7 +487,39 @@ Mengen werden in die Basiseinheit umgerechnet. `target` ist das Ziel für Bewegu
 
 Events: `outbound-order.created|allocated|state-changed`, `outbound-pick.confirmed`, `allocation.decided` (`packages/shared/src/outbound-events.ts`).
 
-Noch nicht enthalten: Wellenbildung, Wegoptimierung der Pick-Liste, Packen und Versand, Teilmengen aus einer TU auf eine Versand-TU umbuchen (geht bereits über die Bestandsumbuchung).
+**Packen am Packplatz:** `confirm` mit `packInto: "<Versand-TU>"` bucht die entnommene Menge aus der Reservierung auf die Versand-TU um (`TRANSFER_OUT`/`TRANSFER_IN`), statt sie auszubuchen. Der Packplatz ist das Ziel des Auftrags (`target`); die Versand-TU muss dort stehen (`PACK_STATION_MISSING`, `PACK_UNIT_NOT_AT_STATION`). Ist `packInto` die Pick-TU selbst, geht die ganze Palette in den Versand – nur wenn der Pick den gesamten Posten umfasst (`PACK_IN_PLACE_PARTIAL`). Der Pick zeigt `packedInto`.
+
+Noch nicht enthalten: Wellenbildung, Wegoptimierung der Pick-Liste.
+
+## Modul Versand (`/v1/shipments`)
+
+Sendungen bündeln gepackte TUs eines Auslagerauftrags (`apps/api/src/modules/shipping`):
+
+| Aktion | Endpunkt | Rollen | Wirkung |
+|---|---|---|---|
+| anlegen | `POST /v1/shipments` `{ orderId, carrierCode?, units? }` | admin, leitstand | Nummer `SH00000001` …, Kunde und Lieferadresse vom Auftrag, Spediteur (Partnerrolle `CARRIER`) |
+| TU aufnehmen / herausnehmen | `POST …/{number}/units` `{ barcode }`, `DELETE …/{number}/units/{barcode}` | admin, leitstand | TU muss am Packplatz stehen, Bestand tragen und in keiner anderen offenen Sendung sein |
+| verladen | `POST …/{number}/load` `{ barcode, loadedBy? }` | admin, leitstand, lager | Ladekontrolle: fremde TU → `WRONG_UNIT`; alle gescannt → `LOADED` |
+| Warenausgang | `POST …/{number}/ship` `{ shippedBy? }` | admin, leitstand | nur `LOADED`: Bestand jeder TU mit Buchungsart `SHIP` (Bezug `shipment:<Nummer>`) ausbuchen, TU löschen, Inhalt in `units[].contents` behalten |
+| stornieren | `POST …/{number}/cancel` `{ reason? }` | admin, leitstand | `OPEN`/`LOADED`; TUs und Bestand bleiben |
+
+Zustände `OPEN → LOADED → SHIPPED` (`CANCELLED`). Der Warenausgang läuft in einer Transaktion; die Löschprüfungen der TUs (laufende Bewegungen, Transportaufträge, Inventur, Bestand) sehen dabei die Buchungen derselben Transaktion. Events: `shipment.created`, `shipment.changed` (`change`: `unit-added`, `unit-removed`, `unit-loaded`, `loaded`, `cancelled`), `shipment.shipped` mit Inhalt (`packages/shared/src/shipping-events.ts`).
+
+## Modul Dokumente (`/v1/documents`)
+
+PDF-Dokumente mit internen Barcodes (Code 128 der eigenen Kennungen, keine SSCC); nur lesend, jeder Angemeldete darf sie abrufen. Antwort `application/pdf`, `Content-Disposition: inline`.
+
+| Dokument | Endpunkt | Format |
+|---|---|---|
+| Palettenetikett | `GET /v1/documents/unit-label/{barcode}` | A6: TU-Barcode, Typ, Platz, Inhalt |
+| Versandetiketten | `GET /v1/documents/shipping-labels/{number}?unit=…` | A6, eine Seite je TU: Empfänger, Auftrag, Spediteur, Packstück n von m, Barcodes von Sendung und TU |
+| Pickliste | `GET /v1/documents/pick-list/{orderId}` | A4: offene Picks in Platzreihenfolge, Kontrollfeld |
+| Lieferschein | `GET /v1/documents/delivery-note/{number}` | A4: Empfänger, Positionen je Produkt/Charge/MHD, Packstücke |
+| Ladeliste | `GET /v1/documents/loading-list/{number}` | A4: TUs mit Inhalt, Ladekontrolle, Unterschriftsfeld |
+
+Nach dem Warenausgang stammen die Inhalte aus der Historie der Sendung, vorher aus dem aktuellen Bestand. Erzeugt mit PDFKit 0.20.2 und bwip-js 4.11.4 (beide MIT; Abhängigkeiten MIT bzw. Apache-2.0 für `@swc/helpers`), Schrift Helvetica aus den PDF-Standardschriften. In der Oberfläche: Links in **Versand** (Lieferschein, Ladeliste, Versandetiketten, Palettenetikett je TU), **Auslagerung** (Pickliste) und **Bestand** (Palettenetikett bei gewählter TU).
+
+Zum Ansehen in Tests: `PDF_DUMP_DIR=/pfad pnpm --filter @wms/api test:integration` schreibt die in den Tests abgerufenen PDFs dorthin; `test/integration/support/pdf.ts` liest den Text für Prüfungen aus.
 
 ## Events
 
@@ -571,7 +636,7 @@ Szenario `node-red-examples` prüft die Beispiel-Flows; Schritt-Szenarien erreic
 | Transport | offene Transportaufträge und Lagerbewegungen mit den erlaubten Aktionen |
 | Materialfluss | Geräte-Ereignis senden (auch als Probelauf) mit Begründung, Entscheidungen, Routen, Action-Matrix |
 | Ereignisse | Live-Protokoll mit Filter |
-| Scanner | für Handy/Handscanner: TU bewegen, Picks quittieren, Wareneingang; Fokus springt nach jedem Scan zurück |
+| Scanner | für Handy/Handscanner: TU bewegen, Picks quittieren, Packen (Pick-TU → Versand-TU), Verladen mit Ladekontrolle, Wareneingang; Fokus springt nach jedem Scan zurück |
 
 **Aufbau:** React 19, React Router, TanStack Query, `openapi-fetch`. Die Typen des API-Clients erzeugt `openapi-typescript` aus `apps/web/src/api/openapi.json` (Skript `generate`, läuft vor `dev`, `build`, `typecheck`). Diese Datei ist die Beschreibung der API zum Zeitpunkt des Commits; der Integrationstest `live.integration.test.ts` schlägt fehl, wenn die API davon abweicht – dann mit `UPDATE_OPENAPI=1 pnpm test:integration` neu schreiben. So kann die Oberfläche nicht unbemerkt von der API abweichen.
 
@@ -584,6 +649,29 @@ Szenario `node-red-examples` prüft die Beispiel-Flows; Schritt-Szenarien erreic
 Die Oberfläche zeigt ohne Sitzung die Anmeldung; Schaltflächen erscheinen nur, wenn die Rolle sie erlaubt (die API prüft trotzdem selbst). Unter **Konto** ändert jeder sein Passwort, unter **Benutzer** (nur admin) werden Benutzer angelegt, Rollen vergeben, gesperrt und Passwörter neu gesetzt. Die Playwright-Tests melden sich einmal als admin an (`WMS_ADMIN_PASSWORD` aus der `.env`).
 
 Noch nicht enthalten: Bearbeiten von Stammdaten (Plätze, Produkte, Regelsätze) in der Oberfläche, Druck (Etiketten, Picklisten).
+
+## Metriken und Aufbewahrung
+
+`GET /metrics` liefert Kennzahlen im Prometheus-Format (Präfix `wms_`, prom-client 15.1.3, Apache-2.0). Abruf nur mit Anmeldung – am einfachsten ein eigenes Service-Token mit der Rolle `lesen` in `AUTH_SERVICE_TOKENS` (z. B. `prometheus:lesen:<geheimnis>`):
+
+```yaml
+scrape_configs:
+  - job_name: wms
+    metrics_path: /metrics
+    authorization: { type: Bearer, credentials_file: /etc/prometheus/wms-token }
+    static_configs: [{ targets: ['wms-api:3000'] }]
+```
+
+| Metrik | Inhalt |
+|---|---|
+| `wms_http_request_duration_seconds` | Histogramm je `method`, `route` (Muster, z. B. `/v1/shipments/:number`), `status` |
+| `wms_outbox_pending`, `wms_outbox_oldest_pending_seconds` | Rückstand der Outbox – steigt beides, ist MQTT nicht erreichbar |
+| `wms_outbox_published_total`, `wms_outbox_publish_failures_total` | je Event-Typ |
+| `wms_outbox_cleaned_total` | nach Ablauf der Frist gelöschte Einträge |
+| `wms_outbound_orders`, `wms_outbound_picks_open`, `wms_receiving_orders`, `wms_movements`, `wms_transport_orders`, `wms_shipments`, `wms_transport_unit_errors_open` | fachliche Zustände je `state`, beim Abruf aus der Datenbank gelesen |
+| `wms_process_*`, `wms_nodejs_*` | Prozesswerte (CPU, Speicher, Event-Loop) |
+
+**Aufbewahrung der Outbox:** Veröffentlichte Events werden nach `OUTBOX_RETENTION_HOURS` (Standard 168 = 7 Tage, `0` = nie) gelöscht; geprüft wird alle `OUTBOX_CLEANUP_INTERVAL_MS` (Standard 1 h), in Portionen zu 5000. Unveröffentlichte Events bleiben immer. Läuft nur, wenn das Relay aktiv ist.
 
 ## Absicherung
 
@@ -604,7 +692,7 @@ Jeder Zugang braucht eine Anmeldung. Alle Geheimnisse stehen in der `.env` (nich
 |---|---|
 | `admin` | Alles, auch Stammdaten, Regelsätze, Materialfluss-Konfiguration und Benutzer |
 | `leitstand` | Aufträge steuern (Wareneingang, Auslagerung, Transport), Sperren, Korrekturen, Inventur |
-| `lager` | Ausführen am Scanner: TUs bewegen, Ware erfassen, Picks quittieren, Bewegungen bearbeiten |
+| `lager` | Ausführen am Scanner: TUs bewegen, Ware erfassen, Picks quittieren und packen, verladen, Bewegungen bearbeiten |
 | `anlage` | Anlagen und Adapter (Node-RED): Geräte-Ereignisse, Fahrbefehle, Transportaufträge |
 | `lesen` | Nur ansehen |
 
@@ -665,4 +753,4 @@ docker compose up -d --wait --no-build
 
 - ESLint (Typprüfung und Architekturregeln laufen bereits)
 - Anmeldung über einen zentralen Identitätsdienst (OIDC/SSO); bisher eigene Benutzer im WMS
-- Aufräumen veröffentlichter Outbox-Einträge (Aufbewahrungsfrist)
+- Verteiltes Tracing (OpenTelemetry)

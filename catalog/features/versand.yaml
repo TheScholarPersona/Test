@@ -1,0 +1,146 @@
+# Feature-Katalog – Bereich Versand.
+area: versand
+
+features:
+  - id: versand.sendungen
+    title: Sendungen bilden
+    group: versand.sendungen
+    summary: Fasst die gepackten Versand-TUs eines Auslagerauftrags zu einer Sendung mit Lieferadresse und Spediteur zusammen.
+    description: |
+      Eine Sendung (Nummer `SH00000001` …) gehört zu einem Auslagerauftrag und übernimmt dessen Kunden und Lieferadresse;
+      optional wird ein Spediteur aus den Geschäftspartnern gewählt. Aufgenommen werden TUs, die am Packplatz des Auftrags
+      stehen und Bestand tragen; eine TU kann nur in einer offenen Sendung sein. TUs lassen sich herausnehmen, die
+      Sendung lässt sich bis zum Warenausgang stornieren – TUs und Bestand bleiben dann unverändert.
+    usage:
+      - channel: leitstand
+        text: Seite **Versand** – Sendung mit Auftrag, Spediteur und Versand-TUs anlegen, TUs aufnehmen oder herausnehmen, stornieren.
+      - channel: api
+        text: "Anlegen `POST /v1/shipments` (`orderId`, `carrierCode?`, `units?`), `POST …/{number}/units`, `DELETE …/{number}/units/{barcode}`, `POST …/{number}/cancel`, Liste `GET /v1/shipments?state=…&orderId=…`."
+    rules:
+      - TU nicht am Packplatz → `UNIT_NOT_AT_STATION`; leer → `UNIT_EMPTY`; schon in einer offenen Sendung → `UNIT_IN_OTHER_SHIPMENT`.
+      - Spediteur braucht die Rolle Spediteur (`PARTNER_ROLE_MISSING`).
+      - Anlegen, Ändern und Stornieren darf der Leitstand.
+    dependsOn: [auslagerung.packen, partner.lieferadresse]
+    technical:
+      components:
+        - apps/api/src/modules/shipping/application/shipment.service.ts
+        - apps/api/src/modules/shipping/http/shipments.controller.ts
+        - apps/api/src/modules/shipping/entities/shipment.entities.ts
+        - apps/web/src/pages/ShippingPage.tsx
+      endpoints:
+        - GET /v1/shipments
+        - POST /v1/shipments
+        - GET /v1/shipments/{number}
+        - POST /v1/shipments/{number}/units
+        - DELETE /v1/shipments/{number}/units/{barcode}
+        - POST /v1/shipments/{number}/cancel
+      events:
+        emits: [shipment.created, shipment.changed]
+      uiRoutes: [/versand]
+      notes:
+        - Tabellen `shipment` und `shipment_unit`, Nummernkreis `shipment_number_seq`; die Sendungszeile wird bei Änderungen gesperrt.
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/shipping.integration.test.ts
+        test: legt eine Sendung mit Lieferadresse und Spediteur an und prüft die TUs
+      - kind: integration
+        file: apps/api/test/integration/shipping.integration.test.ts
+        test: lässt TUs und Bestand beim Storno stehen und gibt die TU für eine neue Sendung frei
+      - kind: web-e2e
+        file: apps/web/e2e/seiten.spec.ts
+        test: "Versand: am Packplatz packen, mit Ladekontrolle verladen, Warenausgang buchen"
+    comparisons:
+      openwms:
+        status: nicht-einsehbar
+        note: Versand liegt in OpenWMS im privaten Dienst Shipping.
+        refs:
+          - Analyse 1.1
+
+  - id: versand.ladekontrolle
+    title: Ladekontrolle beim Verladen
+    group: versand.sendungen
+    summary: Jede TU wird beim Verladen gescannt – eine falsche Palette wird sofort abgelehnt; sind alle gescannt, ist die Sendung verladen.
+    description: |
+      Beim Verladen wird der Barcode jeder TU gescannt. Gehört er nicht zur Sendung, lehnt das System ab (falsche
+      Palette am Tor). Jede gescannte TU wird mit Zeit und Bediener als verladen markiert; sind alle TUs gescannt, wechselt
+      die Sendung nach `LOADED` und kann ausgeliefert werden.
+    usage:
+      - channel: leitstand
+        text: "Seite **Versand** – in der Sendung „Ladekontrolle: Barcode scannen“ und „Verladen“ (auch Rolle lager)."
+      - channel: api
+        text: "`POST /v1/shipments/{number}/load` mit `barcode` und optional `loadedBy`."
+      - channel: scanner
+        text: Ansicht **Verladen** – Sendung scannen, dann jede TU; Fortschritt „n von m“, fremde TUs werden abgelehnt.
+    rules:
+      - Fremde TU → 409 `WRONG_UNIT`; doppelt gescannt → 409 `UNIT_ALREADY_LOADED`; nur offene Sendungen (`SHIPMENT_STATE`).
+      - Verladen darf auch die Rolle lager.
+    dependsOn: [versand.sendungen]
+    technical:
+      components:
+        - apps/api/src/modules/shipping/application/shipment.service.ts
+        - apps/web/src/pages/ShippingPage.tsx
+        - apps/web/src/pages/ScannerPage.tsx
+      endpoints:
+        - POST /v1/shipments/{number}/load
+      events:
+        emits: [shipment.changed]
+      uiRoutes: [/versand, /scanner/*]
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/shipping.integration.test.ts
+        test: lehnt beim Verladen eine falsche TU ab und ist verladen, wenn alle TUs gescannt sind
+      - kind: web-e2e
+        file: apps/web/e2e/seiten.spec.ts
+        test: "Versand: am Packplatz packen, mit Ladekontrolle verladen, Warenausgang buchen"
+      - kind: web-e2e
+        file: apps/web/e2e/scanner.spec.ts
+        test: "Scanner: am Packplatz packen und mit Ladekontrolle verladen"
+    comparisons:
+      openwms:
+        status: nicht-einsehbar
+        note: Verladen liegt in OpenWMS im privaten Dienst Shipping.
+        refs:
+          - Analyse 1.1
+
+  - id: versand.warenausgang
+    title: Warenausgang mit Historie
+    group: versand.warenausgang
+    summary: Bucht den Bestand aller TUs einer verladenen Sendung aus, löscht die TUs und behält ihren Inhalt in der Sendung.
+    description: |
+      Der Warenausgang ist nur für verladene Sendungen möglich. Der gesamte Bestand jeder TU wird mit der Buchungsart
+      `SHIP` und dem Bezug `shipment:<Nummer>` ausgebucht, danach wird die TU gelöscht. Die Sendung behält Barcode und
+      Inhalt (Produkt, Menge, Charge, MHD) jeder TU als Historie und meldet den Versand mit allen Inhalten.
+    usage:
+      - channel: leitstand
+        text: Seite **Versand** – „Warenausgang buchen“, danach zeigt die Sendung den versendeten Inhalt.
+      - channel: api
+        text: "`POST /v1/shipments/{number}/ship` (`shippedBy?`); Inhalt in `units[].contents`."
+    rules:
+      - Nur `LOADED` (`SHIPMENT_STATE`); reservierter Bestand blockiert (`STOCK_RESERVED`); TUs mit laufenden Aufträgen oder gestapelten TUs blockieren (`TU_IN_USE`, `TU_HAS_CHILDREN`).
+      - Alles in einer Transaktion – gelingt eine TU nicht, bleibt die ganze Sendung unverändert.
+    dependsOn: [versand.ladekontrolle, bestand.buchungsjournal]
+    technical:
+      components:
+        - apps/api/src/modules/shipping/application/shipment.service.ts
+        - apps/api/src/modules/inventory/application/inventory.service.ts
+        - apps/api/src/modules/transport/application/transport-unit.service.ts
+      endpoints:
+        - POST /v1/shipments/{number}/ship
+      events:
+        emits: [shipment.shipped, stock.issued, transport-unit.deleted]
+      uiRoutes: [/versand]
+      notes:
+        - Buchungsart `SHIP` im Journal; Löschprüfungen für TUs laufen in der Transaktion des Warenausgangs.
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/shipping.integration.test.ts
+        test: bucht den Bestand aus, löscht die TUs und behält den Inhalt in der Sendung
+      - kind: web-e2e
+        file: apps/web/e2e/seiten.spec.ts
+        test: "Versand: am Packplatz packen, mit Ladekontrolle verladen, Warenausgang buchen"
+    comparisons:
+      openwms:
+        status: nicht-einsehbar
+        note: Warenausgang liegt in OpenWMS im privaten Dienst Shipping.
+        refs:
+          - Analyse 1.1

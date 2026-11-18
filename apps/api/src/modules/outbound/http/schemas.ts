@@ -2,6 +2,7 @@ import { BarcodeSchema, LotSchema, OutboundOrderStateSchema, QuantitySchema, Sku
 import { z } from 'zod';
 import { pageOf } from '../../../http/common-schemas.js';
 import { LocationReferenceSchema } from '../../layout/index.js';
+import { AddressInputSchema, PartnerCodeSchema } from '../../partner/index.js';
 
 export { pageOf };
 
@@ -9,10 +10,18 @@ export const OrderIdSchema = z.string().trim().regex(/^[A-Za-z0-9_.\-/]{1,40}$/,
 export const OrderIdParam = z.object({ orderId: OrderIdSchema });
 export const PickParam = z.object({ orderId: OrderIdSchema, pickId: z.uuid() });
 
+export const ShipToInputSchema = AddressInputSchema.extend({ name: z.string().trim().min(1).max(100).nullable().optional() }).meta({ id: 'ShipToInput' });
+
+export const ShipToSchema = z
+  .object({ name: z.string().nullable(), street: z.string().nullable(), postalCode: z.string().nullable(), city: z.string().nullable(), country: z.string().nullable() })
+  .meta({ id: 'ShipTo', description: 'Lieferadresse zum Zeitpunkt der Anlage (Momentaufnahme)' });
+
 export const CreateOutboundOrderSchema = z
   .strictObject({
     orderId: OrderIdSchema,
-    customer: z.string().trim().min(1).max(100).optional(),
+    customer: z.string().trim().min(1).max(100).optional().meta({ description: 'Freitext; mit customerCode ohne Angabe die Partnernummer' }),
+    customerCode: PartnerCodeSchema.optional().meta({ description: 'Geschäftspartner mit Rolle CUSTOMER; seine Anschrift wird Lieferadresse' }),
+    shipTo: ShipToInputSchema.optional().meta({ description: 'Lieferadresse; überschreibt einzelne Felder der Partneranschrift' }),
     priority: TransportOrderPrioritySchema.default('NORMAL'),
     target: LocationReferenceSchema.optional().meta({ description: 'Versand- oder Kommissionierplatz für Bewegungen/Transportaufträge' }),
     lines: z
@@ -42,6 +51,9 @@ export const ConfirmPickSchema = z
   .strictObject({
     quantity: QuantitySchema.optional().meta({ description: 'Entnommene Menge; ohne Angabe die zugeteilte. Weniger = Fehlmenge, Rest wird freigegeben' }),
     pickedBy: z.string().trim().min(1).max(100).optional(),
+    packInto: BarcodeSchema.optional().meta({
+      description: 'Versand-TU am Packplatz (Ziel des Auftrags): Ware wird umgebucht statt ausgebucht. Gleich der Pick-TU: die ganze TU wird versendet',
+    }),
   })
   .meta({ id: 'ConfirmPick' });
 export type ConfirmPickInput = z.infer<typeof ConfirmPickSchema>;
@@ -83,6 +95,7 @@ export const PickDtoSchema = z
     transportNote: z.string().nullable(),
     pickedBy: z.string().nullable(),
     pickedAt: z.iso.datetime().nullable(),
+    packedInto: z.string().nullable(),
   })
   .meta({ id: 'OutboundPick' });
 export type PickDto = z.infer<typeof PickDtoSchema>;
@@ -91,6 +104,8 @@ export const OutboundOrderDtoSchema = z
   .object({
     orderId: z.string(),
     customer: z.string().nullable(),
+    customerCode: z.string().nullable(),
+    shipTo: ShipToSchema.nullable(),
     priority: TransportOrderPrioritySchema,
     target: z.object({ id: z.uuid().nullable(), locationId: z.string() }).nullable(),
     state: OutboundOrderStateSchema,

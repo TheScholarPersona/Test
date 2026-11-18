@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Param, Patch, Post, Query } from '@nestjs/common';
 import { Quantity } from '@wms/shared';
 import { normalizeDecimal } from '../../../http/common-schemas.js';
 import { ApiDocumentation } from '../../../http/openapi/api-documentation.js';
@@ -15,8 +15,12 @@ import {
   type CaptureResult,
   CaptureResultSchema,
   CaptureSchema,
+  type ChangeReceivingOrder,
+  ChangeReceivingOrderSchema,
   type CreateReceivingOrder,
   CreateReceivingOrderSchema,
+  type LockReceivingOrder,
+  LockReceivingOrderSchema,
   OrderIdParam,
   pageOf,
   PositionParam,
@@ -58,6 +62,11 @@ export function toOrderDto({ order, positions }: OrderWithPositions): ReceivingO
   return {
     orderId: order.orderId,
     supplier: order.supplier ?? null,
+    supplierCode: order.supplierCode ?? null,
+    priority: order.priority,
+    details: order.details ?? {},
+    locked: order.locked,
+    lockReason: order.lockReason ?? null,
     expectedAt: order.expectedAt?.toISOString() ?? null,
     state: order.state,
     positions: positions.map(positionDto),
@@ -114,6 +123,9 @@ export class ReceivingController {
     docs.route({ method: 'post', path: `${PATH}/{orderId}/captures`, summary: 'Ware gegen den Auftrag erfassen (Menge oder ganze TU)', tags: TAGS, params: OrderIdParam, body: CaptureSchema, response: captured, errors: [400, 404, 409] });
     docs.route({ method: 'post', path: `${PATH}/{orderId}/positions/{posNo}/cancel`, summary: 'Unberührte Position stornieren', tags: TAGS, params: PositionParam, body: ReasonSchema, response: one, errors: [404, 409] });
     docs.route({ method: 'post', path: `${PATH}/{orderId}/positions/{posNo}/close`, summary: 'Teilweise erfasste Position mit Fehlmenge schließen', tags: TAGS, params: PositionParam, body: ReasonSchema, response: one, errors: [404, 409] });
+    docs.route({ method: 'patch', path: `${PATH}/{orderId}`, summary: 'Priorität, Termin oder Detailattribute ändern (null löscht ein Attribut)', tags: TAGS, params: OrderIdParam, body: ChangeReceivingOrderSchema, response: one, errors: [400, 404, 409] });
+    docs.route({ method: 'post', path: `${PATH}/{orderId}/lock`, summary: 'Auftrag sperren: keine Erfassung bis zum Entsperren', tags: TAGS, params: OrderIdParam, body: LockReceivingOrderSchema, response: one, errors: [404, 409] });
+    docs.route({ method: 'post', path: `${PATH}/{orderId}/unlock`, summary: 'Auftrag entsperren', tags: TAGS, params: OrderIdParam, response: one, errors: [404, 409] });
     docs.route({ method: 'post', path: `${PATH}/{orderId}/cancel`, summary: 'Auftrag stornieren (nur ohne Erfassungen)', tags: TAGS, params: OrderIdParam, body: ReasonSchema, response: one, errors: [404, 409] });
     docs.route({ method: 'post', path: `${PATH}/{orderId}/complete`, summary: 'Auftrag abschließen (offene Positionen schließen bzw. stornieren)', tags: TAGS, params: OrderIdParam, body: ReasonSchema, response: one, errors: [404, 409] });
     docs.route({ method: 'post', path: '/v1/receiving-blind-captures', summary: 'Wareneingang ohne Avis', tags: TAGS, body: BlindCaptureSchema, response: captured, errors: [400, 404, 409] });
@@ -166,6 +178,23 @@ export class ReceivingController {
     @Body(new ZodValidationPipe(ReasonSchema)) body: Reason,
   ): Promise<ReceivingOrderDto> {
     return toOrderDto(await this.receiving.closePosition(orderId, posNo, body.reason));
+  }
+
+  @Patch('receiving-orders/:orderId')
+  async change(@Param(new ZodValidationPipe(OrderIdParam)) { orderId }: { orderId: string }, @Body(new ZodValidationPipe(ChangeReceivingOrderSchema)) body: ChangeReceivingOrder): Promise<ReceivingOrderDto> {
+    return toOrderDto(await this.receiving.change(orderId, body));
+  }
+
+  @Post('receiving-orders/:orderId/lock')
+  @HttpCode(HttpStatus.OK)
+  async lock(@Param(new ZodValidationPipe(OrderIdParam)) { orderId }: { orderId: string }, @Body(new ZodValidationPipe(LockReceivingOrderSchema)) body: LockReceivingOrder): Promise<ReceivingOrderDto> {
+    return toOrderDto(await this.receiving.setLock(orderId, true, body));
+  }
+
+  @Post('receiving-orders/:orderId/unlock')
+  @HttpCode(HttpStatus.OK)
+  async unlock(@Param(new ZodValidationPipe(OrderIdParam)) { orderId }: { orderId: string }): Promise<ReceivingOrderDto> {
+    return toOrderDto(await this.receiving.setLock(orderId, false));
   }
 
   @Post('receiving-orders/:orderId/cancel')

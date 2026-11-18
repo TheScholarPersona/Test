@@ -153,3 +153,173 @@ test('Störungen: Anlagenzustand eines Platzes und Fehlermeldung an einer TU', a
   await page.getByRole('button', { name: w.group }).click();
   await expect(page.getByRole('row', { name: new RegExp(w.b) })).toContainText('Störung 12');
 });
+
+test('Bewegungsgruppen: bilden, zuteilen, beginnen und zurückgeben', async ({ page, fx }) => {
+  const w = await fx.warehouse();
+  const numbers: string[] = [];
+  for (const n of [1, 2]) {
+    const barcode = `PW-${fx.s}-G${n}`;
+    await fx.api('POST', '/v1/transport-units', { barcode, typeCode: w.unitType, location: { erpCode: w.a } });
+    fx.onCleanup(() => fx.api('DELETE', `/v1/transport-units/${barcode}`));
+    const m = await fx.api('POST', '/v1/movements', { barcode, type: 'RELOCATION', target: { location: { erpCode: w.ship } } });
+    fx.onCleanup(() => fx.api('POST', `/v1/movements/${m.number}/cancel`, {}).catch(() => undefined));
+    numbers.push(m.number);
+  }
+  const operator = `stapler-${fx.s.toLowerCase()}`;
+
+  await page.goto('./transport');
+  for (const n of numbers) await page.getByLabel(`${n} auswählen`).check();
+  await page.getByLabel('Bediener').fill(operator);
+  await page.getByRole('button', { name: 'Gruppe bilden (2)' }).click();
+  await expect(page.getByRole('status')).toHaveText('Bewegungsgruppe mit 2 Bewegungen gebildet');
+
+  const row = page.getByRole('table', { name: 'Bewegungsgruppen' }).getByRole('row', { name: new RegExp(operator) });
+  await expect(row).toContainText('2 offen');
+  await row.getByRole('button', { name: 'Beginnen' }).click();
+  await expect(row).toContainText('2 in Arbeit');
+  for (const n of numbers) expect((await fx.api('GET', `/v1/movements/${n}`)).assignedTo).toBe(operator);
+  await row.getByRole('button', { name: 'Zurückgeben' }).click();
+  await expect(page.getByRole('status')).toContainText('zurückgegeben');
+  for (const n of numbers) expect((await fx.api('GET', `/v1/movements/${n}`)).state).toBe('OPEN');
+});
+
+test('Geschäftspartner: anlegen, im Auslagerauftrag verwenden, deaktivieren', async ({ page, fx }) => {
+  const w = await fx.warehouse();
+  const code = `PW-${fx.s}-K`;
+  const orderId = `PW-${fx.s}-PA`;
+  fx.onCleanup(async () => {
+    await fx.api('POST', `/v1/outbound-orders/${orderId}/cancel`, {}).catch(() => undefined);
+    await fx.api('PATCH', `/v1/partners/${code}`, { active: false }).catch(() => undefined);
+  });
+
+  await page.goto('./partner');
+  const form = page.locator('section', { hasText: 'Partner anlegen' });
+  await form.getByLabel('Partnernummer').fill(code);
+  await form.getByLabel('Name').fill('Musterkunde GmbH');
+  await form.getByLabel('Straße').fill('Musterstraße 1');
+  await form.getByLabel('PLZ').fill('12345');
+  await form.getByLabel('Ort').fill('Musterstadt');
+  await form.getByRole('button', { name: 'Anlegen' }).click();
+  await expect(page.getByText(`Partner ${code} angelegt`)).toBeVisible();
+  const table = page.getByRole('table', { name: 'Geschäftspartner' });
+  await expect(table.getByRole('row', { name: new RegExp(code) })).toContainText('Musterstraße 1, 12345 Musterstadt, DE');
+
+  await page.goto('./auslagerung');
+  const order = page.locator('section', { hasText: 'Auslagerauftrag anlegen' });
+  await order.getByLabel('Auftrag').fill(orderId);
+  await order.getByLabel('Kunde (Partner)').selectOption(code);
+  await order.getByLabel('SKU').fill(w.sku);
+  await order.getByLabel('Menge').fill('1');
+  await order.getByRole('button', { name: 'Anlegen' }).click();
+  await expect(page.getByText(`Auslagerauftrag ${orderId} angelegt`)).toBeVisible();
+  await page.getByRole('row', { name: new RegExp(orderId) }).click();
+  await expect(page.getByText('Lieferadresse: Musterkunde GmbH, Musterstraße 1, 12345 Musterstadt, DE')).toBeVisible();
+
+  await page.goto('./partner');
+  await table.getByRole('row', { name: new RegExp(code) }).getByRole('button', { name: 'Deaktivieren' }).click();
+  await expect(table.getByRole('row', { name: new RegExp(code) })).toContainText('inaktiv');
+});
+
+test('Versand: am Packplatz packen, mit Ladekontrolle verladen, Warenausgang buchen', async ({ page, fx }) => {
+  const w = await fx.warehouse();
+  const source = `PW-${fx.s}-Q`;
+  const box = `PW-${fx.s}-VE`;
+  await fx.stockedUnit(source, w.sku, w.unitType, w.a, '10');
+  const active = (await fx.api('GET', '/v1/strategy-rule-sets?decisionPoint=allocation')).items.some((r: { status: string }) => r.status === 'ACTIVE');
+  test.skip(!active, 'Kein aktiver Auslager-Regelsatz (pnpm demo:data oder das Szenario outbound-flow legen einen an)');
+  await fx.api('POST', '/v1/transport-units', { barcode: box, typeCode: w.unitType, location: { erpCode: w.ship } });
+  fx.onCleanup(async () => {
+    const stock = await fx.api('GET', `/v1/stock?barcode=${box}`).catch(() => ({ items: [] }));
+    for (const item of stock.items) await fx.api('POST', `/v1/stock/${item.id}/corrections`, { delta: { amount: `-${item.quantity.amount}`, unit: 'PCS' }, reason: 'Aufräumen' });
+    await fx.api('DELETE', `/v1/transport-units/${box}`).catch(() => undefined);
+  });
+  const orderId = `PW-${fx.s}-VS`;
+  await fx.api('POST', '/v1/outbound-orders', { orderId, target: { erpCode: w.ship }, lines: [{ sku: w.sku, quantity: { amount: '3', unit: 'PCS' } }] });
+  fx.onCleanup(() => fx.api('POST', `/v1/outbound-orders/${orderId}/cancel`, {}).catch(() => undefined));
+  await fx.api('POST', `/v1/outbound-orders/${orderId}/allocate`, { transport: 'none' });
+
+  await page.goto('./auslagerung');
+  await page.getByRole('row', { name: new RegExp(orderId) }).click();
+  const detail = page.locator('section', { hasText: `Auftrag ${orderId}` });
+  await detail.getByLabel('Packen auf Versand-TU').fill(box);
+  await detail.getByRole('button', { name: 'Quittieren' }).click();
+  await expect(page.getByText(`Pick quittiert und auf ${box} gepackt`)).toBeVisible();
+  expect((await fx.api('GET', `/v1/stock?barcode=${box}`)).items[0].quantity.amount).toBe('3');
+
+  await page.goto('./versand');
+  const form = page.locator('section', { hasText: 'Sendung anlegen' });
+  await form.getByLabel('Auslagerauftrag').fill(orderId);
+  await form.getByLabel('Versand-TUs').fill(box);
+  await form.getByRole('button', { name: 'Anlegen' }).click();
+  await expect(page.getByText(/Sendung SH\d{8} angelegt/)).toBeVisible();
+  const row = page.getByRole('table', { name: 'Sendungen' }).getByRole('row', { name: new RegExp(orderId) });
+  const number = (await row.locator('td').first().textContent())!.trim();
+  fx.onCleanup(() => fx.api('POST', `/v1/shipments/${number}/cancel`, {}).catch(() => undefined));
+  await row.click();
+
+  const shipment = page.locator('section', { hasText: `Sendung ${number}` });
+  await shipment.getByLabel('Ladekontrolle: Barcode scannen').fill(source);
+  await shipment.getByRole('button', { name: 'Verladen' }).click();
+  await expect(shipment.getByText(`TU ${source} gehört nicht zur Sendung ${number}`)).toBeVisible();
+  await shipment.getByLabel('Ladekontrolle: Barcode scannen').fill(box);
+  await shipment.getByRole('button', { name: 'Verladen' }).click();
+  await expect(shipment.getByText(`${box} verladen – Sendung vollständig verladen`)).toBeVisible();
+
+  await shipment.getByRole('button', { name: 'Warenausgang buchen' }).click();
+  await expect(shipment.getByText('Warenausgang gebucht')).toBeVisible();
+  await expect(row).toContainText('SHIPPED');
+  await expect(shipment.getByRole('table', { name: 'TUs der Sendung' })).toContainText(`3 PCS ${w.sku}`);
+  expect((await fx.request.get(fx.url(`/v1/transport-units/${box}`))).status()).toBe(404);
+
+  const note = shipment.getByRole('link', { name: 'Lieferschein' });
+  const pdf = await fx.request.get(fx.url((await note.getAttribute('href'))!));
+  expect(pdf.headers()['content-type']).toBe('application/pdf');
+  expect((await pdf.body()).subarray(0, 5).toString()).toBe('%PDF-');
+});
+
+test('Wareneingang: Avis mit Priorität und Attribut, Sperre verhindert die Erfassung', async ({ page, fx }) => {
+  const w = await fx.warehouse();
+  const orderId = `PW-${fx.s}-WS`;
+  const barcode = `PW-${fx.s}-WS1`;
+  fx.onCleanup(async () => {
+    const item = (await fx.api('GET', `/v1/stock?barcode=${barcode}`)).items[0];
+    if (item) await fx.api('POST', `/v1/stock/${item.id}/corrections`, { delta: { amount: `-${item.quantity.amount}`, unit: 'PCS' }, reason: 'Aufräumen' });
+    await fx.api('DELETE', `/v1/transport-units/${barcode}`).catch(() => undefined);
+    await fx.api('POST', `/v1/receiving-orders/${orderId}/complete`, {}).catch(() => undefined);
+  });
+
+  await page.goto('./wareneingang');
+  const form = page.locator('section', { hasText: 'Avis anlegen' });
+  await form.getByLabel('Auftrag').fill(orderId);
+  await form.getByLabel('Priorität').selectOption('HIGH');
+  await form.getByLabel('SKU').fill(w.sku);
+  await form.getByLabel('Menge').fill('2');
+  await form.getByRole('button', { name: 'Anlegen' }).click();
+  await expect(page.getByText(`Avis ${orderId} angelegt`)).toBeVisible();
+  await expect(page.getByRole('row', { name: new RegExp(orderId) })).toContainText('hoch');
+
+  await page.getByRole('row', { name: new RegExp(orderId) }).click();
+  const detail = page.locator('section', { hasText: `Auftrag ${orderId}` });
+  await detail.getByLabel('Attribut', { exact: true }).fill('rampe');
+  await detail.getByLabel('Wert').fill('3');
+  await detail.getByRole('button', { name: 'Attribut setzen' }).click();
+  await expect(detail.getByLabel('Detailattribute')).toContainText('rampe: 3');
+
+  page.once('dialog', (dialog) => void dialog.accept('Qualitätsprüfung'));
+  await detail.getByRole('button', { name: 'Sperren' }).click();
+  await expect(detail.getByText('Gesperrt: Qualitätsprüfung – Erfassung erst nach dem Entsperren.')).toBeVisible();
+  await expect(page.getByRole('row', { name: new RegExp(orderId) })).toContainText('gesperrt');
+
+  await detail.getByLabel('Menge').fill('2');
+  await detail.getByLabel('TU-Barcode').fill(barcode);
+  await detail.getByLabel('TU-Typ (neue TU)').selectOption(w.unitType);
+  await detail.getByLabel('Platz').selectOption({ label: `${w.a} (${w.group})` });
+  await detail.getByRole('button', { name: 'Erfassen' }).click();
+  await expect(detail.getByText(/ORDER_LOCKED|gesperrt/).first()).toBeVisible();
+  expect((await fx.api('GET', `/v1/stock?barcode=${barcode}`)).items).toHaveLength(0);
+
+  await detail.getByRole('button', { name: 'Entsperren' }).click();
+  await expect(detail.getByText('Gesperrt: Qualitätsprüfung – Erfassung erst nach dem Entsperren.')).toHaveCount(0);
+  await detail.getByRole('button', { name: 'Erfassen' }).click();
+  await expect(page.getByText(`2 PCS ${w.sku} erfasst`)).toBeVisible();
+});

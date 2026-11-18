@@ -3,7 +3,8 @@ import { useState } from 'react';
 import { api, unwrap } from '../api/client';
 import { Feedback, latest } from '../components/Feedback';
 import { LocationSelect } from '../components/LocationSelect';
-import { Empty, ErrorMessage, Panel, Quantity, StateBadge, dateTime } from '../components/ui';
+import { addressLine, PartnerSelect } from '../components/PartnerSelect';
+import { Empty, ErrorMessage, Panel, PdfLink, Quantity, StateBadge, dateTime } from '../components/ui';
 import { useAction } from '../components/useAction';
 import { useCan } from '../auth/session';
 
@@ -12,6 +13,7 @@ type Transport = 'none' | 'movement' | 'transport-order';
 function CreateOrder() {
   const [orderId, setOrderId] = useState('');
   const [customer, setCustomer] = useState('');
+  const [customerCode, setCustomerCode] = useState('');
   const [sku, setSku] = useState('');
   const [amount, setAmount] = useState('');
   const [unit, setUnit] = useState('PCS');
@@ -23,6 +25,7 @@ function CreateOrder() {
           body: {
             orderId,
             ...(customer ? { customer } : {}),
+            ...(customerCode ? { customerCode } : {}),
             ...(target ? { target: { id: target } } : {}),
             lines: [{ sku, quantity: { amount, unit } }],
           },
@@ -42,7 +45,8 @@ function CreateOrder() {
         }}
       >
         <label>Auftrag<input value={orderId} onChange={(e) => setOrderId(e.target.value)} required /></label>
-        <label>Kunde<input value={customer} onChange={(e) => setCustomer(e.target.value)} /></label>
+        <PartnerSelect value={customerCode} onChange={setCustomerCode} role="CUSTOMER" label="Kunde (Partner)" />
+        <label>Kunde (Freitext)<input value={customer} onChange={(e) => setCustomer(e.target.value)} /></label>
         <label>SKU<input value={sku} onChange={(e) => setSku(e.target.value)} required /></label>
         <label>Menge<input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" required /></label>
         <label>Einheit<input value={unit} onChange={(e) => setUnit(e.target.value.toUpperCase())} required /></label>
@@ -57,6 +61,7 @@ export function OutboundPage() {
   const can = useCan();
   const [selected, setSelected] = useState<string | null>(null);
   const [transport, setTransport] = useState<Transport>('none');
+  const [packInto, setPackInto] = useState('');
   const orders = useQuery({ queryKey: ['outbound', 'orders'], queryFn: () => unwrap(api.GET('/v1/outbound-orders', { params: { query: { limit: 200 } } })) });
   const order = orders.data?.items.find((o) => o.orderId === selected);
   const path = { params: { path: { orderId: selected ?? '' } } };
@@ -66,11 +71,15 @@ export function OutboundPage() {
       unwrap(
         api.POST('/v1/outbound-orders/{orderId}/picks/{pickId}/confirm', {
           params: { path: { orderId: selected ?? '', pickId: a.pickId } },
-          body: a.amount === undefined ? { pickedBy: 'leitstand' } : { quantity: { amount: a.amount, unit: a.unit }, pickedBy: 'leitstand' },
+          body: {
+            pickedBy: 'leitstand',
+            ...(a.amount === undefined ? {} : { quantity: { amount: a.amount, unit: a.unit } }),
+            ...(packInto.trim() ? { packInto: packInto.trim() } : {}),
+          },
         }),
       ),
     ['outbound', 'stock'],
-    () => 'Pick quittiert',
+    () => (packInto.trim() ? `Pick quittiert und auf ${packInto.trim()} gepackt` : 'Pick quittiert'),
   );
   const close = useAction(
     (kind: 'complete' | 'cancel') =>
@@ -130,6 +139,8 @@ export function OutboundPage() {
           <div className="row" style={{ marginBottom: 12 }}>
             <StateBadge state={order.state} />
             {order.target && <span className="muted">Ziel {order.target.locationId}</span>}
+            {order.shipTo && <span className="muted">Lieferadresse: {addressLine(order.shipTo)}</span>}
+            {order.picks.some((p) => p.state === 'OPEN') && <PdfLink href={`/v1/documents/pick-list/${encodeURIComponent(order.orderId)}`}>Pickliste</PdfLink>}
             {order.closeReason && <span className="muted">{order.closeReason}</span>}
           </div>
           <div className="table-wrap">
@@ -151,10 +162,17 @@ export function OutboundPage() {
             </table>
           </div>
           <h2 style={{ marginTop: 16 }}>Picks</h2>
+          {order.target && can('lager', 'leitstand') && (
+            <div className="toolbar" style={{ marginBottom: 8 }}>
+              <label title="Leer: Ware wird ausgebucht. Sonst wird sie auf diese TU am Packplatz umgebucht; die Pick-TU selbst: ganze Palette">
+                Packen auf Versand-TU<input value={packInto} onChange={(e) => setPackInto(e.target.value)} placeholder={`TU auf ${order.target.locationId}`} />
+              </label>
+            </div>
+          )}
           {order.picks.length ? (
             <div className="table-wrap">
               <table>
-                <thead><tr><th>TU</th><th>Platz</th><th className="num">Menge</th><th>Zustand</th><th>Transport</th><th /></tr></thead>
+                <thead><tr><th>TU</th><th>Platz</th><th className="num">Menge</th><th>Zustand</th><th>Transport</th><th>gepackt auf</th><th /></tr></thead>
                 <tbody>
                   {order.picks.map((p) => (
                     <tr key={p.id}>
@@ -163,6 +181,7 @@ export function OutboundPage() {
                       <td className="num"><Quantity q={p.state === 'OPEN' ? p.quantity : p.picked} /></td>
                       <td><StateBadge state={p.state} /></td>
                       <td className="muted">{p.movementNumber ?? p.transportOrderNumber ?? p.transportNote ?? '–'}</td>
+                      <td className="mono">{p.packedInto ?? '–'}</td>
                       <td>
                         {p.state === 'OPEN' && can('lager', 'leitstand') && (
                           <div className="row">

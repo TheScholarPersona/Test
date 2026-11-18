@@ -16,6 +16,7 @@ import { OutboxService } from '../../../infrastructure/outbox/outbox.service.js'
 import { InventoryService, type Product } from '../../inventory/index.js';
 import { type Location, LocationLookup } from '../../layout/index.js';
 import { MovementService } from '../../movement/index.js';
+import { PartnerService } from '../../partner/index.js';
 import { AllocationService } from '../../strategy/index.js';
 import { TransportOrderService } from '../../transport-order/index.js';
 import { TransportUnitClaims, TransportUnitService } from '../../transport/index.js';
@@ -55,6 +56,7 @@ export class OutboundService {
     private readonly claims: TransportUnitClaims,
     private readonly movements: MovementService,
     private readonly transportOrders: TransportOrderService,
+    private readonly partners: PartnerService,
   ) {}
 
   async list(query: OutboundQuery): Promise<{ items: OrderWithDetails[]; total: number }> {
@@ -68,6 +70,13 @@ export class OutboundService {
   }
 
   /** Arbeitsliste der Picks, sortiert nach Platz (Wegoptimierung folgt später). */
+  /** Auftrag innerhalb der Transaktion des Aufrufers (z. B. für eine Sendung), mit Ziel. */
+  async orderIn(em: EntityManager, orderId: string): Promise<OutboundOrder> {
+    const order = await em.findOne(OutboundOrder, { orderId }, { populate: ['target'] });
+    if (!order) throw new NotFoundError('OUTBOUND_ORDER_NOT_FOUND', `Auslagerauftrag [${orderId}] existiert nicht`, { orderId });
+    return order;
+  }
+
   listPicks(query: PickQuery): Promise<[OutboundPick[], number]> {
     const where: FilterQuery<OutboundPick> = { state: query.state };
     if (query.barcode) where.barcode = query.barcode;
@@ -86,10 +95,23 @@ export class OutboundService {
         throw new ConflictError('OUTBOUND_ORDER_EXISTS', `Auslagerauftrag [${input.orderId}] existiert bereits`, { orderId: input.orderId });
       }
       const target = input.target ? await this.lookup.resolve(tx, input.target) : null;
+      const partner = input.customerCode ? await this.partners.requireRole(tx, input.customerCode, 'CUSTOMER') : null;
+      const pick = <K extends 'name' | 'street' | 'postalCode' | 'city' | 'country'>(key: K): string | null => {
+        const given = input.shipTo?.[key];
+        if (given !== undefined) return given;
+        return partner?.[key] ?? null;
+      };
+      const shipTo = { name: pick('name'), street: pick('street'), postalCode: pick('postalCode'), city: pick('city'), country: pick('country') };
       const order = tx.create(OutboundOrder, {
         id: randomUUID(),
         orderId: input.orderId,
-        customer: input.customer ?? null,
+        customer: input.customer ?? partner?.code ?? null,
+        customerCode: partner?.code ?? null,
+        shipToName: shipTo.name,
+        shipToStreet: shipTo.street,
+        shipToPostalCode: shipTo.postalCode,
+        shipToCity: shipTo.city,
+        shipToCountry: shipTo.country,
         priority: input.priority,
         target,
         targetCoordinate: target?.locationId ?? null,
@@ -215,10 +237,12 @@ export class OutboundService {
       if (taken.compareTo(planned) > 0) {
         throw new RuleViolationError('EXCEEDS_PICK', `Entnommen ${taken.toString()}, zugeteilt nur ${planned.toString()}`, { quantity: taken.amount, planned: planned.amount });
       }
-      if (!taken.isZero()) {
+      const short = taken.compareTo(planned) < 0;
+      if (input.packInto) {
+        await this.pack(tx, order, pick, input.packInto, taken, short, reference(order, line));
+      } else if (!taken.isZero()) {
         await this.inventory.issueIn(tx, pick.stockItemId, { quantity: taken.toDto(), reference: reference(order, line), reservationId: pick.reservationId ?? undefined });
       }
-      const short = taken.compareTo(planned) < 0;
       if (short && pick.reservationId) await this.inventory.releaseReservationIn(tx, pick.reservationId, { ignoreMissing: true });
       pick.picked = taken.amount;
       pick.state = short ? 'SHORT' : 'PICKED';
@@ -236,6 +260,7 @@ export class OutboundService {
         barcode: pick.barcode,
         quantity: taken.toDto(),
         short,
+        packedInto: pick.packedInto ?? null,
       });
       this.updateState(tx, order, lines, order.state);
       await tx.flush();
@@ -289,6 +314,31 @@ export class OutboundService {
    * Eine bereits belegte TU, eine TU am Ziel oder ein abgelehntes Ziel ist
    * kein Fehler der Zuteilung: der Grund steht im Pick (`transportNote`).
    */
+  /**
+   * Packen am Packplatz: Die Versand-TU muss am Ziel des Auftrags stehen. Die entnommene Menge wird
+   * aus der Reservierung auf die Versand-TU umgebucht; ist die Versand-TU die Pick-TU selbst, wird
+   * die ganze TU versendet (dann muss der Pick den gesamten Posten umfassen).
+   */
+  private async pack(tx: EntityManager, order: OutboundOrder, pick: OutboundPick, barcode: string, taken: Quantity, short: boolean, ref: string): Promise<void> {
+    const station = order.target as Location | null;
+    if (!station) throw new RuleViolationError('PACK_STATION_MISSING', `Auftrag ${order.orderId} hat kein Ziel (Packplatz)`, { orderId: order.orderId });
+    const unit = await this.units.loadIn(tx, barcode);
+    const at = unit.location as Location;
+    if (at.id !== station.id) {
+      throw new RuleViolationError('PACK_UNIT_NOT_AT_STATION', `Versand-TU ${barcode} steht auf ${at.locationId}, Packplatz ist ${station.locationId}`, { barcode, location: at.locationId, station: station.locationId });
+    }
+    if (barcode === pick.barcode) {
+      const item = await this.inventory.stockItemIn(tx, pick.stockItemId);
+      if (short || item.quantity.compareTo(taken) !== 0) {
+        throw new RuleViolationError('PACK_IN_PLACE_PARTIAL', `TU ${barcode} wird nur ganz versendet: Pick ${taken.toString()}, Bestand ${item.quantity.toString()}`, { barcode });
+      }
+      if (pick.reservationId) await this.inventory.consumeReservationIn(tx, pick.stockItemId, pick.reservationId, taken);
+    } else if (!taken.isZero()) {
+      await this.inventory.transferIn(tx, pick.stockItemId, { to: unit, quantity: taken, reference: ref, reservationId: pick.reservationId ?? undefined });
+    }
+    if (!taken.isZero()) pick.packedInto = barcode;
+  }
+
   private async createTransports(tx: EntityManager, order: OutboundOrder, kind: 'movement' | 'transport-order', picks: OutboundPick[]): Promise<void> {
     const target = order.target as Location;
     const byBarcode = new Map<string, OutboundPick[]>();

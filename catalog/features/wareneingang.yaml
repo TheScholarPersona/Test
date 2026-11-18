@@ -235,3 +235,60 @@ features:
         note: Blind-Erfassung wie in OpenWMS (POST /v1/capture).
         refs:
           - Analyse 3.3 wms-receiving
+
+  - id: wareneingang.avis-steuerung
+    title: Avis priorisieren, beschreiben und sperren
+    group: wareneingang.avis
+    summary: Gibt Avisen eine Priorität, frei definierbare Detailattribute und eine Sperre, die die Erfassung bis zur Freigabe verhindert.
+    description: |
+      Ein Avis hat eine Priorität (höchste bis niedrigste, Standard normal) und bis zu 30 frei definierbare
+      Detailattribute (Schlüssel → Text, z. B. Rampe, Frachtbrief, Temperaturzone). Priorität, Termin und Attribute
+      lassen sich ändern; Attribute werden zusammengeführt, `null` löscht eines. Ein gesperrtes Avis (optional mit
+      Grund) nimmt keine Erfassung an, bis es entsperrt wird. Die Liste filtert nach Priorität und Sperre und sortiert
+      auf Wunsch nach Priorität und Termin.
+    usage:
+      - channel: leitstand
+        text: Seite **Wareneingang** – Priorität beim Anlegen und im Auftrag, „Attribut setzen“, „Sperren“/„Entsperren“, Sortierung nach Priorität.
+      - channel: api
+        text: "`POST /v1/receiving-orders` mit `priority`, `details`; `PATCH /v1/receiving-orders/{orderId}`; `POST …/{orderId}/lock` (`reason?`), `POST …/{orderId}/unlock`; Liste `?priority=…&locked=…&sort=priority`."
+    rules:
+      - Erfassung gegen ein gesperrtes Avis → 409 `ORDER_LOCKED`.
+      - Abgeschlossene oder stornierte Avise lassen sich weder ändern noch sperren (`ORDER_CLOSED`).
+      - Ändern und Sperren darf der Leitstand.
+    dependsOn: [wareneingang.avis]
+    technical:
+      components:
+        - apps/api/src/modules/receiving/application/receiving.service.ts
+        - apps/api/src/modules/receiving/http/receiving.controller.ts
+        - apps/web/src/pages/ReceivingPage.tsx
+      endpoints:
+        - PATCH /v1/receiving-orders/{orderId}
+        - POST /v1/receiving-orders/{orderId}/lock
+        - POST /v1/receiving-orders/{orderId}/unlock
+      events:
+        emits: [receiving-order.changed]
+      uiRoutes: [/wareneingang]
+      notes:
+        - Spalten `priority`, `priority_rank`, `details` (jsonb), `locked`, `lock_reason` an `receiving_order`.
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/receiving.integration.test.ts
+        test: legt Avise mit Priorität und Attributen an und sortiert nach Priorität und Termin
+      - kind: integration
+        file: apps/api/test/integration/receiving.integration.test.ts
+        test: ändert Priorität, Termin und Attribute und meldet die geänderten Felder
+      - kind: integration
+        file: apps/api/test/integration/receiving.integration.test.ts
+        test: lehnt die Erfassung gegen ein gesperrtes Avis ab, bis es entsperrt wird
+      - kind: integration
+        file: apps/api/test/integration/receiving.integration.test.ts
+        test: ändert und sperrt abgeschlossene Avise nicht mehr
+      - kind: web-e2e
+        file: apps/web/e2e/seiten.spec.ts
+        test: "Wareneingang: Avis mit Priorität und Attribut, Sperre verhindert die Erfassung"
+    comparisons:
+      openwms:
+        status: erweitert
+        note: Entspricht `priority`, `details` und `locked` an ReceivingOrder; zusätzlich Sperrgrund, Sortierung nach Priorität und Bedienung im Leitstand.
+        refs:
+          - Analyse 2.1 ReceivingOrder

@@ -7,6 +7,8 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module.js';
 import { requestContext } from './common/request-context.js';
 import type { AppConfig } from './config.js';
+import { httpMetrics } from './infrastructure/metrics/http-metrics.js';
+import { MetricsService } from './infrastructure/metrics/metrics.service.js';
 
 export interface CreateAppOptions {
   logger?: LogLevel[] | false;
@@ -45,6 +47,7 @@ export async function createApp(config: AppConfig, options: CreateAppOptions = {
   app.enableShutdownHooks();
   // Je Anfrage ein eigener Kontext (Akteur für die Ereignisse).
   app.use((_req: unknown, _res: unknown, next: () => void) => requestContext.run(next));
+  app.use(httpMetrics(app.get(MetricsService)));
   if (config.webDistDir) serveWeb(app, config.webDistDir);
   return app;
 }
