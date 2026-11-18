@@ -169,6 +169,7 @@ describe('Wareneingang und Bestand', () => {
       const closed = await api.post('/v1/receiving-orders/WE-1/positions/1/close', { reason: 'Rest kommt nicht' });
       expect(closed.body).toMatchObject({ state: 'IN_PROGRESS' });
       expect(closed.body.positions[0]).toMatchObject({ state: 'SHORT', closeReason: 'Rest kommt nicht' });
+      expect(await api.post('/v1/receiving-orders/WE-1/positions/1/close', {})).toMatchObject({ status: 409, body: { code: 'POSITION_NOT_IN_PROGRESS' } });
       expect(await api.post('/v1/receiving-orders/WE-1/positions/9/close', {})).toMatchObject({ status: 404, body: { code: 'POSITION_NOT_FOUND' } });
     });
 

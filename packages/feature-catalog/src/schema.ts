@@ -23,15 +23,43 @@ export const Channel = z.enum(CHANNELS);
 /** Endpunkt wie in OpenAPI: `METHODE /pfad/{parameter}`. */
 export const EndpointRef = z.string().regex(/^(GET|POST|PUT|PATCH|DELETE) \/\S*$/, 'Endpunkt als "METHODE /pfad", z. B. "POST /v1/stock/{id}/issues"');
 
-/** Nachweis: Test oder Szenario, das die Funktion prüft. Die Prüfung stellt sicher, dass es ihn gibt. */
+/** Kennung eines Akzeptanzkriteriums innerhalb eines Features (`zusage-mit-begleitung`). */
+const CriterionId = z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, 'Kriteriums-Kennung: klein, Bindestriche');
+
+/**
+ * Akzeptanzkriterium: prüfbare Aussage, die die Brücke zwischen Beschreibung und Test bildet.
+ * `effekt`: die Fähigkeit wirkt, mit beobachtbarem Ergebnis; `regel`: fachliche Regel bzw. Grenze (optional mit Fehlercode).
+ */
+export const Acceptance = z
+  .object({
+    id: CriterionId,
+    kind: z.enum(['effekt', 'regel']),
+    text: Text,
+    /** Fehlercode, der bei Verletzung der Regel gemeldet wird (muss im abdeckenden Test zugesichert sein). */
+    code: Text.optional(),
+  })
+  .strict();
+export type Acceptance = z.infer<typeof Acceptance>;
+
+/**
+ * Nachweis: Test oder Szenario, das Akzeptanzkriterien prüft (`covers`). Die Prüfung stellt sicher, dass es ihn
+ * gibt, dass er Zusicherungen enthält und – mit Testberichten – dass er bestanden hat.
+ */
 export const Evidence = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('scenario'), id: Id, note: Text.optional() }).strict(),
+  z.object({ kind: z.literal('scenario'), id: Id, covers: z.array(CriterionId).default([]), rationale: Text.optional(), note: Text.optional() }).strict(),
   z
     .object({
       kind: z.enum(['unit', 'integration', 'web-e2e']),
       file: Text,
       /** Titel des Tests (`it`/`test`), wörtlich wie im Quelltext. */
       test: Text,
+      /** Akzeptanzkriterien, die dieser Test prüft. */
+      covers: z.array(CriterionId).default([]),
+      /**
+       * Begründung nach Review, warum der Test die Kriterien belegt, obwohl die Heuristik nur eine Statusprüfung oder
+       * keinen Bezug erkennt (z. B. MQTT-Test ohne HTTP-Endpunkt). Ersetzt die Warnung, nicht den Test.
+       */
+      rationale: Text.optional(),
       note: Text.optional(),
     })
     .strict(),
@@ -89,6 +117,8 @@ const FeatureBase = {
   usage: z.array(Usage).min(1),
   /** Fachliche Regeln und Grenzen. */
   rules: z.array(Text).default([]),
+  /** Prüfbare Akzeptanzkriterien; jedes braucht einen Nachweis, der es zusichert. */
+  acceptance: z.array(Acceptance).default([]),
   /** Was sich einstellen lässt (Regeln, Strategien, Parameter). */
   settings: z.array(Setting).default([]),
   /** Features, ohne die dieses nicht nutzbar ist. */

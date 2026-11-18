@@ -16,6 +16,17 @@ features:
     rules:
       - Kennung eindeutig; auch bei gleichzeitigem Anlegen kommt genau eine Anfrage durch.
       - Löschen nur, wenn kein Platz den Typ nutzt (`LOCATION_TYPE_IN_USE`).
+    acceptance:
+      - id: angelegt
+        kind: effekt
+        text: Ein Platztyp wird angelegt und erscheint in der Liste.
+      - id: eindeutig
+        kind: regel
+        text: Eine doppelte Kennung wird abgelehnt; bei gleichzeitigem Anlegen kommt genau eine Anfrage durch.
+      - id: location-type-in-use
+        kind: regel
+        text: Löschen nur, wenn kein Platz den Typ nutzt (`LOCATION_TYPE_IN_USE`).
+        code: LOCATION_TYPE_IN_USE
     technical:
       components:
         - apps/api/src/modules/layout/application/location-type.service.ts
@@ -34,17 +45,22 @@ features:
       - kind: integration
         file: apps/api/test/integration/layout.integration.test.ts
         test: legt einen Typ an und lehnt Duplikate ab
+        covers: [angelegt, eindeutig]
       - kind: integration
         file: apps/api/test/integration/layout.integration.test.ts
         test: lässt bei gleichzeitigem Anlegen genau eine Anfrage durch
+        covers: [eindeutig]
       - kind: integration
         file: apps/api/test/integration/layout.integration.test.ts
         test: verweigert das Löschen benutzter Typen und nicht leerer Gruppen
+        covers: [location-type-in-use]
       - kind: scenario
         id: layout-locks
+        covers: [angelegt]
       - kind: integration
         file: apps/api/test/integration/layout.integration.test.ts
         test: listet alle Platztypen
+        covers: [angelegt]
     comparisons:
       openwms:
         status: erweitert
@@ -68,6 +84,17 @@ features:
     rules:
       - Name eindeutig; übergeordnete Gruppe nach dem Anlegen unveränderlich.
       - Löschen nur ohne Plätze und Untergruppen (`LOCATION_GROUP_NOT_EMPTY`).
+    acceptance:
+      - id: hierarchie
+        kind: effekt
+        text: Gruppen bilden eine Hierarchie; Beschreibung und Gruppentyp sind änderbar und die Änderung wird gemeldet.
+      - id: geloescht
+        kind: effekt
+        text: Leere Gruppen lassen sich löschen.
+      - id: location-group-not-empty
+        kind: regel
+        text: Löschen nur ohne Plätze und Untergruppen (`LOCATION_GROUP_NOT_EMPTY`).
+        code: LOCATION_GROUP_NOT_EMPTY
     technical:
       components:
         - apps/api/src/modules/layout/application/location-group.service.ts
@@ -88,14 +115,22 @@ features:
       - kind: integration
         file: apps/api/test/integration/layout.integration.test.ts
         test: baut die Hierarchie auf
+        covers: [hierarchie]
       - kind: integration
         file: apps/api/test/integration/layout.integration.test.ts
         test: löscht Plätze, dann leere Gruppen und unbenutzte Typen
+        covers: [geloescht]
       - kind: scenario
         id: layout-locks
+        covers: [hierarchie]
       - kind: integration
         file: apps/api/test/integration/layout.integration.test.ts
         test: ändert Beschreibung und Gruppentyp und meldet die Änderung
+        covers: [hierarchie]
+      - kind: integration
+        file: apps/api/test/integration/layout.integration.test.ts
+        test: verweigert das Löschen benutzter Typen und nicht leerer Gruppen
+        covers: [location-group-not-empty]
     comparisons:
       openwms:
         status: eingeschraenkt
@@ -121,6 +156,25 @@ features:
       - Koordinate und Typ unveränderlich (`LOCATION_ID_IMMUTABLE`, `LOCATION_TYPE_IMMUTABLE`).
       - Löschen nur ohne Einwände anderer Module (`LOCATION_IN_USE`).
       - Jede Änderung erhöht die Version (optimistische Sperre).
+    acceptance:
+      - id: angelegt
+        kind: effekt
+        text: Ein Platz steht mit Koordinate, ERP- und SPS-Code, Kapazität und Gruppe bereit und lässt sich in eine andere Gruppe verschieben.
+      - id: eindeutig
+        kind: regel
+        text: Doppelte Koordinaten oder Codes und unbekannte Platztypen werden abgelehnt.
+      - id: location-id-immutable
+        kind: regel
+        text: Koordinate und Typ unveränderlich (`LOCATION_ID_IMMUTABLE`, `LOCATION_TYPE_IMMUTABLE`).
+        code: LOCATION_ID_IMMUTABLE
+      - id: location-type-immutable
+        kind: regel
+        text: Koordinate und Typ unveränderlich (`LOCATION_ID_IMMUTABLE`, `LOCATION_TYPE_IMMUTABLE`).
+        code: LOCATION_TYPE_IMMUTABLE
+      - id: location-in-use
+        kind: regel
+        text: Löschen nur ohne Einwände anderer Module (`LOCATION_IN_USE`).
+        code: LOCATION_IN_USE
     settings:
       - name: Kapazität und Höchstgewicht
         description: "`maxTransportUnits` und `maxWeight` (KG) – werden beim Platzieren von TUs durchgesetzt."
@@ -147,18 +201,23 @@ features:
       - kind: integration
         file: apps/api/test/integration/layout.integration.test.ts
         test: legt Plätze an
+        covers: [angelegt]
       - kind: integration
         file: apps/api/test/integration/layout.integration.test.ts
         test: verhindert doppelte Koordinaten und Codes und unbekannte Typen
+        covers: [eindeutig]
       - kind: integration
         file: apps/api/test/integration/layout.integration.test.ts
         test: hält Koordinate und Typ unveränderlich
+        covers: [location-id-immutable, location-type-immutable]
       - kind: integration
         file: apps/api/test/integration/layout.integration.test.ts
         test: verschiebt einen Platz in eine andere Gruppe; geerbte Sperren folgen der neuen Gruppe
+        covers: [angelegt]
       - kind: integration
         file: apps/api/test/integration/layout.integration.test.ts
         test: berücksichtigt Einwände anderer Module beim Löschen eines Platzes
+        covers: [location-in-use]
     comparisons:
       openwms:
         status: gleichwertig
@@ -178,6 +237,10 @@ features:
         text: "`GET /v1/locations?locationId=…|erpCode=…|plcCode=…|group=…`"
       - channel: leitstand
         text: Seite **Lagerplätze** – Plätze je Gruppe; Platzauswahl in anderen Seiten.
+    acceptance:
+      - id: gefunden
+        kind: effekt
+        text: Plätze werden nach Koordinate, ERP-Code und Gruppe einschließlich Untergruppen gefunden.
     dependsOn: [lagerstruktur.plaetze]
     technical:
       components:
@@ -190,6 +253,7 @@ features:
       - kind: integration
         file: apps/api/test/integration/layout.integration.test.ts
         test: findet Plätze nach Koordinate, ERP-Code und Gruppe einschließlich Untergruppen
+        covers: [gefunden]
     comparisons:
       openwms:
         status: gleichwertig
@@ -215,6 +279,23 @@ features:
       - Entsperren ist abgelehnt, solange eine übergeordnete Gruppe sperrt (`LOCK_INHERITED`).
       - Wird die übergeordnete Sperre aufgehoben, bleiben eigene Sperren darunter bestehen.
       - Eine Sperränderung an einer Gruppe erzeugt nur ein Ereignis für diese Gruppe.
+    acceptance:
+      - id: vererbt
+        kind: effekt
+        text: Die Sperre einer Gruppe gilt für alle Untergruppen und Plätze darunter.
+      - id: gemeldet
+        kind: effekt
+        text: Eine Sperränderung erscheint als Ereignis mit Vorher, Nachher und Grund.
+      - id: eigene-bleiben
+        kind: regel
+        text: Wird die übergeordnete Sperre aufgehoben, bleiben eigene Sperren darunter bestehen.
+      - id: platz
+        kind: effekt
+        text: Einzelne Plätze lassen sich für Auslagerung und Platzvergabe sperren und wieder entsperren, auch im Leitstand.
+      - id: lock-inherited
+        kind: regel
+        text: Entsperren ist abgelehnt, solange eine übergeordnete Gruppe sperrt (`LOCK_INHERITED`).
+        code: LOCK_INHERITED
     dependsOn: [lagerstruktur.gruppen, lagerstruktur.plaetze]
     technical:
       components:
@@ -231,26 +312,34 @@ features:
       - kind: integration
         file: apps/api/test/integration/layout.integration.test.ts
         test: vererbt die Sperre einer Gruppe auf Untergruppen und Plätze
+        covers: [vererbt]
       - kind: integration
         file: apps/api/test/integration/layout.integration.test.ts
         test: veröffentlicht die Sperränderung mit Vorher/Nachher und Grund
+        covers: [gemeldet]
       - kind: integration
         file: apps/api/test/integration/layout.integration.test.ts
         test: verbietet das Entsperren unterhalb einer sperrenden Gruppe
+        covers: [lock-inherited]
       - kind: integration
         file: apps/api/test/integration/layout.integration.test.ts
         test: behält eigene Sperren, wenn die übergeordnete Sperre aufgehoben wird
+        covers: [eigene-bleiben]
       - kind: integration
         file: apps/api/test/integration/layout.integration.test.ts
         test: sperrt einzelne Plätze für Auslagerung und Platzvergabe
+        covers: [platz]
       - kind: unit
         file: apps/api/test/unit/layout/lock-state.test.ts
         test: erbt die Sperre einer übergeordneten Gruppe
+        covers: [vererbt]
       - kind: web-e2e
         file: apps/web/e2e/leitstand.spec.ts
         test: Lagerplatz sperren zeigt die Sperre und hebt sie wieder auf
+        covers: [platz]
       - kind: scenario
         id: layout-locks
+        covers: [vererbt, lock-inherited]
     comparisons:
       openwms:
         status: erweitert
@@ -279,6 +368,14 @@ features:
     rules:
       - Gemeldet wird nur eine echte Änderung (Zustand oder Text).
       - Der Text gilt nur bei Störung; bei 0 wird er gelöscht.
+    acceptance:
+      - id: uebernommen
+        kind: effekt
+        text: Eine Störungsmeldung der Anlage setzt den Zustand des Platzes, eine Freimeldung hebt ihn auf.
+      - id: nicht-vergeben
+        kind: regel
+        text: Gestörte Plätze vergibt die Einlagerstrategie nicht.
+        code: PLC_FAULT
     dependsOn: [lagerstruktur.plaetze]
     technical:
       components:
@@ -297,15 +394,20 @@ features:
       - kind: integration
         file: apps/api/test/integration/flow.integration.test.ts
         test: übernimmt den Anlagenzustand eines Platzes und gibt ihn wieder frei
+        covers: [uebernommen]
       - kind: integration
         file: apps/api/test/integration/strategy.integration.test.ts
         test: vergibt keinen Platz, für den die Anlage eine Störung meldet
+        covers: [nicht-vergeben]
       - kind: unit
         file: packages/node-red-nodes/test/nodes.test.mjs
         test: wms-device-event meldet den Anlagenzustand eines Platzes
+        rationale: Prüft die Meldung über den Node `wms-device-event`, der den Anlagenzustand an das WMS übergibt.
+        covers: [uebernommen]
       - kind: web-e2e
         file: apps/web/e2e/seiten.spec.ts
         test: "Störungen: Anlagenzustand eines Platzes und Fehlermeldung an einer TU"
+        covers: [uebernommen]
     comparisons:
       openwms:
         status: erweitert

@@ -18,6 +18,17 @@ features:
     rules:
       - Nur lesend; drucken darf jeder Angemeldete.
       - Etikett für eine TU, die nicht zur Sendung gehört → 404 `UNIT_NOT_IN_SHIPMENT`.
+    acceptance:
+      - id: palettenetikett
+        kind: effekt
+        text: Das Palettenetikett ist ein PDF mit Barcode, TU-Typ, Platz und Inhalt der TU; unbekannte TUs ergeben 404.
+      - id: versandetikett
+        kind: effekt
+        text: Je Packstück einer Sendung entsteht ein Versandetikett mit Empfänger, Spediteur und Zählung „x von n“.
+      - id: unit-not-in-shipment
+        kind: regel
+        text: Etikett für eine TU, die nicht zur Sendung gehört → 404 `UNIT_NOT_IN_SHIPMENT`.
+        code: UNIT_NOT_IN_SHIPMENT
     dependsOn: [transporteinheiten.anlegen, versand.sendungen]
     technical:
       components:
@@ -36,12 +47,15 @@ features:
       - kind: integration
         file: apps/api/test/integration/shipping.integration.test.ts
         test: druckt ein Palettenetikett mit Inhalt
+        covers: [palettenetikett]
       - kind: integration
         file: apps/api/test/integration/shipping.integration.test.ts
         test: druckt Lieferschein, Ladeliste und Versandetiketten einer versendeten Sendung aus der Historie
+        covers: [versandetikett, unit-not-in-shipment]
       - kind: integration
         file: apps/api/test/integration/shipping.integration.test.ts
         test: nimmt für offene Sendungen den aktuellen Bestand
+        covers: [versandetikett]
     comparisons:
       openwms:
         status: nicht-einsehbar
@@ -61,6 +75,10 @@ features:
         text: Seite **Auslagerung** – im Auftrag „Pickliste“, solange offene Picks bestehen.
       - channel: api
         text: "`GET /v1/documents/pick-list/{orderId}` (Antwort `application/pdf`)."
+    acceptance:
+      - id: pickliste
+        kind: effekt
+        text: Die Pickliste nennt die offenen Picks des Auftrags in Platzreihenfolge mit Platz, Produkt und Menge.
     dependsOn: [auslagerung.zuteilung]
     technical:
       components:
@@ -73,6 +91,7 @@ features:
       - kind: integration
         file: apps/api/test/integration/shipping.integration.test.ts
         test: druckt die Pickliste mit offenen Picks in Platzreihenfolge
+        covers: [pickliste]
     comparisons:
       openwms:
         status: nicht-einsehbar
@@ -94,6 +113,16 @@ features:
         text: Seite **Versand** – in der Sendung „Lieferschein“ und „Ladeliste“.
       - channel: api
         text: "`GET /v1/documents/delivery-note/{number}`, `GET /v1/documents/loading-list/{number}` (Antwort `application/pdf`)."
+    acceptance:
+      - id: lieferschein
+        kind: effekt
+        text: Der Lieferschein nennt Empfängeradresse, Auftrag, Spediteur und Positionen mit Menge und TU; nach dem Warenausgang aus der Historie.
+      - id: ladeliste
+        kind: effekt
+        text: Die Ladeliste nennt jede TU mit Verlader und den Zustand der Sendung.
+      - id: aktueller-bestand
+        kind: effekt
+        text: Für offene Sendungen kommt der Inhalt aus dem aktuellen Bestand, mit Hinweis darauf.
     dependsOn: [versand.warenausgang, partner.lieferadresse]
     technical:
       components:
@@ -107,12 +136,15 @@ features:
       - kind: integration
         file: apps/api/test/integration/shipping.integration.test.ts
         test: druckt Lieferschein, Ladeliste und Versandetiketten einer versendeten Sendung aus der Historie
+        covers: [lieferschein, ladeliste]
       - kind: integration
         file: apps/api/test/integration/shipping.integration.test.ts
         test: nimmt für offene Sendungen den aktuellen Bestand
+        covers: [aktueller-bestand]
       - kind: web-e2e
         file: apps/web/e2e/seiten.spec.ts
         test: "Versand: am Packplatz packen, mit Ladekontrolle verladen, Warenausgang buchen"
+        covers: [lieferschein]
     comparisons:
       openwms:
         status: nicht-einsehbar

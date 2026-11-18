@@ -19,6 +19,13 @@ features:
     rules:
       - Zustellung mindestens einmal; auch mehrere parallele Relays senden jedes Ereignis genau einmal.
       - Ereignis-Schemas sind versioniert (`packages/shared/src`).
+    acceptance:
+      - id: veroeffentlicht
+        kind: effekt
+        text: Eine fachliche Änderung erscheint als Ereignis auf MQTT, auch wenn der Broker zunächst nicht erreichbar war.
+      - id: genau-einmal
+        kind: regel
+        text: Auch zwei parallele Relays veröffentlichen jedes Ereignis genau einmal; Empfänger verwerfen Duplikate.
     technical:
       components:
         - apps/api/src/infrastructure/outbox/outbox.service.ts
@@ -33,17 +40,22 @@ features:
       - kind: integration
         file: apps/api/test/integration/api.integration.test.ts
         test: veröffentlicht ein Ping-Event über Outbox und MQTT
+        covers: [veroeffentlicht]
       - kind: integration
         file: apps/api/test/integration/api.integration.test.ts
         test: zählt Fehlversuche, wartet ab und veröffentlicht später
+        covers: [veroeffentlicht]
       - kind: integration
         file: apps/api/test/integration/api.integration.test.ts
         test: veröffentlicht jedes Event genau einmal, auch mit zwei parallelen Relays
+        covers: [genau-einmal]
       - kind: unit
         file: packages/node-red-nodes/test/nodes.test.mjs
         test: wms-event filtert nach Typ und Feld und verwirft Duplikate
+        covers: [genau-einmal]
       - kind: scenario
         id: system-ping
+        covers: [veroeffentlicht]
     comparisons:
       openwms:
         status: abweichend
@@ -59,6 +71,10 @@ features:
     usage:
       - channel: api
         text: "`GET /v1/events/stream?types=stock.*,transport-order.*` (`text/event-stream`)."
+    acceptance:
+      - id: sse
+        kind: effekt
+        text: Browser erhalten Ereignisse als Server-Sent Events, gefiltert nach Typ.
     dependsOn: [integration.ereignisse]
     technical:
       components:
@@ -70,6 +86,7 @@ features:
       - kind: integration
         file: apps/api/test/integration/live.integration.test.ts
         test: liefert Ereignisse als Server-Sent Events, gefiltert nach Typ
+        covers: [sse]
     comparisons:
       openwms:
         status: neu
@@ -86,6 +103,13 @@ features:
     usage:
       - channel: api
         text: "`GET /openapi.json` (ohne Anmeldung)."
+    acceptance:
+      - id: beschrieben
+        kind: effekt
+        text: "`/openapi.json` beschreibt alle Endpunkte als OpenAPI 3.1 und stimmt mit der Beschreibung der Oberfläche überein."
+      - id: validiert
+        kind: regel
+        text: Ungültige Anfragen werden mit 400 und der Liste fehlerhafter Felder abgelehnt.
     technical:
       components:
         - apps/api/src/http/openapi/api-documentation.ts
@@ -95,12 +119,18 @@ features:
       - kind: integration
         file: apps/api/test/integration/api.integration.test.ts
         test: beschreibt die Endpunkte als OpenAPI 3.1
+        rationale: Querschnittsfunktion; geprüft über `/openapi.json`, das nicht als Fachendpunkt katalogisiert ist.
+        covers: [beschrieben]
       - kind: integration
         file: apps/api/test/integration/api.integration.test.ts
         test: lehnt ungültige Anfragen mit Feldangaben ab
+        rationale: Querschnittsfunktion; die Eingabeprüfung gilt für alle Endpunkte und wird am Test-Endpunkt gezeigt.
+        covers: [validiert]
       - kind: integration
         file: apps/api/test/integration/live.integration.test.ts
         test: stimmt mit der OpenAPI-Beschreibung der Oberfläche überein
+        rationale: Vergleicht die ausgelieferte Beschreibung mit der eingecheckten Datei der Oberfläche; die Zusicherung ist der Vergleich selbst.
+        covers: [beschrieben]
     comparisons:
       openwms:
         status: abweichend
@@ -120,6 +150,16 @@ features:
     usage:
       - channel: node-red
         text: Palette „WMS“ im Editor; Verbindung mit `${WMS_API_URL}` und Token aus `WMS_API_TOKEN`.
+    acceptance:
+      - id: api-aufruf
+        kind: effekt
+        text: "`wms-api` füllt Platzhalter, ruft die API mit dem Service-Token auf und gibt die Antwort aus."
+      - id: fehler
+        kind: effekt
+        text: Fachliche Fehler kommen mit Code im Catch-Node oder am Fehlerausgang an.
+      - id: warten
+        kind: effekt
+        text: "`wms-wait-event` wartet auf das passende Ereignis."
     technical:
       components:
         - packages/node-red-nodes/nodes/wms-config.js
@@ -130,20 +170,29 @@ features:
       - kind: unit
         file: packages/node-red-nodes/test/nodes.test.mjs
         test: wms-api füllt Platzhalter und gibt die Antwort aus
+        covers: [api-aufruf]
       - kind: unit
         file: packages/node-red-nodes/test/nodes.test.mjs
         test: meldet fachliche Fehler als Node-RED-Fehler mit Code (Catch-Node)
+        rationale: Prüft die gemeinsame Fehlerbehandlung aller WMS-Nodes am Beispiel `wms-move-tu`.
+        covers: [fehler]
       - kind: unit
         file: packages/node-red-nodes/test/nodes.test.mjs
         test: gibt Fehler mit Fehlerausgang an Ausgang 2
+        rationale: Prüft die gemeinsame Fehlerbehandlung aller WMS-Nodes am Beispiel eines Nodes mit Fehlerausgang.
+        covers: [fehler]
       - kind: unit
         file: packages/node-red-nodes/test/nodes.test.mjs
         test: meldet sich mit dem Service-Token aus der Umgebung an
+        rationale: Prüft die Anmeldung der Konfiguration `wms-config` über den Service-Token aus der Umgebung.
+        covers: [api-aufruf]
       - kind: unit
         file: packages/node-red-nodes/test/nodes.test.mjs
         test: wms-wait-event wartet auf das passende Ereignis (Bedingung aus der Nachricht)
+        covers: [warten]
       - kind: scenario
         id: nodes-selftest
+        covers: [api-aufruf, warten]
     comparisons:
       openwms:
         status: neu
@@ -162,6 +211,10 @@ features:
     usage:
       - channel: node-red
         text: "Tab „Beispiele“; Endpunkte `/examples/erp-receipts` und `/examples/scan` (Basic Auth `wms`)."
+    acceptance:
+      - id: beispiele
+        kind: effekt
+        text: Die Beispiel-Flows legen aus einer ERP-Datei einen Wareneingang an und setzen eine Scanner-Meldung als TU-Bewegung mit Regelprüfung um.
     dependsOn: [integration.node-red-nodes]
     technical:
       components:
@@ -169,6 +222,8 @@ features:
     evidence:
       - kind: scenario
         id: node-red-examples
+        rationale: Das Szenario treibt die Beispiel-Flows über ihre Eingänge; die Flows haben keinen eigenen WMS-Endpunkt.
+        covers: [beispiele]
     comparisons:
       openwms:
         status: neu
@@ -190,6 +245,13 @@ features:
         text: "`flows/scenarios/*.js` bzw. eigene Tabs; ausführen mit `pnpm test:e2e`."
       - channel: api
         text: "Nur Testprofil: `POST /test/events/ping`."
+    acceptance:
+      - id: ergebnis
+        kind: effekt
+        text: Szenarien führen ihre Schritte gegen die laufende Umgebung aus, notieren sie und übertragen das Ergebnis in den Testbericht.
+      - id: nur-test
+        kind: regel
+        text: Im Profil production gibt es keine Test-Endpunkte.
     technical:
       components:
         - flows/scenarios
@@ -205,13 +267,18 @@ features:
       - kind: unit
         file: packages/node-red-nodes/test/nodes.test.mjs
         test: prüft, notiert Schritte und überträgt das Ergebnis ins Testframework
+        covers: [ergebnis]
       - kind: integration
         file: apps/api/test/integration/api.integration.test.ts
         test: bietet im Profil production keine Test-Endpunkte an
+        rationale: Die fehlende Route (404) im Profil production ist das fachliche Ergebnis.
+        covers: [nur-test]
       - kind: scenario
         id: system-ping
+        covers: [ergebnis]
       - kind: scenario
         id: nodes-selftest
+        covers: [ergebnis]
     comparisons:
       openwms:
         status: neu
@@ -228,6 +295,10 @@ features:
     usage:
       - channel: leitstand
         text: Menü **Ereignisse**, Feld „Typ enthält“ (z. B. `stock` oder `flow.command`).
+    acceptance:
+      - id: monitor
+        kind: effekt
+        text: Die Seite Ereignisse zeigt Live-Ereignisse und filtert nach Typ.
     dependsOn: [integration.live-stream]
     technical:
       components:
@@ -238,6 +309,7 @@ features:
       - kind: web-e2e
         file: apps/web/e2e/seiten.spec.ts
         test: "Ereignisse: zeigt Live-Ereignisse und filtert nach Typ"
+        covers: [monitor]
     comparisons:
       openwms:
         status: nicht-einsehbar

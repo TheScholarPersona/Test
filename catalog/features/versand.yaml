@@ -20,6 +20,29 @@ features:
       - TU nicht am Packplatz → `UNIT_NOT_AT_STATION`; leer → `UNIT_EMPTY`; schon in einer offenen Sendung → `UNIT_IN_OTHER_SHIPMENT`.
       - Spediteur braucht die Rolle Spediteur (`PARTNER_ROLE_MISSING`).
       - Anlegen, Ändern und Stornieren darf der Leitstand.
+    acceptance:
+      - id: angelegt
+        kind: effekt
+        text: Eine Sendung fasst die Versand-TUs eines Auftrags mit Lieferadresse und Spediteur zusammen und wird gemeldet.
+      - id: storno
+        kind: effekt
+        text: Ein Storno lässt TUs und Bestand stehen und gibt die TU für eine neue Sendung frei.
+      - id: unit-not-at-station
+        kind: regel
+        text: TU nicht am Packplatz → `UNIT_NOT_AT_STATION`.
+        code: UNIT_NOT_AT_STATION
+      - id: unit-empty
+        kind: regel
+        text: Leer → `UNIT_EMPTY`.
+        code: UNIT_EMPTY
+      - id: unit-in-other-shipment
+        kind: regel
+        text: Schon in einer offenen Sendung → `UNIT_IN_OTHER_SHIPMENT`.
+        code: UNIT_IN_OTHER_SHIPMENT
+      - id: partner-role-missing
+        kind: regel
+        text: Spediteur braucht die Rolle Spediteur (`PARTNER_ROLE_MISSING`).
+        code: PARTNER_ROLE_MISSING
     dependsOn: [auslagerung.packen, partner.lieferadresse]
     technical:
       components:
@@ -43,12 +66,15 @@ features:
       - kind: integration
         file: apps/api/test/integration/shipping.integration.test.ts
         test: legt eine Sendung mit Lieferadresse und Spediteur an und prüft die TUs
+        covers: [angelegt, unit-not-at-station, unit-empty, unit-in-other-shipment, partner-role-missing]
       - kind: integration
         file: apps/api/test/integration/shipping.integration.test.ts
         test: lässt TUs und Bestand beim Storno stehen und gibt die TU für eine neue Sendung frei
+        covers: [storno]
       - kind: web-e2e
         file: apps/web/e2e/seiten.spec.ts
         test: "Versand: am Packplatz packen, mit Ladekontrolle verladen, Warenausgang buchen"
+        covers: [angelegt]
     comparisons:
       openwms:
         status: nicht-einsehbar
@@ -74,6 +100,22 @@ features:
     rules:
       - Fremde TU → 409 `WRONG_UNIT`; doppelt gescannt → 409 `UNIT_ALREADY_LOADED`; nur offene Sendungen (`SHIPMENT_STATE`).
       - Verladen darf auch die Rolle lager.
+    acceptance:
+      - id: verladen
+        kind: effekt
+        text: Jede gescannte TU wird als verladen vermerkt; sind alle gescannt, ist die Sendung `LOADED`.
+      - id: wrong-unit
+        kind: regel
+        text: Fremde TU → 409 `WRONG_UNIT`.
+        code: WRONG_UNIT
+      - id: unit-already-loaded
+        kind: regel
+        text: Doppelt gescannt → 409 `UNIT_ALREADY_LOADED`.
+        code: UNIT_ALREADY_LOADED
+      - id: shipment-state
+        kind: regel
+        text: Nur offene Sendungen (`SHIPMENT_STATE`).
+        code: SHIPMENT_STATE
     dependsOn: [versand.sendungen]
     technical:
       components:
@@ -89,12 +131,19 @@ features:
       - kind: integration
         file: apps/api/test/integration/shipping.integration.test.ts
         test: lehnt beim Verladen eine falsche TU ab und ist verladen, wenn alle TUs gescannt sind
+        covers: [verladen, wrong-unit, shipment-state]
       - kind: web-e2e
         file: apps/web/e2e/seiten.spec.ts
         test: "Versand: am Packplatz packen, mit Ladekontrolle verladen, Warenausgang buchen"
+        covers: [verladen]
       - kind: web-e2e
         file: apps/web/e2e/scanner.spec.ts
         test: "Scanner: am Packplatz packen und mit Ladekontrolle verladen"
+        covers: [verladen]
+      - kind: integration
+        file: apps/api/test/integration/shipping.integration.test.ts
+        test: meldet eine doppelt gescannte TU und bleibt offen, bis alle TUs verladen sind
+        covers: [verladen, unit-already-loaded]
     comparisons:
       openwms:
         status: nicht-einsehbar
@@ -118,6 +167,29 @@ features:
     rules:
       - Nur `LOADED` (`SHIPMENT_STATE`); reservierter Bestand blockiert (`STOCK_RESERVED`); TUs mit laufenden Aufträgen oder gestapelten TUs blockieren (`TU_IN_USE`, `TU_HAS_CHILDREN`).
       - Alles in einer Transaktion – gelingt eine TU nicht, bleibt die ganze Sendung unverändert.
+    acceptance:
+      - id: ausgebucht
+        kind: effekt
+        text: Der Warenausgang bucht den Bestand aus, löscht die TUs, meldet die Sendung und behält den Inhalt in der Historie.
+      - id: transaktion
+        kind: regel
+        text: Scheitert eine Prüfung, bleibt die Sendung unverändert – nichts wird gebucht.
+      - id: shipment-state
+        kind: regel
+        text: Nur `LOADED` (`SHIPMENT_STATE`).
+        code: SHIPMENT_STATE
+      - id: stock-reserved
+        kind: regel
+        text: Reservierter Bestand blockiert (`STOCK_RESERVED`).
+        code: STOCK_RESERVED
+      - id: tu-in-use
+        kind: regel
+        text: TUs mit laufenden Aufträgen oder gestapelten TUs blockieren (`TU_IN_USE`, `TU_HAS_CHILDREN`).
+        code: TU_IN_USE
+      - id: tu-has-children
+        kind: regel
+        text: TUs mit laufenden Aufträgen oder gestapelten TUs blockieren (`TU_IN_USE`, `TU_HAS_CHILDREN`).
+        code: TU_HAS_CHILDREN
     dependsOn: [versand.ladekontrolle, bestand.buchungsjournal]
     technical:
       components:
@@ -135,9 +207,15 @@ features:
       - kind: integration
         file: apps/api/test/integration/shipping.integration.test.ts
         test: bucht den Bestand aus, löscht die TUs und behält den Inhalt in der Sendung
+        covers: [ausgebucht, shipment-state]
       - kind: web-e2e
         file: apps/web/e2e/seiten.spec.ts
         test: "Versand: am Packplatz packen, mit Ladekontrolle verladen, Warenausgang buchen"
+        covers: [ausgebucht]
+      - kind: integration
+        file: apps/api/test/integration/shipping.integration.test.ts
+        test: bucht nicht aus, solange Bestand reserviert ist, TUs daraufstehen oder eine Bewegung offen ist
+        covers: [transaktion, stock-reserved, tu-in-use, tu-has-children]
     comparisons:
       openwms:
         status: nicht-einsehbar

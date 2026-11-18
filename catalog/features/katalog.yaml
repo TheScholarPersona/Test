@@ -20,6 +20,17 @@ features:
       - Nur nachgewiesene Funktionen stehen im Katalog; alles andere im Prüfbestand.
       - Ein Feature braucht mindestens einen Nachweis (Unit-, Integrations-, Browser-Test oder Node-RED-Szenario).
       - Die Anwendung ändert sich durch den Katalog nicht.
+    acceptance:
+      - id: fehlerfrei
+        kind: effekt
+        text: Der Katalog im Repository wird geladen und gegen den Code geprüft – ohne Fehler.
+      - id: nachweis-pflicht
+        kind: regel
+        text: Ein Katalog-Feature ohne Nachweis entspricht nicht dem Datenmodell.
+      - id: entferntes
+        kind: regel
+        text: Verweise auf entfernte Endpunkte, Ereignisse, Tests, Szenarien und Quelldateien sind Fehler.
+        code: UNKNOWN_ENDPOINT
     technical:
       components:
         - catalog/catalog.yaml
@@ -33,12 +44,15 @@ features:
       - kind: unit
         file: packages/feature-catalog/test/catalog.test.ts
         test: hat keine Fehler
+        covers: [fehlerfrei]
       - kind: unit
         file: packages/feature-catalog/test/catalog.test.ts
         test: verlangt für Katalog-Features mindestens einen Nachweis
+        covers: [nachweis-pflicht]
       - kind: unit
         file: packages/feature-catalog/test/catalog.test.ts
         test: "meldet Verweise auf Entferntes: Endpunkt, Ereignis, Test, Szenario, Quelle"
+        covers: [entferntes]
     comparisons:
       openwms:
         status: neu
@@ -61,6 +75,19 @@ features:
     rules:
       - Meldet nur; neue Features legt immer ein Mensch an.
       - Verweise auf Entferntes (Endpunkt, Ereignis, Test, Szenario, Quelldatei) sind Fehler.
+    acceptance:
+      - id: zugeordnet
+        kind: effekt
+        text: Jeder erkannte Endpunkt, jedes Ereignis, jede Seite und jeder Node gehört zu einem Bereich; Nicht-Zugeordnetes in katalogisierten Bereichen ist ein Fehler.
+      - id: nur-melden
+        kind: regel
+        text: Die Prüfung legt nie selbst Features an.
+      - id: aufrufe
+        kind: effekt
+        text: Testaufrufe eines Endpunkts werden an Methode und Pfad erkannt, bloße Pfadlisten nicht; fehlt jeder Aufruf, gibt es eine Warnung.
+      - id: rollen
+        kind: effekt
+        text: Die Rollen je Endpunkt kommen aus der Rechtetabelle der API.
     dependsOn: [katalog.datenmodell]
     technical:
       components:
@@ -71,21 +98,27 @@ features:
       - kind: unit
         file: packages/feature-catalog/test/catalog.test.ts
         test: ordnet jeden erkannten Bestandteil einem Bereich zu
+        covers: [zugeordnet]
       - kind: unit
         file: packages/feature-catalog/test/catalog.test.ts
         test: meldet nicht zugeordnete Bestandteile nur in katalogisierten Bereichen als Fehler
+        covers: [zugeordnet]
       - kind: unit
         file: packages/feature-catalog/test/catalog.test.ts
         test: legt nie selbst Features an, sondern meldet nur
+        covers: [nur-melden]
       - kind: unit
         file: packages/feature-catalog/test/catalog.test.ts
         test: warnt, wenn kein Test einen Endpunkt eines Features erkennbar aufruft
+        covers: [aufrufe]
       - kind: unit
         file: packages/feature-catalog/test/catalog.test.ts
         test: erkennt Aufrufe mit Methode und Parametern, nicht aber bloße Pfadlisten
+        covers: [aufrufe]
       - kind: unit
         file: packages/feature-catalog/test/catalog.test.ts
         test: leitet Rollen aus der Rechtetabelle der API ab
+        covers: [rollen]
     comparisons:
       openwms:
         status: neu
@@ -107,6 +140,24 @@ features:
         text: "`pnpm catalog:check --reports reports` nach den Testläufen; in der CI im eigenen Job mit allen Testberichten."
     rules:
       - Übersprungen gilt nicht als nachgewiesen.
+      - Nachgewiesen ist ein Feature erst, wenn jedes Akzeptanzkriterium durch einen bestandenen Test mit Zusicherung belegt ist; sind nur einige belegt, gilt es als teilweise nachgewiesen.
+      - Der Fehlercode einer Regel muss im abdeckenden Test vorkommen; reine Statusprüfungen und Tests ohne Bezug zum Feature werden gemeldet, bis eine Begründung nach Review vorliegt.
+    acceptance:
+      - id: testlauf
+        kind: effekt
+        text: Ein Nachweis zählt erst, wenn er im Testbericht bestanden hat; Fehlschlag, Überspringen und Fehlen werden gemeldet.
+      - id: kriterien
+        kind: regel
+        text: Jedes Akzeptanzkriterium braucht einen zugeordneten, bestandenen Nachweis; sonst ist das Feature höchstens teilweise nachgewiesen.
+        code: ACCEPTANCE_UNCOVERED
+      - id: zusicherung
+        kind: regel
+        text: Ein Nachweis ohne Zusicherung trägt kein Kriterium; reine Statusprüfungen und fehlender Bezug zum Feature werden gemeldet.
+        code: EVIDENCE_NO_ASSERTION
+      - id: fehlercode
+        kind: regel
+        text: Der Fehlercode einer Regel muss im abdeckenden Test zugesichert sein.
+        code: RULE_CODE_NOT_ASSERTED
     dependsOn: [katalog.datenmodell, integration.szenario-tests]
     technical:
       components:
@@ -117,9 +168,23 @@ features:
       - kind: unit
         file: packages/feature-catalog/test/catalog.test.ts
         test: kennzeichnet Features, deren Nachweis im Testlauf fehlschlägt oder fehlt
+        covers: [testlauf]
       - kind: unit
         file: packages/feature-catalog/test/catalog.test.ts
         test: ordnet Szenarien und Browser-Tests ihren Berichten zu
+        covers: [testlauf]
+      - kind: unit
+        file: packages/feature-catalog/test/catalog.test.ts
+        test: verlangt für jedes Akzeptanzkriterium einen bestandenen Nachweis
+        covers: [kriterien]
+      - kind: unit
+        file: packages/feature-catalog/test/catalog.test.ts
+        test: erkennt Nachweise ohne Zusicherung, mit reiner Statusprüfung oder ohne Bezug zum Feature
+        covers: [zusicherung]
+      - kind: unit
+        file: packages/feature-catalog/test/catalog.test.ts
+        test: verlangt den Fehlercode einer Regel als Zusicherung im Test
+        covers: [fehlercode]
     comparisons:
       openwms:
         status: neu
@@ -138,6 +203,10 @@ features:
     usage:
       - channel: entwicklung
         text: "`pnpm catalog:build --reports reports`, dann `catalog/dist/index.html` im Browser öffnen; oder das CI-Artefakt herunterladen."
+    acceptance:
+      - id: ansicht
+        kind: effekt
+        text: Aus denselben Daten entsteht eine eigenständige HTML-Seite mit eingebetteten Daten und eine JSON-Datei mit allen Features.
     dependsOn: [katalog.datenmodell, katalog.nachweise]
     technical:
       components:
@@ -148,6 +217,7 @@ features:
       - kind: unit
         file: packages/feature-catalog/test/catalog.test.ts
         test: erzeugt eine eigenständige Ansicht aus denselben Daten
+        covers: [ansicht]
     comparisons:
       openwms:
         status: neu
@@ -169,6 +239,14 @@ features:
         text: "Einstufung unter `comparisons.<system>` am Feature, Lücken in `catalog/comparisons/<system>.yaml`; Reiter **Vergleich** in der Ansicht."
     rules:
       - Neue Features ohne Einstufung lassen die Prüfung scheitern (`COMPARISON_MISSING`).
+    acceptance:
+      - id: einstufung
+        kind: effekt
+        text: Jedes Feature hat bei vollständigem Vergleich eine Einstufung; unbekannte Systeme und falsche Verweise in Lücken werden gemeldet.
+      - id: comparison-missing
+        kind: regel
+        text: Neue Features ohne Einstufung lassen die Prüfung scheitern (`COMPARISON_MISSING`).
+        code: COMPARISON_MISSING
     dependsOn: [katalog.datenmodell]
     technical:
       components:
@@ -178,9 +256,11 @@ features:
       - kind: unit
         file: packages/feature-catalog/test/catalog.test.ts
         test: verlangt bei vollständigem Vergleich eine Einstufung für jedes Feature
+        covers: [einstufung, comparison-missing]
       - kind: unit
         file: packages/feature-catalog/test/catalog.test.ts
         test: meldet unbekannte Systeme und Lücken mit falschen Verweisen
+        covers: [einstufung]
     comparisons:
       openwms:
         status: neu

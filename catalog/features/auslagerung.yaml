@@ -18,6 +18,14 @@ features:
     rules:
       - Auftragsnummer eindeutig, Produkte und Einheiten müssen existieren.
       - Zustände Auftrag `CREATED` → `PARTIALLY_ALLOCATED` → `ALLOCATED` → `IN_PICKING` → `COMPLETED` (`CANCELLED`).
+    acceptance:
+      - id: angelegt
+        kind: effekt
+        text: Ein angelegter Auftrag steht mit Positionen in der Basiseinheit, offener Menge und Zustand `CREATED` bereit und ist über die Liste nach Zustand auffindbar.
+      - id: eindeutig
+        kind: regel
+        text: Eine doppelte Auftragsnummer wird abgelehnt, unbekannte Produkte ebenso.
+        code: OUTBOUND_ORDER_EXISTS
     dependsOn: [bestand.produktstamm, bestand.einheiten-umrechnung]
     technical:
       components:
@@ -37,14 +45,18 @@ features:
       - kind: integration
         file: apps/api/test/integration/outbound.integration.test.ts
         test: legt einen Auftrag an und prüft Produkt und Nummer
+        covers: [angelegt, eindeutig]
       - kind: web-e2e
         file: apps/web/e2e/leitstand.spec.ts
         test: "Auslagerauftrag: anlegen, zuteilen, quittieren"
+        covers: [angelegt]
       - kind: scenario
         id: outbound-flow
+        covers: [angelegt]
       - kind: integration
         file: apps/api/test/integration/outbound.integration.test.ts
         test: listet Aufträge, neueste zuerst, gefiltert nach Zustand
+        covers: [angelegt]
     comparisons:
       openwms:
         status: nicht-einsehbar
@@ -70,6 +82,23 @@ features:
       - Kein Bestand von gesperrten Plätzen, gesperrten TUs oder aus laufender Inventur.
       - Gleichzeitige Zuteilungen vergeben nie mehr als verfügbar.
       - Ist eine TU schon belegt, wird das vermerkt statt doppelt beauftragt.
+    acceptance:
+      - id: reserviert
+        kind: effekt
+        text: Die Zuteilung wählt den Bestand nach Strategie (FEFO, FIFO), legt Picks an und reserviert die Menge auf den TUs.
+      - id: fehlmenge
+        kind: effekt
+        text: Fehlt Bestand, wird zugeteilt, was geht; die Fehlmenge steht am Auftrag und im Ereignis.
+      - id: gesperrt
+        kind: regel
+        text: Bestand von gesperrten Plätzen, gesperrten TUs und aus laufender Inventur wird nicht zugeteilt.
+        code: SOURCE_OUTBOUND_BLOCKED
+      - id: transport
+        kind: effekt
+        text: Auf Wunsch entsteht je TU eine Lagerbewegung oder ein Transportauftrag zum Ziel; belegte TUs werden vermerkt statt doppelt beauftragt.
+      - id: parallel
+        kind: regel
+        text: Gleichzeitige Zuteilungen vergeben nie mehr als verfügbar.
     dependsOn: [auslagerung.auftrag, strategien.auslagerstrategien, bestand.reservierung]
     technical:
       components:
@@ -84,29 +113,39 @@ features:
       - kind: integration
         file: apps/api/test/integration/outbound.integration.test.ts
         test: teilt per FEFO mit Mindestrestlaufzeit zu und reserviert
+        covers: [reserviert]
       - kind: integration
         file: apps/api/test/integration/outbound.integration.test.ts
         test: teilt per FIFO über mehrere Posten zu
+        covers: [reserviert]
       - kind: integration
         file: apps/api/test/integration/outbound.integration.test.ts
         test: teilt bei zu wenig Bestand zu, was geht, und meldet die Fehlmenge
+        covers: [fehlmenge]
       - kind: integration
         file: apps/api/test/integration/outbound.integration.test.ts
         test: nimmt keinen Bestand von gesperrten Plätzen, gesperrten TUs oder aus laufender Inventur
+        rationale: Prüft die harten Regeln über die Zuteilungs-Simulation, die denselben Entscheidungspunkt wie die Zuteilung nutzt.
+        covers: [gesperrt]
       - kind: integration
         file: apps/api/test/integration/outbound.integration.test.ts
         test: legt je TU eine Lagerbewegung zum Ziel an
+        covers: [transport]
       - kind: integration
         file: apps/api/test/integration/outbound.integration.test.ts
         test: legt Transportaufträge an und vermerkt belegte TUs
+        covers: [transport]
       - kind: integration
         file: apps/api/test/integration/outbound.integration.test.ts
         test: vergibt bei gleichzeitigen Zuteilungen nie mehr als verfügbar
+        covers: [parallel]
       - kind: web-e2e
         file: apps/web/e2e/leitstand.spec.ts
         test: "Auslagerauftrag: anlegen, zuteilen, quittieren"
+        covers: [reserviert]
       - kind: scenario
         id: outbound-flow
+        covers: [reserviert]
     comparisons:
       openwms:
         status: nicht-einsehbar
@@ -131,6 +170,13 @@ features:
         text: Ansicht **Picken** – Pick wählen, TU zur Kontrolle scannen, Menge bestätigen.
     rules:
       - Buchungen tragen den Bezug `outbound:<orderId>/<Position>`.
+    acceptance:
+      - id: abgang
+        kind: effekt
+        text: Die Quittung bucht die Entnahme gegen die Reservierung ab und schließt den Auftrag, wenn alles quittiert ist.
+      - id: rest-frei
+        kind: effekt
+        text: Bei einer Fehlmenge wird der Rest freigegeben und lässt sich neu zuteilen.
     dependsOn: [auslagerung.zuteilung, bestand.abgang]
     technical:
       components:
@@ -145,17 +191,22 @@ features:
       - kind: integration
         file: apps/api/test/integration/outbound.integration.test.ts
         test: bucht bei der Quittung den Abgang und schließt den Auftrag
+        covers: [abgang]
       - kind: integration
         file: apps/api/test/integration/outbound.integration.test.ts
         test: gibt bei einer Fehlmenge den Rest frei und teilt ihn neu zu
+        covers: [rest-frei]
       - kind: web-e2e
         file: apps/web/e2e/leitstand.spec.ts
         test: "Auslagerauftrag: anlegen, zuteilen, quittieren"
+        covers: [abgang]
       - kind: scenario
         id: outbound-flow
+        covers: [abgang]
       - kind: web-e2e
         file: apps/web/e2e/scanner.spec.ts
         test: "Scanner: Pick quittieren mit TU-Kontrolle"
+        covers: [abgang]
     comparisons:
       openwms:
         status: nicht-einsehbar
@@ -183,6 +234,33 @@ features:
       - Ohne Ziel am Auftrag → 409 `PACK_STATION_MISSING`; Versand-TU nicht am Packplatz → 409 `PACK_UNIT_NOT_AT_STATION`.
       - Ganze Palette nur vollständig (`PACK_IN_PLACE_PARTIAL`).
       - Buchungen `TRANSFER_OUT`/`TRANSFER_IN` mit dem Bezug `outbound:<orderId>/<Position>`.
+    acceptance:
+      - id: umgebucht
+        kind: effekt
+        text: Die Quittung mit Versand-TU bucht die Menge aus der Reservierung auf die Versand-TU am Packplatz um (`TRANSFER_OUT`/`TRANSFER_IN`).
+      - id: ganze-palette
+        kind: effekt
+        text: Eine ganze Palette geht unverändert in den Versand.
+      - id: pack-station-missing
+        kind: regel
+        text: Ohne Ziel am Auftrag → 409 `PACK_STATION_MISSING`.
+        code: PACK_STATION_MISSING
+      - id: pack-unit-not-at-station
+        kind: regel
+        text: Versand-TU nicht am Packplatz → 409 `PACK_UNIT_NOT_AT_STATION`.
+        code: PACK_UNIT_NOT_AT_STATION
+      - id: pack-in-place-partial
+        kind: regel
+        text: Ganze Palette nur vollständig (`PACK_IN_PLACE_PARTIAL`).
+        code: PACK_IN_PLACE_PARTIAL
+      - id: transfer-out
+        kind: regel
+        text: Buchungen `TRANSFER_OUT`/`TRANSFER_IN` mit dem Bezug `outbound:<orderId>/<Position>`.
+        code: TRANSFER_OUT
+      - id: transfer-in
+        kind: regel
+        text: Buchungen `TRANSFER_OUT`/`TRANSFER_IN` mit dem Bezug `outbound:<orderId>/<Position>`.
+        code: TRANSFER_IN
     dependsOn: [auslagerung.kommissionierung, bestand.umbuchung]
     technical:
       components:
@@ -201,18 +279,23 @@ features:
       - kind: integration
         file: apps/api/test/integration/shipping.integration.test.ts
         test: lehnt Versand-TUs außerhalb des Packplatzes und Aufträge ohne Packplatz ab
+        covers: [pack-station-missing, pack-unit-not-at-station]
       - kind: integration
         file: apps/api/test/integration/shipping.integration.test.ts
         test: bucht die entnommene Menge aus der Reservierung auf die Versand-TU um
+        covers: [umgebucht, transfer-out, transfer-in]
       - kind: integration
         file: apps/api/test/integration/shipping.integration.test.ts
         test: versendet eine ganze Palette an Ort und Stelle, aber nur vollständig
+        covers: [ganze-palette, pack-in-place-partial]
       - kind: web-e2e
         file: apps/web/e2e/seiten.spec.ts
         test: "Versand: am Packplatz packen, mit Ladekontrolle verladen, Warenausgang buchen"
+        covers: [umgebucht]
       - kind: web-e2e
         file: apps/web/e2e/scanner.spec.ts
         test: "Scanner: am Packplatz packen und mit Ladekontrolle verladen"
+        covers: [umgebucht]
     comparisons:
       openwms:
         status: nicht-einsehbar
@@ -232,6 +315,13 @@ features:
         text: Seite **Auslagerung** – Abschließen bzw. Stornieren.
       - channel: api
         text: "`POST /v1/outbound-orders/{orderId}/complete`, `…/cancel` (`reason?`)."
+    acceptance:
+      - id: abgeschlossen
+        kind: effekt
+        text: Ein Auftrag lässt sich mit Fehlmengen abschließen oder stornieren; beim Storno werden alle Reservierungen freigegeben.
+      - id: endgueltig
+        kind: regel
+        text: Abschluss und Storno sind endgültig; danach sind keine Zustandswechsel mehr möglich.
     dependsOn: [auslagerung.zuteilung]
     technical:
       components:
@@ -246,11 +336,14 @@ features:
       - kind: integration
         file: apps/api/test/integration/outbound.integration.test.ts
         test: verlangt vor dem Abschluss quittierte Picks und gibt beim Storno alles frei
+        covers: [abgeschlossen]
       - kind: unit
         file: apps/api/test/unit/outbound/outbound-rules.test.ts
         test: Storno und Abschluss sind endgültig
+        covers: [endgueltig]
       - kind: scenario
         id: outbound-flow
+        covers: [abgeschlossen]
     comparisons:
       openwms:
         status: nicht-einsehbar

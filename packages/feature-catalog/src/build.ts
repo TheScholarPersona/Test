@@ -47,7 +47,15 @@ function entryView(e: EnrichedEntry, usedBy: Map<string, string[]>) {
       nodeRedNodes: entry.technical.nodeRedNodes,
       notes: entry.technical.notes,
     },
-    evidence: e.evidence.map((ev) => ({ ...ev.evidence, exists: ev.exists, result: ev.result ?? null })),
+    acceptance: e.acceptance.map((c) => ({ ...c.criterion, status: c.status, coveredBy: c.coveredBy })),
+    evidence: e.evidence.map((ev) => ({
+      ...ev.evidence,
+      exists: ev.exists,
+      result: ev.result ?? null,
+      assertions: ev.quality.assertions,
+      statusOnly: ev.quality.statusOnly,
+      related: ev.quality.related,
+    })),
     comparisons: entry.comparisons,
     ...(review ? { state: review.state, reason: review.reason } : {}),
   };

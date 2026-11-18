@@ -199,6 +199,14 @@ describe('Auslagerung', () => {
       const r = await api.post('/v1/allocation/simulations', { sku: 'MILCH', quantity: { amount: '30', unit: 'PCS' } });
       expect(r.body.decision.summary.excludedByRule).toEqual({ SOURCE_OUTBOUND_BLOCKED: 1, UNIT_NOT_AVAILABLE: 1, COUNT_IN_PROGRESS: 1 });
       expect(r.body).toMatchObject({ allocated: { amount: '15' }, shortfall: { amount: '15' } });
+      // Vollständig reservierter Bestand zählt als nicht verfügbar
+      const [m4] = (await api.get('/v1/stock?barcode=M4')).body.items;
+      const reservation = await api.post(`/v1/stock/${m4.id}/reservations`, { quantity: m4.available, reference: 'TEST-VOLL' });
+      expect(reservation.status, JSON.stringify(reservation.body)).toBe(201);
+      const none = await api.post('/v1/allocation/simulations', { sku: 'MILCH', quantity: { amount: '30', unit: 'PCS' } });
+      expect(none.body.decision.summary.excludedByRule).toMatchObject({ NOT_AVAILABLE: 1 });
+      expect(none.body).toMatchObject({ allocated: { amount: '0' }, shortfall: { amount: '30' } });
+      await api.delete(`/v1/stock-reservations/${reservation.body.id}`);
       await api.patch(`/v1/locations/${loc['A1']}/locks`, { outbound: false });
       await api.post('/v1/transport-units/M2/state', { state: 'AVAILABLE' });
       await api.post(`/v1/stock-counts/${count.body.number}/cancel`);

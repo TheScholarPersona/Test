@@ -232,6 +232,8 @@ describe('Lagerbewegungen', () => {
 
       expect(await api.post('/v1/movement-groups', { movements: [groupMv[0]] })).toMatchObject({ status: 409, body: { code: 'MOVEMENT_GROUPED' } });
       expect(await api.post('/v1/movement-groups', { movements: ['MV99999999'] })).toMatchObject({ status: 404 });
+      // Erledigte Bewegung (P1 ist DONE) lässt sich nicht bündeln
+      expect(await api.post('/v1/movement-groups', { movements: [mv['P1']] })).toMatchObject({ status: 409, body: { code: 'MOVEMENT_CLOSED' } });
       expect((await api.get(`/v1/movements?group=${group}`)).body.total).toBe(2);
     });
 

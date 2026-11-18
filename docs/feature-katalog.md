@@ -69,6 +69,7 @@ Ein Eintrag (Katalog und Prüfbestand haben denselben Aufbau; Schema: `packages/
 | `description` | fachlich | was die Funktion leistet |
 | `usage[]` | fachlich | Bedienung je Bedienweg: `leitstand`, `scanner`, `api`, `node-red`, `mqtt`, `entwicklung` (Kommandozeile und CI) |
 | `rules[]` | fachlich | Regeln und Grenzen (mit Fehlercodes) |
+| `acceptance[]` | Nachweis | prüfbare Akzeptanzkriterien: `id`, `kind` (`effekt` = beobachtbare Wirkung, `regel` = Grenze), `text`, bei Regeln mit Fehlercode `code`; im Katalog mindestens ein `effekt` |
 | `settings[]` | fachlich | was sich einstellen lässt und wo |
 | `dependsOn[]` | fachlich | vorausgesetzte Features (umgekehrt zeigt die Ansicht „Grundlage für“) |
 | `technical.components[]` | technisch | Quellcode-Dateien (müssen existieren) |
@@ -76,7 +77,7 @@ Ein Eintrag (Katalog und Prüfbestand haben denselben Aufbau; Schema: `packages/
 | `technical.events.emits[]` / `consumes[]` | technisch | Ereignistypen |
 | `technical.uiRoutes[]`, `technical.nodeRedNodes[]` | technisch | Seiten der Oberfläche, Node-RED-Nodes |
 | `technical.notes[]` | technisch | Tabellen, Fehlercodes, Hinweise |
-| `evidence[]` | Nachweis | `scenario` (Szenario-Kennung) oder `unit`/`integration`/`web-e2e` (Datei + Testtitel); im Katalog Pflicht |
+| `evidence[]` | Nachweis | `scenario` (Szenario-Kennung) oder `unit`/`integration`/`web-e2e` (Datei + Testtitel); `covers[]` nennt die Kriterien, die der Test prüft; `rationale` begründet nach Review einen indirekten Bezug; im Katalog Pflicht |
 | `comparisons{}` | Vergleich | je System (z. B. `openwms`) `status` (`gleichwertig`, `erweitert`, `eingeschraenkt`, `neu`, `abweichend`, `nicht-einsehbar`), `note`, `refs`; siehe Abschnitt 7 |
 | `state`, `reason` | nur Prüfbestand | `unvollstaendig`, `deaktiviert` oder `nicht-nachgewiesen` und warum |
 
@@ -86,9 +87,23 @@ Ein Eintrag (Katalog und Prüfbestand haben denselben Aufbau; Schema: `packages/
 
 | Status | Bedeutung |
 |---|---|
-| nachgewiesen | alle Nachweise haben im letzten Testlauf bestanden (nur mit `--reports`) |
-| Nachweis vorhanden | Tests/Szenarien existieren, Ergebnis unbekannt (ohne Testberichte erzeugt) |
-| nicht nachgewiesen | ein Nachweis fehlt, ist fehlgeschlagen, übersprungen oder lief nicht |
+| nachgewiesen | jedes Akzeptanzkriterium ist durch einen Test mit Zusicherung belegt, der im letzten Testlauf bestanden hat (nur mit `--reports`) |
+| teilweise nachgewiesen | einige Kriterien sind belegt, andere nicht (Test fehlt, schlug fehl, übersprungen oder lief nicht) |
+| Nachweis vorhanden | jedes Kriterium hat einen Test mit Zusicherung, Ergebnis unbekannt (ohne Testberichte erzeugt) |
+| nicht nachgewiesen | kein Kriterium ist belegt |
+
+### Nachweisregeln
+
+Ein bestandener Test ist noch kein Funktionsnachweis. Deshalb gilt:
+
+1. **Kriterien statt Tests.** Jedes Feature beschreibt in `acceptance` prüfbare Kriterien – mindestens einen beobachtbaren Effekt („Die Zuteilung reserviert die Menge auf den TUs“). Jeder Fehlercode aus `rules` (`CODE` in Backticks) braucht ein Kriterium der Art `regel` mit diesem `code`; Zustandsketten (`` `OPEN` → `DONE` ``) zählen nicht als Codes.
+2. **Zuordnung.** Jeder Nachweis nennt in `covers` die Kriterien, die er prüft; jedes Kriterium braucht mindestens einen Nachweis.
+3. **Zusicherung.** Der Testkörper (mit den Helfern, die er aufruft) muss etwas zusichern (`expect`, `assert`, Szenario-`check`/`event`). Ein Nachweis ohne Zusicherung trägt kein Kriterium.
+4. **Fehlercode im Test.** Der `code` eines Regel-Kriteriums muss als ganzes Wort in einem abdeckenden Test vorkommen – der Test muss die Regel also auslösen und den Code prüfen.
+5. **Effekt statt Status.** Sichert ein Test nur Status oder Existenz zu (`status` 201, `toBeTruthy`), oder berührt er keinen Endpunkt, kein Ereignis, keine Seite, keinen Node und keine Komponente des Features, gibt es eine Warnung. Nach Review lässt sich ein indirekter Bezug in `rationale` begründen (z. B. Querschnittsfunktion ohne eigenen Endpunkt) – die Begründung ersetzt die Warnung, nicht den Test.
+6. **Belegt ist belegt.** Ein Kriterium ist belegt, wenn mindestens ein zugeordneter Test mit Zusicherung im letzten Testlauf bestanden hat.
+
+Die Heuristik liest den Testkörper statisch; sie erkennt viel, aber nicht alles. Sie ersetzt nicht das Review, sondern zwingt es dorthin, wo ein Test die beschriebene Fähigkeit nicht erkennbar prüft.
 
 ## 4. Automatische Prüfungen
 
@@ -98,6 +113,10 @@ Ein Eintrag (Katalog und Prüfbestand haben denselben Aufbau; Schema: `packages/
 | Verweise ins Leere: Endpunkt, Ereignis, Route, Node, Quelldatei, Szenario oder Testtitel gibt es nicht (mehr) | Fehler | immer |
 | Bestandteil eines **katalogisierten** Bereichs ist keinem Eintrag und keiner Ausnahme zugeordnet (z. B. neuer Endpunkt) | Fehler | immer |
 | Nachweis eines Katalog-Features ist fehlgeschlagen, übersprungen oder lief nicht | Fehler | mit `--reports` (CI-Job „Feature-Katalog“) |
+| Kein Kriterium der Art `effekt` (`ACCEPTANCE_MISSING`); Fehlercode einer Regel ohne Regel-Kriterium (`RULE_WITHOUT_ACCEPTANCE`) | Fehler | immer |
+| Nachweis ohne `covers` oder mit unbekanntem Kriterium (`EVIDENCE_UNLINKED`); Kriterium ohne gültigen, bestandenen Nachweis (`ACCEPTANCE_UNCOVERED`) | Fehler | immer bzw. mit `--reports` |
+| Nachweis ohne Zusicherung (`EVIDENCE_NO_ASSERTION`); Fehlercode eines Kriteriums in keinem abdeckenden Test (`RULE_CODE_NOT_ASSERTED`) | Fehler | immer |
+| Nachweis sichert nur Status zu (`EVIDENCE_STATUS_ONLY`) oder berührt keinen Bestandteil des Features (`EVIDENCE_UNRELATED`), ohne `rationale` | Warnung | immer |
 | Endpunkt eines Features, den kein Test erkennbar aufruft | Warnung | immer |
 | Bestandteil ohne zuständigen Bereich (`owns` fehlt) | Warnung | immer |
 | Bereich noch offen: Anzahl nicht zugeordneter Bestandteile | Hinweis | immer |
@@ -111,7 +130,9 @@ Die Prüfung **legt nie Features an**. Sie meldet, was zugeordnet werden muss; o
 | Anlass | Vorgehen |
 |---|---|
 | Neuer Endpunkt / neues Ereignis in einem katalogisierten Bereich | CI meldet `UNASSIGNED`. Bestehendem Feature zuordnen, neues Feature anlegen (mit Nachweis) oder in den Prüfbestand bzw. als Ausnahme eintragen. |
-| Neues Feature | Eintrag in `features/<bereich>.yaml` mit mindestens einem Nachweis; ohne Test zuerst in `review.yaml`. |
+| Neues Feature | Eintrag in `features/<bereich>.yaml` mit Akzeptanzkriterien (mindestens ein Effekt, je Fehlercode eine Regel) und Nachweisen mit `covers`; ohne Test zuerst in `review.yaml`. |
+| Prüfung meldet `RULE_CODE_NOT_ASSERTED` oder `ACCEPTANCE_UNCOVERED` | Test ergänzen, der die Regel auslöst und den Code bzw. den Effekt zusichert – nicht das Kriterium abschwächen. |
+| Warnung `EVIDENCE_STATUS_ONLY`/`EVIDENCE_UNRELATED` | Test lesen: Zusicherung auf den Effekt schärfen; ist der Bezug nur indirekt (Querschnittsfunktion), mit `rationale` begründen. |
 | Endpunkt, Test oder Datei umbenannt/entfernt | CI meldet `UNKNOWN_*`. Verweis anpassen oder Eintrag in den Prüfbestand verschieben. |
 | Test schlägt fehl | Job *Feature-Katalog* meldet `EVIDENCE_FAILED`; das Feature gilt als nicht nachgewiesen, bis der Test wieder grün ist. |
 | Prüfbestand-Eintrag bekommt einen Test | Eintrag mit Nachweis nach `features/<bereich>.yaml` verschieben. |
@@ -119,7 +140,9 @@ Die Prüfung **legt nie Features an**. Sie meldet, was zugeordnet werden muss; o
 
 ## 6. Stand der Bestandsaufnahme
 
-Alle 17 Bereiche sind katalogisiert (`status: katalogisiert`); jeder erkannte Bestandteil ist einem Feature zugeordnet. Mit den Testberichten aller Testarten (Unit, Integration, Node-RED-Szenarien, MQTT-Sicherheit, Browser) sind **alle 100 Features im Testlauf nachgewiesen; der Prüfbestand ist leer**.
+Alle 17 Bereiche sind katalogisiert (`status: katalogisiert`); jeder erkannte Bestandteil ist einem Feature zugeordnet. Mit den Testberichten aller Testarten (Unit, Integration, Node-RED-Szenarien, MQTT-Sicherheit, Browser) sind **alle 100 Features im Testlauf nachgewiesen; der Prüfbestand ist leer**. Die 100 Features haben **289 Akzeptanzkriterien** (Effekte und Regeln, darunter jeder Fehlercode aus den Regeln); jedes ist durch einen bestandenen Test mit Zusicherung belegt. 53 Nachweise prüfen ihr Feature nur indirekt (Querschnittsfunktionen ohne eigenen Endpunkt, Simulation statt Entscheidung, Node-RED-Flows) und tragen dafür eine Begründung nach Review.
+
+**Nachgeschärft beim Einführen der Nachweisregeln:** Für acht Fehlercodes gab es keinen Test, der sie auslöst und zusichert. Neue bzw. erweiterte Integrationstests decken sie jetzt ab: doppelt gescannte TU beim Verladen (`UNIT_ALREADY_LOADED`), Warenausgang bei reserviertem Bestand, aufgestapelten TUs oder offener Bewegung (`STOCK_RESERVED`, `TU_HAS_CHILDREN`, `TU_IN_USE`), Versandetikett für eine fremde TU (`UNIT_NOT_IN_SHIPMENT`), erledigte Bewegung in einer Gruppe (`MOVEMENT_CLOSED`), erneutes Schließen einer Position (`POSITION_NOT_IN_PROGRESS`) und vollständig reservierter Bestand in der Zuteilung (`NOT_AVAILABLE`).
 
 | Bereich | Features | Erkannte Bestandteile |
 |---|---|---|

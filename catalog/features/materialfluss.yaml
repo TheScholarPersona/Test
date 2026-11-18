@@ -18,6 +18,20 @@ features:
         text: Seite **Materialfluss** – Routen mit Schritten ansehen.
     rules:
       - Routen mit Actions und Plätze in Routen, Schritten oder Actions sind vor dem Löschen geschützt (`ROUTE_IN_USE`).
+    acceptance:
+      - id: route
+        kind: effekt
+        text: Routen mit Schritten und Actions sind lesbar und änderbar; Änderungen wirken sofort.
+      - id: typ-schritt
+        kind: effekt
+        text: Für einen TU-Typ gilt ein spezieller Schritt vor dem allgemeinen; Schritte gelten für Platz vor Gruppe vor Elterngruppen.
+      - id: abgeschaltet
+        kind: regel
+        text: Eine abgeschaltete Route wird nicht gefunden.
+      - id: route-in-use
+        kind: regel
+        text: Routen mit Actions und Plätze in Routen, Schritten oder Actions sind vor dem Löschen geschützt (`ROUTE_IN_USE`).
+        code: ROUTE_IN_USE
     dependsOn: [lagerstruktur.plaetze]
     technical:
       components:
@@ -39,29 +53,39 @@ features:
       - kind: integration
         file: apps/api/test/integration/flow.integration.test.ts
         test: listet Programme mit Parameter-Schema und die Route mit Schritten
+        covers: [route]
       - kind: integration
         file: apps/api/test/integration/flow.integration.test.ts
         test: nimmt für den TU-Typ den speziellen Schritt
+        rationale: Prüft die Schrittwahl über Geräte-Ereignisse und den resultierenden Fahrbefehl – so wirkt die Route.
+        covers: [typ-schritt]
       - kind: integration
         file: apps/api/test/integration/flow.integration.test.ts
         test: wendet geänderte Schritte sofort an
+        covers: [route]
       - kind: integration
         file: apps/api/test/integration/flow.integration.test.ts
         test: findet keine Route, wenn sie abgeschaltet ist
+        covers: [abgeschaltet]
       - kind: integration
         file: apps/api/test/integration/flow.integration.test.ts
         test: schützt verwendete Plätze und Routen vor dem Löschen
+        covers: [route-in-use]
       - kind: unit
         file: apps/api/test/unit/flow/matching.test.ts
         test: ordnet Platz vor Gruppe vor Elterngruppen
+        covers: [typ-schritt]
       - kind: scenario
         id: material-flow
+        covers: [typ-schritt]
       - kind: integration
         file: apps/api/test/integration/flow.integration.test.ts
         test: listet Routen und Actions und ändert eine Action
+        covers: [route]
       - kind: web-e2e
         file: apps/web/e2e/seiten.spec.ts
         test: "Materialfluss: Konfiguration ansehen und Geräte-Ereignis im Probelauf senden"
+        covers: [route]
     comparisons:
       openwms:
         status: erweitert
@@ -83,6 +107,13 @@ features:
         text: "`POST /v1/flow/actions` (`eventType`, `routeId?`, `place?`, `program`, `params`), Liste `GET /v1/flow/actions`, ändern `PATCH …/{name}` (`description`, `params`, `enabled`), `DELETE …/{name}`, Programme `GET /v1/flow/programs`."
       - channel: leitstand
         text: Seite **Materialfluss** – Action-Matrix ansehen.
+    acceptance:
+      - id: zuordnung
+        kind: effekt
+        text: Die Action wird nach Ort und Route gewählt (Platz+Route vor Platz vor Gruppe … vor überall) und lässt sich ändern.
+      - id: programme
+        kind: effekt
+        text: Programme sind mit Parameter-Schema gelistet; Parameter, Ereignistyp und Verweise werden geprüft.
     settings:
       - name: Programm und Parameter je Ereignis und Ort
         description: z. B. `create-order` am I-Punkt mit `typeCode` und `target`.
@@ -107,20 +138,26 @@ features:
       - kind: integration
         file: apps/api/test/integration/flow.integration.test.ts
         test: prüft Programmparameter, Ereignistyp und Verweise
+        covers: [programme]
       - kind: integration
         file: apps/api/test/integration/flow.integration.test.ts
         test: listet Programme mit Parameter-Schema und die Route mit Schritten
+        covers: [programme]
       - kind: unit
         file: apps/api/test/unit/flow/matching.test.ts
         test: "Ort vor Route: Platz+Route, Platz, Gruppe+Route, Gruppe, Eltern …, überall+Route, überall"
+        covers: [zuordnung]
       - kind: scenario
         id: material-flow
+        covers: [zuordnung]
       - kind: integration
         file: apps/api/test/integration/flow.integration.test.ts
         test: listet Routen und Actions und ändert eine Action
+        covers: [zuordnung]
       - kind: web-e2e
         file: apps/web/e2e/seiten.spec.ts
         test: "Materialfluss: Konfiguration ansehen und Geräte-Ereignis im Probelauf senden"
+        covers: [zuordnung]
     comparisons:
       openwms:
         status: abweichend
@@ -152,6 +189,19 @@ features:
     rules:
       - Nichts wird still ignoriert – keine Route erzeugt `flow.no-route`, keine Action `flow.unhandled` (R4).
       - Fachfehler eines Programms brechen ab und kommen als HTTP-Fehler zurück.
+    acceptance:
+      - id: fahrbefehl
+        kind: effekt
+        text: Am I-Punkt entstehen TU und Auftrag; Schritt für Schritt kommt der nächste Fahrbefehl, bis der Auftrag im Ziel abgeschlossen ist.
+      - id: probelauf
+        kind: effekt
+        text: Im Probelauf wird nichts gebucht oder gesendet, die Entscheidung aber begründet.
+      - id: nichts-ignoriert
+        kind: regel
+        text: Ohne Route kommt `flow.no-route`, ohne Action `flow.unhandled`.
+      - id: stoerung
+        kind: effekt
+        text: Platzmeldungen werden zu Sperren, eine Störung unterbricht den laufenden Auftrag.
     dependsOn: [materialfluss.action-matrix, transportauftraege.anlegen-starten]
     technical:
       components:
@@ -171,32 +221,42 @@ features:
       - kind: integration
         file: apps/api/test/integration/flow.integration.test.ts
         test: legt am I-Punkt TU und Auftrag an und schickt die TU zum ersten Schritt
+        covers: [fahrbefehl]
       - kind: integration
         file: apps/api/test/integration/flow.integration.test.ts
         test: fährt Schritt für Schritt und schließt bei Ankunft in der Zielgruppe ab
+        covers: [fahrbefehl]
       - kind: integration
         file: apps/api/test/integration/flow.integration.test.ts
         test: bucht und sendet im Probelauf nichts, begründet aber
+        covers: [probelauf]
       - kind: integration
         file: apps/api/test/integration/flow.integration.test.ts
         test: meldet „keine Route“ für einen Auftrag ohne passende Route (R4)
+        covers: [nichts-ignoriert]
       - kind: integration
         file: apps/api/test/integration/flow.integration.test.ts
         test: meldet „keine Action“, wenn nichts konfiguriert ist
+        covers: [nichts-ignoriert]
       - kind: integration
         file: apps/api/test/integration/flow.integration.test.ts
         test: übernimmt Platzmeldungen der Anlage als Sperren
+        covers: [stoerung]
       - kind: integration
         file: apps/api/test/integration/flow.integration.test.ts
         test: unterbricht bei einer Störung den laufenden Auftrag
+        covers: [stoerung]
       - kind: unit
         file: packages/node-red-nodes/test/nodes.test.mjs
         test: wms-device-event meldet ein Geräte-Ereignis über den plcCode
+        covers: [fahrbefehl]
       - kind: scenario
         id: material-flow
+        covers: [fahrbefehl]
       - kind: web-e2e
         file: apps/web/e2e/seiten.spec.ts
         test: "Materialfluss: Konfiguration ansehen und Geräte-Ereignis im Probelauf senden"
+        covers: [fahrbefehl, probelauf]
     comparisons:
       openwms:
         status: abweichend
@@ -216,6 +276,10 @@ features:
         text: Flow hört auf `wms/flow/program-requested` und antwortet mit `POST /v1/flow/commands`.
       - channel: api
         text: "`POST /v1/flow/commands` mit `barcode`, `to`, optional `deviceId` und `reason`."
+    acceptance:
+      - id: uebergabe
+        kind: effekt
+        text: Ein Programm übergibt an Node-RED, dessen Fahrbefehl als Antwort an die Anlage geht.
     dependsOn: [materialfluss.geraete-ereignisse]
     technical:
       components:
@@ -229,9 +293,11 @@ features:
       - kind: integration
         file: apps/api/test/integration/flow.integration.test.ts
         test: übergibt an Node-RED, das per Fahrbefehl antwortet
+        covers: [uebergabe]
       - kind: scenario
         id: material-flow
         note: Programm-Tab send-to-plc
+        covers: [uebergabe]
     comparisons:
       openwms:
         status: abweichend
@@ -250,6 +316,10 @@ features:
         text: "`GET /v1/flow/decisions`"
       - channel: leitstand
         text: Seite **Materialfluss** – Entscheidungen, neueste zuerst.
+    acceptance:
+      - id: nachvollziehbar
+        kind: effekt
+        text: Zu jedem Geräte-Ereignis stehen gefundene Route, Action und Begründung im Protokoll.
     technical:
       components:
         - apps/api/src/modules/flow/entities/flow.entities.ts
@@ -261,8 +331,10 @@ features:
       - kind: integration
         file: apps/api/test/integration/flow.integration.test.ts
         test: fährt Schritt für Schritt und schließt bei Ankunft in der Zielgruppe ab
+        covers: [nachvollziehbar]
       - kind: scenario
         id: material-flow
+        covers: [nachvollziehbar]
     comparisons:
       openwms:
         status: neu
@@ -281,6 +353,10 @@ features:
     usage:
       - channel: node-red
         text: "Tab „Anlagensimulator“; `GET /sim/state`, `POST /sim/faults`, `DELETE /sim/faults` (Basic Auth `wms`)."
+    acceptance:
+      - id: simuliert
+        kind: effekt
+        text: Der Simulator fährt Paletten mit Fahrzeiten über die Anlage und meldet die Ankunft an das WMS.
     settings:
       - name: Fahrzeiten und Ankunftsplätze
         description: "`defaultTravelMs`, `travelMs` je SPS-Code, `arrivedPatterns`."
@@ -296,6 +372,8 @@ features:
     evidence:
       - kind: scenario
         id: material-flow
+        rationale: Der Simulator ist ein Node-RED-Flow; das Szenario fährt Paletten durch ihn und prüft die Ankunft im WMS.
+        covers: [simuliert]
     comparisons:
       openwms:
         status: neu
@@ -316,6 +394,10 @@ features:
         text: 'Action anlegen: `{ "eventType": "location-status", "place": { "group": "HRL" }, "program": "lock-group" }`; Meldung `{ "type": "location-status", "state": { "inbound": true }, "code": "SYSU" }`.'
       - channel: node-red
         text: Node `wms-device-event` mit Ereignis `location-status` oder `error`.
+    acceptance:
+      - id: bereich
+        kind: effekt
+        text: Ein Systemstatus sperrt einen ganzen Bereich für Ein- oder Auslagerung und gibt ihn mit der Freimeldung wieder frei.
     settings:
       - name: Bereich und feste Sperren
         description: "`group` (sonst Gruppe des meldenden Platzes), `inbound`/`outbound` (sonst aus der Meldung)."
@@ -332,6 +414,7 @@ features:
       - kind: integration
         file: apps/api/test/integration/flow.integration.test.ts
         test: sperrt per Systemstatus einen ganzen Bereich (Programm lock-group)
+        covers: [bereich]
     comparisons:
       openwms:
         status: gleichwertig

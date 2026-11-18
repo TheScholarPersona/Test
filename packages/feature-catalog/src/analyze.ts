@@ -5,7 +5,10 @@
  * - Verweise ins Leere: Endpunkt, Ereignis, Route, Node, Quelldatei, Szenario oder Test gibt es nicht (mehr)
  * - Katalog-Feature, dessen Nachweis im Testlauf fehlschlägt oder fehlt
  * - Bestandteil eines katalogisierten Bereichs, der keinem Feature, Prüfbestand-Eintrag oder Ausnahme zugeordnet ist
- * Warnungen: Endpunkt eines Features, den kein Test erkennbar aufruft (Heuristik); Bestandteile ohne zuständigen Bereich
+ * - Nachweisregeln: Feature ohne Akzeptanzkriterium der Art effekt, Fehlercode ohne Regel-Kriterium, Nachweis ohne
+ *   `covers`, Test ohne Zusicherung, Regel-Code nicht im abdeckenden Test, Kriterium ohne (bestandenen) Nachweis
+ * Warnungen: Endpunkt eines Features, den kein Test erkennbar aufruft (Heuristik); Bestandteile ohne zuständigen Bereich;
+ *   Nachweis, der nur Status/Existenz zusichert oder keinen Bestandteil des Features berührt (Review nötig)
  * Hinweise: offene Bereiche (Anzahl nicht zugeordneter Bestandteile)
  *
  * Neue Features legt die Prüfung nie an – sie meldet nur, was zugeordnet werden muss.
@@ -13,10 +16,11 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { containsTitle, type Discovery, filesCalling } from './discover.ts';
+import { assess, codesIn, type EvidenceQuality, scenarioBlock, testBlock } from './evidence-quality.ts';
 import { coveredKinds, type ReportedTest, resultOf, type TestResult } from './junit.ts';
 import type { CatalogData } from './load.ts';
 import { accessOf, type EndpointAccess } from './roles.ts';
-import type { Area, Evidence, Feature, ReviewItem } from './schema.ts';
+import type { Acceptance, Area, Evidence, Feature, ReviewItem } from './schema.ts';
 
 export type Level = 'fehler' | 'warnung' | 'hinweis';
 
@@ -32,13 +36,26 @@ export const ITEM_KINDS = ['endpoints', 'events', 'uiRoutes', 'nodeRedNodes'] as
 export type ItemKind = (typeof ITEM_KINDS)[number];
 export const ITEM_LABELS: Record<ItemKind, string> = { endpoints: 'Endpunkt', events: 'Ereignis', uiRoutes: 'Route', nodeRedNodes: 'Node-RED-Node' };
 
-/** Nachweisstatus eines Features. */
-export type ProofStatus = 'nachgewiesen' | 'statisch' | 'nicht-nachgewiesen';
+/**
+ * Nachweisstatus eines Features: `nachgewiesen` = jedes Akzeptanzkriterium hat einen inhaltlich passenden Nachweis,
+ * der im Testlauf bestanden hat; `statisch` = ebenso, aber ohne Testberichte; `teilweise` = nur ein Teil der Kriterien.
+ */
+export type ProofStatus = 'nachgewiesen' | 'statisch' | 'teilweise' | 'nicht-nachgewiesen';
+export type CriterionStatus = 'nachgewiesen' | 'statisch' | 'offen';
 
 export interface EnrichedEvidence {
   evidence: Evidence;
   exists: boolean;
   result?: TestResult | 'nicht-ausgefuehrt';
+  /** Inhaltliche Beurteilung des Testkörpers (Heuristik). */
+  quality: Omit<EvidenceQuality, 'text'>;
+}
+
+export interface EnrichedCriterion {
+  criterion: Acceptance;
+  status: CriterionStatus;
+  /** Indizes der Nachweise, die das Kriterium abdecken. */
+  coveredBy: number[];
 }
 
 export interface EnrichedEndpoint {
@@ -60,6 +77,7 @@ export interface EnrichedEntry {
   channels: string[];
   endpoints: EnrichedEndpoint[];
   evidence: EnrichedEvidence[];
+  acceptance: EnrichedCriterion[];
   proof: ProofStatus;
 }
 
@@ -158,44 +176,102 @@ export function analyze(data: CatalogData, discovery: Discovery, reports?: Repor
       endpoints.push({ ref, summary: found.summary, tags: found.tags, access: accessOf(found.method, found.path), calledBy });
     }
 
+    const refs = {
+      endpoints: t.endpoints.map((r) => ({ method: r.slice(0, r.indexOf(' ')), path: r.slice(r.indexOf(' ') + 1) })),
+      events: [...t.events.emits, ...t.events.consumes],
+      uiRoutes: t.uiRoutes,
+      nodeRedNodes: t.nodeRedNodes,
+      components: t.components,
+    };
+    const level = isFeature ? 'fehler' : 'hinweis';
+    const criteria = new Map(entry.acceptance.map((c) => [c.id, c]));
+    if (criteria.size !== entry.acceptance.length) add('fehler', 'DUPLICATE_ID', where, 'Kennung eines Akzeptanzkriteriums mehrfach vergeben');
+    if (isFeature && !entry.acceptance.some((c) => c.kind === 'effekt')) add('fehler', 'ACCEPTANCE_MISSING', where, 'Kein Akzeptanzkriterium der Art „effekt“ – was bewirkt die Funktion beobachtbar?');
+    const ruleCodes = new Set(entry.acceptance.filter((c) => c.kind === 'regel' && c.code).map((c) => c.code!));
+    for (const code of codesIn(entry.rules)) {
+      if (!ruleCodes.has(code)) add(level, 'RULE_WITHOUT_ACCEPTANCE', where, `Fehlercode \`${code}\` aus den Regeln hat kein Akzeptanzkriterium der Art „regel“`);
+    }
+
+    const texts: string[] = [];
     const evidence: EnrichedEvidence[] = entry.evidence.map((ev) => {
       let exists: boolean;
+      let block: string | undefined;
+      let fileText = '';
       if (ev.kind === 'scenario') {
         exists = discovery.scenarios.has(ev.id);
         if (!exists) add('fehler', 'UNKNOWN_SCENARIO', where, `Szenario „${ev.id}“ gibt es nicht (mehr)`);
+        for (const f of discovery.testFiles.filter((x) => x.path.startsWith('flows/scenarios/'))) {
+          block = scenarioBlock(f.text, ev.id);
+          if (block) {
+            fileText = f.text;
+            break;
+          }
+        }
       } else {
         const file = discovery.testFiles.find((f) => f.path === ev.file);
         exists = !!file && containsTitle(file.text, ev.test);
         if (!file) add('fehler', 'UNKNOWN_TEST_FILE', where, `Testdatei „${ev.file}“ gibt es nicht (mehr)`);
         else if (!exists) add('fehler', 'UNKNOWN_TEST', where, `Test „${ev.test}“ steht nicht (mehr) in ${ev.file}`);
+        if (file && exists) {
+          fileText = file.text;
+          block = testBlock(file.text, ev.test);
+        }
       }
-      const enriched: EnrichedEvidence = { evidence: ev, exists };
+      const { text, ...quality } = assess(fileText, block, refs);
+      texts.push(text);
+      const name = ev.kind === 'scenario' ? `Szenario ${ev.id}` : `„${ev.test}“`;
+      if (ev.covers.length === 0) add(level, 'EVIDENCE_UNLINKED', where, `Nachweis ${name} nennt kein Akzeptanzkriterium (covers)`);
+      for (const c of ev.covers) if (!criteria.has(c)) add('fehler', 'EVIDENCE_UNLINKED', where, `Nachweis ${name} verweist auf unbekanntes Kriterium „${c}“`);
+      if (exists && quality.found) {
+        if (quality.assertions === 0) add(level, 'EVIDENCE_NO_ASSERTION', where, `Nachweis ${name} enthält keine Zusicherung`);
+        else if (quality.statusOnly && isFeature && !ev.rationale) add('warnung', 'EVIDENCE_STATUS_ONLY', where, `Nachweis ${name} sichert nur Status oder Existenz zu – prüft er den Effekt?`);
+        if (!quality.related && isFeature && !ev.rationale) add('warnung', 'EVIDENCE_UNRELATED', where, `Nachweis ${name} berührt keinen Endpunkt, kein Ereignis, keine Seite und keine Komponente des Features`);
+      }
+      const enriched: EnrichedEvidence = { evidence: ev, exists, quality };
       if (reports && reportedKinds.has(ev.kind)) enriched.result = resultOf(ev, reports) ?? 'nicht-ausgefuehrt';
       return enriched;
     });
 
-    let proof: ProofStatus = evidence.length > 0 && evidence.every((e) => e.exists) ? 'statisch' : 'nicht-nachgewiesen';
-    const executed = evidence.filter((e) => e.result !== undefined);
-    if (proof === 'statisch' && executed.length > 0) {
-      // Übersprungen zählt wie nicht ausgeführt: belegt ist nur, was im Lauf bestanden hat.
-      const bad = executed.filter((e) => e.result !== 'bestanden');
-      if (bad.length > 0) proof = 'nicht-nachgewiesen';
-      else if (executed.length === evidence.length) proof = 'nachgewiesen';
-      if (isFeature) {
-        for (const e of bad) {
-          const name = e.evidence.kind === 'scenario' ? `Szenario ${e.evidence.id}` : `„${e.evidence.test}“`;
-          const what = { fehlgeschlagen: 'ist fehlgeschlagen', uebersprungen: 'wurde übersprungen', 'nicht-ausgefuehrt': 'kam im Testlauf nicht vor' }[e.result as string];
-          const code = { fehlgeschlagen: 'EVIDENCE_FAILED', uebersprungen: 'EVIDENCE_SKIPPED', 'nicht-ausgefuehrt': 'EVIDENCE_NOT_RUN' }[e.result as string]!;
-          add('fehler', code, where, `Nachweis ${name} ${what} – Verfügbarkeit nicht nachgewiesen`);
-        }
+    if (isFeature) {
+      for (const e of evidence) {
+        if (e.result === undefined || e.result === 'bestanden') continue;
+        const name = e.evidence.kind === 'scenario' ? `Szenario ${e.evidence.id}` : `„${e.evidence.test}“`;
+        const what = { fehlgeschlagen: 'ist fehlgeschlagen', uebersprungen: 'wurde übersprungen', 'nicht-ausgefuehrt': 'kam im Testlauf nicht vor' }[e.result];
+        const code = { fehlgeschlagen: 'EVIDENCE_FAILED', uebersprungen: 'EVIDENCE_SKIPPED', 'nicht-ausgefuehrt': 'EVIDENCE_NOT_RUN' }[e.result];
+        add('fehler', code, where, `Nachweis ${name} ${what} – Verfügbarkeit nicht nachgewiesen`);
       }
     }
+
+    // Ein Nachweis trägt ein Kriterium, wenn es ihn gibt und er etwas zusichert (oder nicht beurteilbar ist, z. B. ein
+    // Szenario-Tab ohne Schrittliste); belegt ist das Kriterium erst, wenn ein solcher Nachweis bestanden hat.
+    const usable = (e: EnrichedEvidence) => e.exists && (!e.quality.found || e.quality.assertions > 0);
+    const acceptance: EnrichedCriterion[] = entry.acceptance.map((criterion) => {
+      const coveredBy = evidence.map((e, i) => (e.evidence.covers.includes(criterion.id) ? i : -1)).filter((i) => i >= 0);
+      const valid = coveredBy.filter((i) => usable(evidence[i]!));
+      let status: CriterionStatus = 'offen';
+      if (valid.some((i) => evidence[i]!.result === 'bestanden')) status = 'nachgewiesen';
+      else if (valid.some((i) => evidence[i]!.result === undefined)) status = 'statisch';
+      if (coveredBy.length === 0) add(level, 'ACCEPTANCE_UNCOVERED', where, `Kriterium „${criterion.id}“ hat keinen Nachweis`);
+      else if (status === 'offen') add(level, 'ACCEPTANCE_UNCOVERED', where, `Kriterium „${criterion.id}“ hat keinen gültigen, bestandenen Nachweis`);
+      if (criterion.kind === 'regel' && criterion.code && coveredBy.length > 0 && !coveredBy.some((i) => new RegExp(`\\b${criterion.code}\\b`).test(texts[i]!))) {
+        add(level, 'RULE_CODE_NOT_ASSERTED', where, `Fehlercode \`${criterion.code}\` von Kriterium „${criterion.id}“ kommt in keinem abdeckenden Test vor`);
+      }
+      return { criterion, status, coveredBy };
+    });
+
+    // nachgewiesen: alle Kriterien bestanden; statisch: alle belegt, aber nicht alle im Lauf; teilweise: einige offen.
+    let proof: ProofStatus;
+    const open = acceptance.filter((c) => c.status === 'offen').length;
+    if (acceptance.length === 0 || open === acceptance.length) proof = 'nicht-nachgewiesen';
+    else if (open > 0 || evidence.some((e) => !e.exists)) proof = 'teilweise';
+    else if (acceptance.every((c) => c.status === 'nachgewiesen')) proof = 'nachgewiesen';
+    else proof = 'statisch';
 
     // Wer die Funktion ausführen darf: die Rollen der ändernden Endpunkte; reine Lesefunktionen nach den Leseendpunkten.
     const writing = endpoints.filter((e) => !e.ref.startsWith('GET '));
     const roles = [...new Set((writing.length ? writing : endpoints).flatMap((e) => e.access.roles))];
     const channels = [...new Set(entry.usage.map((u) => u.channel))];
-    return { entry, area, roles, channels, endpoints, evidence, proof };
+    return { entry, area, roles, channels, endpoints, evidence, acceptance, proof };
   };
 
   const enriched = all.map((item) => ({ item, result: enrich(item) }));

@@ -19,6 +19,17 @@ features:
     rules:
       - Passwörter mit scrypt gespeichert, Sitzungen nur als Hash des Tokens.
       - Fünf Fehlversuche → fünf Minuten Sperre (`LOGIN_LOCKED`).
+    acceptance:
+      - id: geschuetzt
+        kind: effekt
+        text: Ohne Anmeldung sind nur Betriebszustand, API-Beschreibung und Anmeldung erreichbar; nach Anmeldung per Cookie die übrige API.
+      - id: einheitlich
+        kind: regel
+        text: Falsche Anmeldedaten werden einheitlich gemeldet.
+      - id: login-locked
+        kind: regel
+        text: Fünf Fehlversuche → fünf Minuten Sperre (`LOGIN_LOCKED`).
+        code: LOGIN_LOCKED
     settings:
       - name: Sitzungsdauer und Cookie
         description: "`AUTH_SESSION_HOURS` (Standard 12), `AUTH_COOKIE_SECURE` (auto | true | false)."
@@ -43,15 +54,21 @@ features:
       - kind: integration
         file: apps/api/test/integration/auth.integration.test.ts
         test: lässt ohne Anmeldung nur Öffentliches zu
+        rationale: Prüft öffentliche und geschützte Endpunkte ohne Anmeldung – die Regel betrifft alle Endpunkte, nicht nur die der Anmeldung.
+        covers: [geschuetzt]
       - kind: integration
         file: apps/api/test/integration/auth.integration.test.ts
         test: legt admin aus der Konfiguration an und meldet per Cookie an
+        covers: [geschuetzt]
       - kind: integration
         file: apps/api/test/integration/auth.integration.test.ts
         test: meldet falsche Anmeldedaten einheitlich und bremst nach fünf Fehlversuchen
+        covers: [einheitlich, login-locked]
       - kind: web-e2e
         file: apps/web/e2e/auth.spec.ts
         test: "Anmeldung: falsches Passwort, Anmelden, Abmelden"
+        rationale: Browser-Test über die Anmeldeseite; die Seite ist keine katalogisierte Route des Features.
+        covers: [geschuetzt, einheitlich]
     comparisons:
       openwms:
         status: nicht-einsehbar
@@ -73,6 +90,13 @@ features:
         text: Wirkt automatisch; `GET /v1/auth/me` zeigt die eigenen Rollen.
     rules:
       - "`admin`: alles; `leitstand`: Aufträge steuern, Sperren, Korrekturen, Inventur; `lager`: Arbeit am Scanner; `anlage`: Geräte-Ereignisse und Transporte; `lesen`: nur ansehen."
+    acceptance:
+      - id: rechtetabelle
+        kind: regel
+        text: Jede Rolle darf nur, was die Rechtetabelle vorsieht; die Rolle lesen ändert nichts.
+      - id: akteur
+        kind: effekt
+        text: Jede Änderung vermerkt ihren Akteur.
     technical:
       components:
         - apps/api/src/modules/auth/domain/policy.ts
@@ -82,9 +106,13 @@ features:
       - kind: unit
         file: apps/api/test/unit/auth/policy.test.ts
         test: lässt die Rolle lesen nichts ändern
+        rationale: Die Rechteprüfung liefert einen Wahrheitswert; `toBe(false)` je Aktion ist das fachliche Ergebnis.
+        covers: [rechtetabelle]
       - kind: integration
         file: apps/api/test/integration/auth.integration.test.ts
         test: erlaubt je Rolle nur, was die Rechtetabelle vorsieht, und vermerkt den Akteur
+        rationale: Querschnittsfunktion; geprüft über Aufrufe mit verschiedenen Rollen und den vermerkten Akteur.
+        covers: [rechtetabelle, akteur]
     comparisons:
       openwms:
         status: nicht-einsehbar
@@ -104,6 +132,10 @@ features:
         text: "Header `Authorization: Bearer <token>`."
       - channel: node-red
         text: Verbindung `wms-config` liest das Token aus `WMS_API_TOKEN`.
+    acceptance:
+      - id: token
+        kind: effekt
+        text: Ein Service-Token meldet eine Maschine mit eigener Rolle an; Node-RED nimmt es aus der Umgebung.
     settings:
       - name: Tokens und Rollen
         description: "`AUTH_SERVICE_TOKENS=\"name:rolle+rolle:token;…\"` (Token mindestens 32 Zeichen)."
@@ -117,9 +149,13 @@ features:
       - kind: integration
         file: apps/api/test/integration/auth.integration.test.ts
         test: erlaubt je Rolle nur, was die Rechtetabelle vorsieht, und vermerkt den Akteur
+        rationale: Querschnittsfunktion; geprüft über Aufrufe mit Service-Token und den vermerkten Akteur.
+        covers: [token]
       - kind: unit
         file: packages/node-red-nodes/test/nodes.test.mjs
         test: meldet sich mit dem Service-Token aus der Umgebung an
+        rationale: Prüft die Anmeldung des Node-RED-Nodes mit dem Service-Token aus der Umgebung.
+        covers: [token]
     comparisons:
       openwms:
         status: nicht-einsehbar
@@ -142,6 +178,17 @@ features:
     rules:
       - Benutzername eindeutig; nur bekannte Rollen; Passwort mindestens 10 Zeichen.
       - Keine Selbstaussperrung (`SELF_LOCKOUT`).
+    acceptance:
+      - id: angelegt
+        kind: effekt
+        text: Admins legen Benutzer mit Rollen an und sehen die Rollen mit Beschreibung.
+      - id: sitzungen
+        kind: effekt
+        text: Sperren und Rollenwechsel beenden die Sitzungen des Benutzers sofort.
+      - id: self-lockout
+        kind: regel
+        text: Keine Selbstaussperrung (`SELF_LOCKOUT`).
+        code: SELF_LOCKOUT
     technical:
       components:
         - apps/api/src/modules/auth/application/auth.service.ts
@@ -158,15 +205,19 @@ features:
       - kind: integration
         file: apps/api/test/integration/auth.integration.test.ts
         test: beendet Sitzungen beim Abmelden, beim Sperren und beim Rollenwechsel
+        covers: [sitzungen]
       - kind: integration
         file: apps/api/test/integration/auth.integration.test.ts
         test: ändert das eigene Passwort und schützt vor Selbstaussperrung
+        covers: [self-lockout]
       - kind: integration
         file: apps/api/test/integration/auth.integration.test.ts
         test: liefert die Rollen mit Beschreibung
+        covers: [angelegt]
       - kind: web-e2e
         file: apps/web/e2e/seiten.spec.ts
         test: "Benutzer: anlegen mit Rolle, Rollen ansehen, sperren"
+        covers: [angelegt, sitzungen]
     comparisons:
       openwms:
         status: nicht-einsehbar
@@ -186,6 +237,14 @@ features:
         text: Seite **Konto** (Link beim Anmeldenamen).
     rules:
       - Mindestens 10 Zeichen (`PASSWORD_TOO_SHORT`).
+    acceptance:
+      - id: geaendert
+        kind: effekt
+        text: Das eigene Passwort lässt sich ändern; danach gilt nur noch das neue.
+      - id: password-too-short
+        kind: regel
+        text: Mindestens 10 Zeichen (`PASSWORD_TOO_SHORT`).
+        code: PASSWORD_TOO_SHORT
     technical:
       components:
         - apps/api/src/modules/auth/application/auth.service.ts
@@ -199,9 +258,11 @@ features:
       - kind: integration
         file: apps/api/test/integration/auth.integration.test.ts
         test: ändert das eigene Passwort und schützt vor Selbstaussperrung
+        covers: [geaendert, password-too-short]
       - kind: web-e2e
         file: apps/web/e2e/auth.spec.ts
         test: "Konto: eigenes Passwort ändern und mit dem neuen anmelden"
+        covers: [geaendert]
     comparisons:
       openwms:
         status: nicht-einsehbar
@@ -219,6 +280,10 @@ features:
     usage:
       - channel: node-red
         text: "Editor-Anmeldung `admin` / `WMS_NODE_RED_ADMIN_PASSWORD`."
+    acceptance:
+      - id: anmeldung
+        kind: effekt
+        text: Aufrufe von Editor, Test- und Simulator-Endpunkten ohne Anmeldung werden abgelehnt.
     settings:
       - name: Passwörter
         description: "`WMS_NODE_RED_ADMIN_PASSWORD`, `WMS_NODE_RED_HTTP_PASSWORD` – erzeugt von `pnpm env:init`."
@@ -231,6 +296,8 @@ features:
       - kind: integration
         file: packages/scenario-runner/test/scenarios.test.ts
         test: lehnt Aufrufe ohne Anmeldung ab
+        rationale: Die Ablehnung mit 401 ohne Anmeldung ist das fachliche Ergebnis; Node-RED hat keinen katalogisierten WMS-Endpunkt.
+        covers: [anmeldung]
     comparisons:
       openwms:
         status: neu
@@ -246,6 +313,10 @@ features:
     usage:
       - channel: api
         text: "`GET /health`"
+    acceptance:
+      - id: erreichbar
+        kind: effekt
+        text: "`/health` meldet Datenbank und MQTT als erreichbar."
     technical:
       components:
         - apps/api/src/modules/health/health.controller.ts
@@ -255,6 +326,7 @@ features:
       - kind: integration
         file: apps/api/test/integration/api.integration.test.ts
         test: meldet Datenbank und MQTT als erreichbar
+        covers: [erreichbar]
     comparisons:
       openwms:
         status: gleichwertig
@@ -276,6 +348,13 @@ features:
         text: "`GET /metrics` mit Anmeldung, z. B. Prometheus mit einem Service-Token der Rolle `lesen` (`authorization: Bearer …`)."
     rules:
       - Nur angemeldet (401 sonst); Routen werden als Muster erfasst (`/v1/shipments/:number`), damit die Zahl der Zeitreihen klein bleibt.
+    acceptance:
+      - id: prometheus
+        kind: effekt
+        text: "`/metrics` liefert Kennzahlen im Prometheus-Format mit Routen als Muster."
+      - id: anmeldung
+        kind: regel
+        text: Ohne Anmeldung antwortet `/metrics` mit 401.
     dependsOn: [sicherheit.service-tokens]
     technical:
       components:
@@ -290,6 +369,7 @@ features:
       - kind: integration
         file: apps/api/test/integration/api.integration.test.ts
         test: liefert Metriken im Prometheus-Format nur mit Anmeldung
+        covers: [prometheus, anmeldung]
     comparisons:
       openwms:
         status: gleichwertig
@@ -308,6 +388,10 @@ features:
     usage:
       - channel: api
         text: Konfiguration `OUTBOX_RETENTION_HOURS` und `OUTBOX_CLEANUP_INTERVAL_MS`; Metrik `wms_outbox_cleaned_total`.
+    acceptance:
+      - id: geloescht
+        kind: effekt
+        text: Veröffentlichte Einträge werden nach der Frist gelöscht, unveröffentlichte nie.
     dependsOn: [integration.ereignisse]
     technical:
       components:
@@ -316,6 +400,7 @@ features:
       - kind: integration
         file: apps/api/test/integration/api.integration.test.ts
         test: löscht veröffentlichte Einträge nach der Aufbewahrungsfrist, unveröffentlichte nie
+        covers: [geloescht]
     comparisons:
       openwms:
         status: neu
@@ -331,6 +416,10 @@ features:
     usage:
       - channel: api
         text: "`DB_MIGRATE_ON_START=true` oder `pnpm --filter @wms/api db:migrate`."
+    acceptance:
+      - id: schema
+        kind: effekt
+        text: Die Migrationen legen das Schema an und lassen sich wiederholt ausführen.
     technical:
       components:
         - apps/api/src/infrastructure/database/migrate.ts
@@ -339,6 +428,7 @@ features:
       - kind: integration
         file: apps/api/test/integration/api.integration.test.ts
         test: legen das Schema an und sind wiederholbar
+        covers: [schema]
     comparisons:
       openwms:
         status: erweitert
@@ -357,6 +447,16 @@ features:
     usage:
       - channel: mqtt
         text: "`mqtts://localhost:8883` mit `--cafile ca.crt` und Benutzer (siehe docs/entwicklung.md, Absicherung)."
+    acceptance:
+      - id: verbindung
+        kind: effekt
+        text: Eine Verbindung mit Benutzer, Passwort und gültigem Zertifikat gelingt.
+      - id: nur-tls
+        kind: regel
+        text: Verbindungen ohne TLS, anonyme Zugriffe, falsche Passwörter und fremde Server-Zertifikate werden abgelehnt.
+      - id: topic-rechte
+        kind: regel
+        text: Node-RED darf keine Ereignisse des WMS veröffentlichen.
     settings:
       - name: Passwörter
         description: "`WMS_MQTT_API_PASSWORD`, `WMS_MQTT_NODE_RED_PASSWORD`, `WMS_MQTT_HEALTH_PASSWORD`."
@@ -374,18 +474,28 @@ features:
       - kind: integration
         file: packages/scenario-runner/test/security.test.ts
         test: verbindet mit Benutzer, Passwort und gültigem Zertifikat
+        rationale: Prüft den Broker direkt über MQTT – das Feature hat keinen HTTP-Endpunkt, Bezug ist die Broker-Konfiguration.
+        covers: [verbindung]
       - kind: integration
         file: packages/scenario-runner/test/security.test.ts
         test: lehnt Verbindungen ohne TLS ab
+        rationale: Prüft den Broker direkt über MQTT – das Feature hat keinen HTTP-Endpunkt, Bezug ist die Broker-Konfiguration.
+        covers: [nur-tls]
       - kind: integration
         file: packages/scenario-runner/test/security.test.ts
         test: lehnt anonyme Zugriffe und falsche Passwörter ab
+        rationale: Prüft den Broker direkt über MQTT – das Feature hat keinen HTTP-Endpunkt, Bezug ist die Broker-Konfiguration.
+        covers: [nur-tls]
       - kind: integration
         file: packages/scenario-runner/test/security.test.ts
         test: lehnt einen Server ab, dessen Zertifikat nicht von der eigenen Zertifizierungsstelle stammt
+        rationale: Prüft den Broker direkt über MQTT – das Feature hat keinen HTTP-Endpunkt, Bezug ist die Broker-Konfiguration.
+        covers: [nur-tls]
       - kind: integration
         file: packages/scenario-runner/test/security.test.ts
         test: erlaubt Node-RED nicht, Ereignisse des WMS zu veröffentlichen (Rechte je Topic)
+        rationale: Prüft den Broker direkt über MQTT – das Feature hat keinen HTTP-Endpunkt, Bezug ist die Broker-Konfiguration.
+        covers: [topic-rechte]
     comparisons:
       openwms:
         status: nicht-einsehbar

@@ -10,6 +10,10 @@ features:
     usage:
       - channel: leitstand
         text: "`http://localhost:3000/ui/`"
+    acceptance:
+      - id: ui
+        kind: effekt
+        text: Die API liefert die Oberfläche unter `/ui/` aus; API-Pfade bleiben erreichbar.
     technical:
       components:
         - apps/api/src/app.factory.ts
@@ -20,6 +24,8 @@ features:
       - kind: integration
         file: apps/api/test/integration/live.integration.test.ts
         test: liefert die Oberfläche unter /ui/ aus, ohne die API zu verdecken
+        rationale: Prüft die Auslieferung unter `/ui/` direkt – die Oberfläche ist kein katalogisierter Fachendpunkt.
+        covers: [ui]
     comparisons:
       openwms:
         status: nicht-einsehbar
@@ -35,6 +41,10 @@ features:
     usage:
       - channel: leitstand
         text: Menü **Übersicht**.
+    acceptance:
+      - id: zustand
+        kind: effekt
+        text: Die Übersicht zeigt den Zustand von Datenbank und MQTT und die Live-Verbindung.
     technical:
       components:
         - apps/web/src/pages/OverviewPage.tsx
@@ -43,6 +53,7 @@ features:
       - kind: web-e2e
         file: apps/web/e2e/leitstand.spec.ts
         test: Übersicht zeigt Systemzustand und Live-Verbindung
+        covers: [zustand]
     comparisons:
       openwms:
         status: nicht-einsehbar
@@ -58,6 +69,10 @@ features:
     usage:
       - channel: leitstand
         text: Wirkt automatisch; die Übersicht zeigt den Verbindungszustand.
+    acceptance:
+      - id: live
+        kind: effekt
+        text: Nach einer Buchung zeigt die geöffnete Seite den neuen Stand ohne Neuladen; die Live-Verbindung ist sichtbar.
     dependsOn: [integration.live-stream]
     technical:
       components:
@@ -66,9 +81,13 @@ features:
       - kind: web-e2e
         file: apps/web/e2e/leitstand.spec.ts
         test: Bestand zeigt Posten und aktualisiert sich live nach einem Abgang
+        rationale: Querschnittsfunktion aller Seiten; geprüft an der Bestandsseite nach einem Abgang.
+        covers: [live]
       - kind: web-e2e
         file: apps/web/e2e/leitstand.spec.ts
         test: Übersicht zeigt Systemzustand und Live-Verbindung
+        rationale: Querschnittsfunktion aller Seiten; geprüft an der Anzeige der Live-Verbindung.
+        covers: [live]
     comparisons:
       openwms:
         status: nicht-einsehbar
@@ -84,6 +103,13 @@ features:
     usage:
       - channel: scanner
         text: "`/ui/scanner` auf dem Gerät öffnen."
+    acceptance:
+      - id: bewegen
+        kind: effekt
+        text: Am Scanner lässt sich eine TU bewegen; eine Regelverletzung erscheint als verständliche Meldung.
+      - id: wareneingang
+        kind: effekt
+        text: Am Scanner lässt sich Ware ohne Avis erfassen.
     technical:
       components:
         - apps/web/src/pages/ScannerPage.tsx
@@ -92,9 +118,11 @@ features:
       - kind: web-e2e
         file: apps/web/e2e/scanner.spec.ts
         test: "Scanner: TU bewegen, Regelverletzung als verständliche Meldung"
+        covers: [bewegen]
       - kind: web-e2e
         file: apps/web/e2e/scanner.spec.ts
         test: "Scanner: Wareneingang ohne Avis"
+        covers: [wareneingang]
     comparisons:
       openwms:
         status: nicht-einsehbar
@@ -110,6 +138,10 @@ features:
     usage:
       - channel: leitstand
         text: Wirkt automatisch nach der Anmeldung.
+    acceptance:
+      - id: nur-erlaubtes
+        kind: effekt
+        text: Die Rolle lager sieht keine Benutzerverwaltung und kein Anlegen von Auslageraufträgen.
     dependsOn: [sicherheit.anmeldung, sicherheit.rollen]
     technical:
       components:
@@ -119,6 +151,8 @@ features:
       - kind: web-e2e
         file: apps/web/e2e/auth.spec.ts
         test: "Rolle lager: keine Benutzerverwaltung, kein Anlegen von Auslageraufträgen"
+        rationale: Querschnittsfunktion aller Seiten; geprüft an Benutzerverwaltung und Auslagerung mit der Rolle lager.
+        covers: [nur-erlaubtes]
     comparisons:
       openwms:
         status: nicht-einsehbar

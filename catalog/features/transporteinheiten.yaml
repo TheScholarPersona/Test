@@ -15,6 +15,14 @@ features:
         text: "`POST /v1/transport-unit-types` (`code`, `tareWeight`, `maxPayload`, Maße), Liste mit Regeln `GET /v1/transport-unit-types`, lesen `GET …/{code}`, ändern `PATCH …/{code}`, löschen `DELETE …/{code}`."
     rules:
       - Kennung eindeutig; löschen nur ohne Verwendung (`TU_TYPE_IN_USE`).
+    acceptance:
+      - id: angelegt
+        kind: effekt
+        text: Ein TU-Typ steht mit Maßen, Leergewicht und Zuladung bereit, ist mit Regeln gelistet und änderbar.
+      - id: tu-type-in-use
+        kind: regel
+        text: Löschen nur ohne Verwendung (`TU_TYPE_IN_USE`).
+        code: TU_TYPE_IN_USE
     technical:
       components:
         - apps/api/src/modules/transport/application/transport-unit-type.service.ts
@@ -33,14 +41,18 @@ features:
       - kind: integration
         file: apps/api/test/integration/transport.integration.test.ts
         test: legt Typen mit Gewichten an
+        covers: [angelegt]
       - kind: integration
         file: apps/api/test/integration/transport.integration.test.ts
         test: schützt Lagerplätze mit TUs und benutzte Typen vor dem Löschen
+        covers: [tu-type-in-use]
       - kind: scenario
         id: tu-placement
+        covers: [angelegt]
       - kind: integration
         file: apps/api/test/integration/transport.integration.test.ts
         test: listet Typen mit Regeln und ändert Maße und Beschreibung
+        covers: [angelegt]
     comparisons:
       openwms:
         status: erweitert
@@ -59,6 +71,14 @@ features:
     usage:
       - channel: api
         text: "`PUT /v1/transport-unit-types/{code}/placement-rules` und `…/stacking-rules` ersetzen die jeweilige Liste."
+    acceptance:
+      - id: ersetzt
+        kind: effekt
+        text: Platzierungs- und Stapelregeln eines Typs werden als Ganzes ersetzt.
+      - id: durchgesetzt
+        kind: regel
+        text: Eine TU kommt nur auf Platztypen, die eine Platzierungsregel erlaubt.
+        code: PLACEMENT_NOT_ALLOWED
     settings:
       - name: Erlaubte Platztypen mit Vorrang
         description: "`locationTypeCode` und `privilegeLevel` (0–1000) je Regel."
@@ -80,9 +100,12 @@ features:
       - kind: integration
         file: apps/api/test/integration/transport.integration.test.ts
         test: ersetzt Platzierungs- und Stapelregeln
+        covers: [ersetzt]
       - kind: integration
         file: apps/api/test/integration/transport.integration.test.ts
         test: setzt Platzierungsregeln durch
+        rationale: Prüft die Wirkung der Regeln über das Bewegen einer TU.
+        covers: [durchgesetzt]
     comparisons:
       openwms:
         status: erweitert
@@ -106,6 +129,21 @@ features:
       - Barcode eindeutig; Zuladung des Typs wird geprüft (`TU_OVERWEIGHT`).
       - Beim Anlegen gelten die Platzierungsregeln wie beim Bewegen.
       - Löschen nicht mit aufgestapelten TUs (`TU_HAS_CHILDREN`) oder bei Einwänden anderer Module.
+    acceptance:
+      - id: angelegt
+        kind: effekt
+        text: Eine TU entsteht mit (auch erzeugtem) Barcode auf einem Platz und rechnet mit dem Leergewicht; das geplante Ziel entfällt, sobald es erreicht ist.
+      - id: eindeutig
+        kind: regel
+        text: Ein doppelter Barcode wird abgelehnt.
+      - id: tu-overweight
+        kind: regel
+        text: Zuladung des Typs wird geprüft (`TU_OVERWEIGHT`).
+        code: TU_OVERWEIGHT
+      - id: tu-has-children
+        kind: regel
+        text: Löschen nicht mit aufgestapelten TUs (`TU_HAS_CHILDREN`) oder bei Einwänden anderer Module.
+        code: TU_HAS_CHILDREN
     dependsOn: [transporteinheiten.typen, lagerstruktur.plaetze]
     technical:
       components:
@@ -125,14 +163,26 @@ features:
       - kind: integration
         file: apps/api/test/integration/transport.integration.test.ts
         test: erzeugt einen Barcode und rechnet mit dem Leergewicht
+        covers: [angelegt]
       - kind: integration
         file: apps/api/test/integration/transport.integration.test.ts
         test: verhindert doppelte Barcodes
+        covers: [eindeutig]
       - kind: integration
         file: apps/api/test/integration/transport.integration.test.ts
         test: löscht das geplante Ziel, sobald es erreicht ist
+        covers: [angelegt]
       - kind: scenario
         id: tu-placement
+        covers: [angelegt]
+      - kind: integration
+        file: apps/api/test/integration/transport.integration.test.ts
+        test: prüft Platzgewicht und Zuladung
+        covers: [tu-overweight]
+      - kind: integration
+        file: apps/api/test/integration/transport.integration.test.ts
+        test: nimmt vom Stapel nur, wenn auf dem Platz Raum ist
+        covers: [tu-has-children]
     comparisons:
       openwms:
         status: gleichwertig
@@ -159,6 +209,36 @@ features:
       - Regeln `SOURCE_OUTBOUND_BLOCKED`, `TARGET_INBOUND_BLOCKED`, `LOCATION_FULL`, `WEIGHT_EXCEEDED`, `PLACEMENT_NOT_ALLOWED`.
       - Gewicht exakt dezimal; gestapelte TUs zählen nicht zur Höchstzahl, aber zum Gewicht.
       - Zielplatz wird während der Prüfung in der Datenbank gesperrt.
+    acceptance:
+      - id: alle-verstoesse
+        kind: effekt
+        text: Die Prüfung nennt alle Verstöße auf einmal, jeweils mit Regel und Grund.
+      - id: exakt
+        kind: regel
+        text: Das Gewicht wird exakt dezimal gerechnet; genau das Höchstgewicht ist erlaubt.
+      - id: gleichzeitig
+        kind: regel
+        text: Bei gleichzeitigen Anfragen wird ein Platz mit Höchstzahl 1 genau einmal belegt.
+      - id: source-outbound-blocked
+        kind: regel
+        text: Regeln `SOURCE_OUTBOUND_BLOCKED`, `TARGET_INBOUND_BLOCKED`, `LOCATION_FULL`, `WEIGHT_EXCEEDED`, `PLACEMENT_NOT_ALLOWED`.
+        code: SOURCE_OUTBOUND_BLOCKED
+      - id: target-inbound-blocked
+        kind: regel
+        text: Regeln `SOURCE_OUTBOUND_BLOCKED`, `TARGET_INBOUND_BLOCKED`, `LOCATION_FULL`, `WEIGHT_EXCEEDED`, `PLACEMENT_NOT_ALLOWED`.
+        code: TARGET_INBOUND_BLOCKED
+      - id: location-full
+        kind: regel
+        text: Regeln `SOURCE_OUTBOUND_BLOCKED`, `TARGET_INBOUND_BLOCKED`, `LOCATION_FULL`, `WEIGHT_EXCEEDED`, `PLACEMENT_NOT_ALLOWED`.
+        code: LOCATION_FULL
+      - id: weight-exceeded
+        kind: regel
+        text: Regeln `SOURCE_OUTBOUND_BLOCKED`, `TARGET_INBOUND_BLOCKED`, `LOCATION_FULL`, `WEIGHT_EXCEEDED`, `PLACEMENT_NOT_ALLOWED`.
+        code: WEIGHT_EXCEEDED
+      - id: placement-not-allowed
+        kind: regel
+        text: Regeln `SOURCE_OUTBOUND_BLOCKED`, `TARGET_INBOUND_BLOCKED`, `LOCATION_FULL`, `WEIGHT_EXCEEDED`, `PLACEMENT_NOT_ALLOWED`.
+        code: PLACEMENT_NOT_ALLOWED
     dependsOn: [transporteinheiten.regeln, lagerstruktur.sperren]
     technical:
       components:
@@ -170,20 +250,34 @@ features:
       - kind: unit
         file: apps/api/test/unit/transport/placement.test.ts
         test: meldet alle Verstöße auf einmal
+        covers: [alle-verstoesse, target-inbound-blocked, location-full, weight-exceeded, placement-not-allowed]
       - kind: unit
         file: apps/api/test/unit/transport/placement.test.ts
         test: rechnet das Gewicht exakt dezimal und erlaubt genau das Höchstgewicht
+        covers: [exakt, weight-exceeded]
       - kind: integration
         file: apps/api/test/integration/transport.integration.test.ts
         test: lehnt einen vollen Platz ab und nennt die Regel
+        rationale: Querschnittsfunktion ohne eigenen Endpunkt; geprüft über das Bewegen einer TU.
+        covers: [alle-verstoesse, location-full]
       - kind: integration
         file: apps/api/test/integration/transport.integration.test.ts
         test: prüft Platzgewicht und Zuladung
+        rationale: Querschnittsfunktion ohne eigenen Endpunkt; geprüft über Anlegen und Bewegen von TUs.
+        covers: [exakt, weight-exceeded]
       - kind: integration
         file: apps/api/test/integration/transport.integration.test.ts
         test: belegt einen Platz mit Höchstzahl 1 bei gleichzeitigen Anfragen genau einmal
+        rationale: Querschnittsfunktion ohne eigenen Endpunkt; geprüft über gleichzeitiges Bewegen auf einen Platz.
+        covers: [gleichzeitig, location-full]
       - kind: scenario
         id: tu-placement
+        rationale: Querschnittsfunktion ohne eigenen Endpunkt; das Szenario prüft sie über das Bewegen einer TU.
+        covers: [alle-verstoesse, location-full, weight-exceeded]
+      - kind: unit
+        file: apps/api/test/unit/transport/placement.test.ts
+        test: meldet Sperren an Quelle und Ziel mit dem Verursacher
+        covers: [alle-verstoesse, source-outbound-blocked, target-inbound-blocked]
     comparisons:
       openwms:
         status: neu
@@ -208,6 +302,20 @@ features:
         text: Node `wms-move-tu` – Platz und Modus aus der Nachricht oder fest.
     rules:
       - Gestapelte TUs lassen sich nicht einzeln bewegen (`TU_STACKED`).
+    acceptance:
+      - id: bewegt
+        kind: effekt
+        text: Eine TU wird regelkonform auf den neuen Platz gebucht; das Ereignis nennt Quelle und Ziel.
+      - id: ist-position
+        kind: effekt
+        text: Geerbte Sperren gelten; gemeldete Ist-Positionen werden trotzdem gebucht.
+      - id: leerlauf
+        kind: effekt
+        text: Bewegen auf den aktuellen Platz ändert nichts.
+      - id: tu-stacked
+        kind: regel
+        text: Gestapelte TUs lassen sich nicht einzeln bewegen (`TU_STACKED`).
+        code: TU_STACKED
     dependsOn: [transporteinheiten.platzierungspruefung]
     technical:
       components:
@@ -224,21 +332,32 @@ features:
       - kind: integration
         file: apps/api/test/integration/transport.integration.test.ts
         test: bewegt regelkonform und veröffentlicht Quelle und Ziel
+        covers: [bewegt]
       - kind: integration
         file: apps/api/test/integration/transport.integration.test.ts
         test: beachtet geerbte Sperren und bucht gemeldete Ist-Positionen trotzdem
+        covers: [ist-position]
       - kind: integration
         file: apps/api/test/integration/transport.integration.test.ts
         test: behandelt Bewegen auf den aktuellen Platz als Leerlauf
+        covers: [leerlauf]
       - kind: web-e2e
         file: apps/web/e2e/scanner.spec.ts
         test: "Scanner: TU bewegen, Regelverletzung als verständliche Meldung"
+        covers: [bewegt]
       - kind: unit
         file: packages/node-red-nodes/test/nodes.test.mjs
         test: wms-move-tu baut den Platzverweis und den Modus
+        covers: [bewegt]
       - kind: scenario
         id: node-red-examples
         note: Beispiel-Flow Scan → TU bewegen
+        rationale: Das Szenario treibt den Beispiel-Flow mit `wms-move-tu`; der Node-Typ steht im Flow, nicht im Szenario.
+        covers: [bewegt]
+      - kind: integration
+        file: apps/api/test/integration/transport.integration.test.ts
+        test: verhindert unzulässige Stapel
+        covers: [tu-stacked]
     comparisons:
       openwms:
         status: erweitert
@@ -260,6 +379,25 @@ features:
         text: '`POST /v1/transport-units/{barcode}/stack` mit `{ "onto": "<barcode>" }`, `POST …/unstack`.'
     rules:
       - Nur mit Stapelregel, bis zur Höchstzahl (`STACK_FULL`), nur auf demselben Platz, ohne Zyklen (`STACKING_REJECTED`).
+    acceptance:
+      - id: gestapelt
+        kind: effekt
+        text: TUs werden bis zur Höchstzahl der Stapelregel aufeinandergestellt; der Stapel bewegt sich als Ganzes und zählt sein Gewicht.
+      - id: unzulaessig
+        kind: regel
+        text: Stapel ohne Regel oder auf sich selbst werden abgelehnt.
+        code: STACKING_NOT_ALLOWED
+      - id: abgestapelt
+        kind: effekt
+        text: Abstapeln gelingt nur, wenn auf dem Platz Raum ist.
+      - id: stack-full
+        kind: regel
+        text: Nur mit Stapelregel, bis zur Höchstzahl (`STACK_FULL`), nur auf demselben Platz, ohne Zyklen (`STACKING_REJECTED`).
+        code: STACK_FULL
+      - id: stacking-rejected
+        kind: regel
+        text: Nur mit Stapelregel, bis zur Höchstzahl (`STACK_FULL`), nur auf demselben Platz, ohne Zyklen (`STACKING_REJECTED`).
+        code: STACKING_REJECTED
     dependsOn: [transporteinheiten.regeln]
     technical:
       components:
@@ -274,15 +412,20 @@ features:
       - kind: integration
         file: apps/api/test/integration/transport.integration.test.ts
         test: stapelt BOX auf EURO bis zur Höchstzahl
+        covers: [gestapelt, stack-full, stacking-rejected]
       - kind: integration
         file: apps/api/test/integration/transport.integration.test.ts
         test: verhindert unzulässige Stapel
+        covers: [unzulaessig]
       - kind: integration
         file: apps/api/test/integration/transport.integration.test.ts
         test: bewegt den ganzen Stapel und zählt das Gewicht des Stapels
+        rationale: Prüft die Wirkung des Stapels über das Bewegen der unteren TU.
+        covers: [gestapelt]
       - kind: integration
         file: apps/api/test/integration/transport.integration.test.ts
         test: nimmt vom Stapel nur, wenn auf dem Platz Raum ist
+        covers: [abgestapelt]
     comparisons:
       openwms:
         status: erweitert
@@ -301,6 +444,10 @@ features:
     usage:
       - channel: api
         text: "`POST /v1/transport-units/{barcode}/state` mit `state`."
+    acceptance:
+      - id: zustand
+        kind: effekt
+        text: Ein Zustandswechsel wird mit Vorher und Nachher gemeldet; gesperrte TUs nimmt die Auslagerung nicht.
     technical:
       components:
         - apps/api/src/modules/transport/application/transport-unit.service.ts
@@ -312,9 +459,11 @@ features:
       - kind: integration
         file: apps/api/test/integration/transport.integration.test.ts
         test: ändert den Zustand und veröffentlicht vorher/nachher
+        covers: [zustand]
       - kind: integration
         file: apps/api/test/integration/outbound.integration.test.ts
         test: nimmt keinen Bestand von gesperrten Plätzen, gesperrten TUs oder aus laufender Inventur
+        covers: [zustand]
     comparisons:
       openwms:
         status: gleichwertig
@@ -330,6 +479,10 @@ features:
     usage:
       - channel: api
         text: "`GET /v1/transport-units?location=…&typeCode=…&state=…`"
+    acceptance:
+      - id: gefunden
+        kind: effekt
+        text: TUs werden nach Platz, Typ und Zustand gefunden.
     technical:
       components:
         - apps/api/src/modules/transport/http/transport-units.controller.ts
@@ -339,6 +492,7 @@ features:
       - kind: integration
         file: apps/api/test/integration/transport.integration.test.ts
         test: findet TUs nach Platz, Typ und Zustand
+        covers: [gefunden]
     comparisons:
       openwms:
         status: gleichwertig
@@ -365,6 +519,20 @@ features:
     rules:
       - Erledigte Meldungen lassen sich nicht erneut erledigen (`UNIT_ERROR_RESOLVED`).
       - Störungen der Anlage mit Barcode werden mit Melder `device:<Geräte-ID>` erfasst.
+    acceptance:
+      - id: erfasst
+        kind: effekt
+        text: Fehlermeldungen an einer TU werden erfasst, gelistet und erledigt; die Historie bleibt.
+      - id: anlage
+        kind: effekt
+        text: Eine Störung der Anlage mit Barcode wird als Fehlermeldung an der TU erfasst.
+      - id: unbekannt
+        kind: regel
+        text: Meldungen zu unbekannten TUs oder Meldungen werden abgelehnt.
+      - id: unit-error-resolved
+        kind: regel
+        text: Erledigte Meldungen lassen sich nicht erneut erledigen (`UNIT_ERROR_RESOLVED`).
+        code: UNIT_ERROR_RESOLVED
     dependsOn: [transporteinheiten.anlegen]
     technical:
       components:
@@ -386,15 +554,19 @@ features:
       - kind: integration
         file: apps/api/test/integration/transport.integration.test.ts
         test: erfasst, listet und erledigt Fehlermeldungen an einer TU und behält die Historie
+        covers: [erfasst, unit-error-resolved]
       - kind: integration
         file: apps/api/test/integration/transport.integration.test.ts
         test: meldet unbekannte TUs und Meldungen
+        covers: [unbekannt]
       - kind: integration
         file: apps/api/test/integration/flow.integration.test.ts
         test: erfasst eine Störung mit Barcode als Fehlermeldung an der TU
+        covers: [anlage]
       - kind: web-e2e
         file: apps/web/e2e/seiten.spec.ts
         test: "Störungen: Anlagenzustand eines Platzes und Fehlermeldung an einer TU"
+        covers: [erfasst, anlage]
     comparisons:
       openwms:
         status: erweitert
