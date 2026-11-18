@@ -17,8 +17,9 @@ Schreibe Katalogtexte und Antworten in der Sprache des Projekts bzw. des Nutzers
 ## 1. Grundsätze (gelten unverändert)
 
 1. **Eine Quelle der Wahrheit:** YAML unter `catalog/` im Repository. Ansicht, JSON und Statistik werden erzeugt.
-2. **Nur Nachgewiesenes im Katalog:** Jedes Feature hat mindestens einen automatisierten Test als Nachweis, der im
-   letzten CI-Lauf **bestanden** hat. Der Rest steht im **Prüfbestand** (`catalog/review.yaml`).
+2. **Nur funktional Nachgewiesenes im Katalog:** Jedes Feature hat prüfbare **Akzeptanzkriterien**, und jedes
+   Kriterium hat einen Test, der die Fähigkeit auslöst, den erwarteten Effekt oder die Regel zusichert und im letzten
+   CI-Lauf **bestanden** hat (Abschnitt 3.3). Ein bloß grüner Test genügt nicht. Der Rest steht im **Prüfbestand**.
 3. **Die Prüfung legt nie selbst Features an** – sie meldet nur (Unzugeordnetes, tote Verweise, fehlende Nachweise).
 4. **Die Applikation bleibt unverändert:** keine Annotationen, keine Abhängigkeit im Produktivcode. Das Werkzeug liest
    Code, API-Beschreibung und Testberichte. Erlaubt sind **Tests**, die Informationen aus der laufenden App
@@ -114,17 +115,89 @@ features:
       events: { emits: [receiving.event.ro.created], consumes: [] }
       jobs: []
       notes: [Tabelle `WMS_REC_ORDER`.]
+    acceptance:                                        # Pflicht, siehe 3.3
+      - id: auftrag-angelegt
+        kind: effekt
+        text: Ein Avis mit zwei Positionen ist danach mit Zustand CREATED und beiden Positionen lesbar.
+      - id: nummer-eindeutig
+        kind: regel
+        text: Eine bereits vergebene Auftragsnummer wird abgelehnt.
+        code: "409"                                    # HTTP-Status, Fehlercode oder Exception-Klasse
     evidence:
       - kind: integration
         file: src/test/java/org/example/receiving/ReceivingOrderControllerIT.java
         test: shall create order with positions        # @DisplayName oder Methodenname
+        covers: [auftrag-angelegt]
+      - kind: integration
+        file: src/test/java/org/example/receiving/ReceivingOrderControllerIT.java
+        test: shall reject duplicate order id
+        covers: [nummer-eindeutig]
       - kind: unit
-        file: tests/unit/test_rsvp.py                  # Python
+        file: tests/unit/test_rsvp.py                  # Python-Projekt: gleiches Prinzip
         test: test_saves_rsvp_with_plus_one            # Funktionsname, optional Klasse::funktion
+        covers: [zusage-mit-begleitung]
     comparisons: {}                                    # nur mit Vergleichssystem
 ```
 
 Prüfbestand: gleiches Format plus `state` (`unvollstaendig`, `deaktiviert`, `nicht-nachgewiesen`) und `reason`.
+
+### 3.3 Nachweisregeln: Test ≠ Funktionsnachweis
+
+Ein bestandener Test ist **nicht automatisch ein Funktionsnachweis**: Er kann nur den HTTP-Status prüfen, etwas
+Benachbartes testen oder das Ergebnis selbst herstellen (Mocks). Deshalb gelten diese verbindlichen Nachweisregeln.
+
+**Akzeptanzkriterien:** Jedes Feature nennt prüfbare Kriterien – die Brücke zwischen Beschreibung und Test.
+
+```yaml
+    acceptance:
+      - id: zusage-mit-begleitung
+        kind: effekt          # effekt = die Fähigkeit wirkt, mit beobachtbarem Ergebnis
+        text: Eine Zusage mit Begleitung wird gespeichert; die Gästeliste zählt danach zwei Personen.
+      - id: anmeldeschluss
+        kind: regel           # regel = fachliche Regel bzw. Grenze
+        text: Nach dem Anmeldeschluss lehnt das System Änderungen durch Gäste ab.
+        code: RSVP_CLOSED     # Fehlercode/Exception, falls vorhanden
+    evidence:
+      - kind: integration
+        file: tests/integration/test_rsvp.py
+        test: test_saves_rsvp_with_plus_one_and_counts_two
+        covers: [zusage-mit-begleitung]
+      - kind: integration
+        file: tests/integration/test_rsvp.py
+        test: test_rejects_changes_after_deadline
+        covers: [anmeldeschluss]
+```
+
+| Nr. | Regel |
+|---|---|
+| N1 | Jedes Katalog-Feature hat mindestens ein Kriterium der Art **effekt**. Jede Regel mit Fehlercode aus `rules` erscheint als Kriterium der Art **regel**. |
+| N2 | Jeder Nachweis nennt unter `covers`, welche Kriterien er prüft. Ein Nachweis ohne `covers` zählt nicht. |
+| N3 | Ein Feature ist erst **nachgewiesen**, wenn **jedes** Kriterium mindestens einen Nachweis hat, der im letzten Lauf bestanden hat. Sonst gilt es als *teilweise nachgewiesen* und gehört in den Prüfbestand. |
+| N4 | Der Test **wirkt und prüft**: Er löst die Fähigkeit über einen Bestandteil des Features aus (Endpunkt, Seite, Ereignis, Komponente) und sichert mindestens einen **erwarteten Effekt** (fachlicher Wert, gespeicherter Zustand, ausgelöstes Ereignis, angezeigte Information) oder die **Regel** (abgelehnte Aktion mit Fehlercode) zu. Statuscode, „nicht null“ oder „Seite lädt“ allein genügen nicht. |
+| N5 | Der Effekt wird **von außen beobachtet** – über die Antwort, eine Lese-Schnittstelle, ein Ereignis oder die Oberfläche –, nicht nur über Aufrufe an Mocks des eigenen Codes. Rein mock-basierte Unit-Tests zählen nur für Kriterien reiner Berechnungs- oder Entscheidungslogik. |
+| N6 | Bei Kriterien der Art regel mit `code` steht der Fehlercode im Test als Zusicherung. |
+| N7 | **Review-Pflicht:** Wer einen Nachweis einträgt oder ändert, liest den Testcode und bestätigt die Zuordnung. Als LLM-Agent gibst du im PR je neuem Nachweis eine Zeile an: *Kriterium → auslösende Aktion → Zusicherung (Datei:Zeile)*. Änderungen unter `catalog/features/` sind per CODEOWNERS reviewpflichtig. |
+| N8 | **Kein Nachweis** sind: Smoke-Tests (Endpunkt antwortet, Seite lädt), Snapshot-Tests ohne fachliche Zusicherung, übersprungene Tests, Tests, die nur prüfen, was sie selbst gemockt haben. |
+| N9 | Optional, aber empfohlen für Kernfunktionen: **Mutationstests** (Stryker für JS/TS, PIT für Java, mutmut für Python) auf den Komponenten des Features. Überlebende Mutanten in abgedeckten Pfaden zeigen zu schwache Zusicherungen. |
+
+**Statische Prüfung des Testkörpers** (Heuristik, ergänzt das Review, ersetzt es nicht): Den Körper des Tests
+ermitteln (JS/TS: Block nach dem Testtitel per Klammerzählung; Java: Methodenkörper per JavaParser; Python:
+Funktionskörper per `ast`) und darin prüfen:
+
+- **Zusicherungen vorhanden:** `expect`/`assert`/`assertThat`/`assertEquals`/`andExpect`/`verify`/`pytest.raises`/
+  `assert` …
+- **Nicht nur Status:** Gibt es nur Zusicherungen auf Statuscode, `isOk()`, `toBeTruthy()`, `is not None`, gilt das als
+  reine Statusprüfung.
+- **Bezug zum Feature:** Der Körper (samt aufgerufener Test-Helfer derselben Datei) nennt einen Endpunkt, eine
+  Komponente, ein Ereignis oder eine Seite des Features.
+- **Fehlercode:** Bei Regel-Kriterien mit `code` kommt der Code im Körper vor.
+
+Stack-spezifische Zusicherungen für die statische Prüfung:
+
+| | Zusicherung | nur Status (→ `EVIDENCE_STATUS_ONLY`) |
+|---|---|---|
+| Java | `assertThat`, `assertEquals`, `assertThrows`, MockMvc `andExpect(jsonPath(…))`, RestAssured `.body(…)`, `verify` | nur `andExpect(status().isOk())`, `.statusCode(200)`, `assertNotNull` |
+| Python | `assert`, `pytest.raises`, `self.assertEqual`, `assertContains` | nur `assert response.status_code == 200`, `assert x is not None` |
 
 ---
 
@@ -235,6 +308,14 @@ Bestandteile des Werkzeugs: **Schema** · **Erkennung** (liest die Exportdateien
 | `UNKNOWN_TEST` | Fehler | Testmethode/-funktion bzw. `@DisplayName` nicht (mehr) in der Datei |
 | `UNKNOWN_DEPENDENCY` | Fehler | `dependsOn` ins Leere |
 | `EVIDENCE_MISSING` | Fehler | Katalog-Feature ohne Nachweis |
+| `ACCEPTANCE_MISSING` | Fehler | Katalog-Feature ohne Kriterium der Art effekt (N1) |
+| `RULE_WITHOUT_ACCEPTANCE` | Fehler | Fehlercode in `rules` ohne Kriterium der Art regel (N1) |
+| `EVIDENCE_UNLINKED` | Fehler | Nachweis ohne `covers` oder mit unbekannter Kriteriums-ID (N2) |
+| `ACCEPTANCE_UNCOVERED` | Fehler | Kriterium ohne Nachweis bzw. ohne bestandenen Nachweis (N3) |
+| `EVIDENCE_NO_ASSERTION` | Fehler | Testkörper ohne Zusicherung (N4) |
+| `RULE_CODE_NOT_ASSERTED` | Fehler | Regel-Kriterium mit `code`, kein abdeckender Test enthält den Code (N6) |
+| `EVIDENCE_STATUS_ONLY` | Warnung | Testkörper sichert nur Status/Existenz zu (N4) – Review nötig |
+| `EVIDENCE_UNRELATED` | Warnung | Testkörper berührt keinen Bestandteil des Features (N4) – Review nötig |
 | `EVIDENCE_FAILED` | Fehler | im Testlauf fehlgeschlagen (`failure`/`error`) |
 | `EVIDENCE_SKIPPED` | Fehler | übersprungen (`skipped`, `@Disabled`, `pytest.skip`, fehlende Testcontainers-Umgebung) – **zählt nie als bestanden** |
 | `EVIDENCE_NOT_RUN` | Fehler | Testart lief, Nachweis kam nicht vor |
@@ -293,7 +374,8 @@ Nachweise im Testlauf, Ansicht und ggf. Vergleich. Nachweise sind die Tests des 
 „hat keine Fehler“ (echter Katalog besteht), „ordnet jeden erkannten Bestandteil einem Bereich zu“, „erzeugt eine
 eigenständige Ansicht“, „verlangt mindestens einen Nachweis“, „legt nie selbst Features an“, „meldet Verweise auf
 Entferntes“, „kennzeichnet fehlgeschlagene, übersprungene und fehlende Nachweise“, „erkennt Aufrufe mit Methode, nicht
-aber bloße Pfadlisten“.
+aber bloße Pfadlisten“, „verlangt für jedes Akzeptanzkriterium einen bestandenen Nachweis“, „erkennt Nachweise ohne
+Zusicherung, mit reiner Statusprüfung oder ohne Bezug zum Feature“, „verlangt den Fehlercode einer Regel als Zusicherung“.
 
 ---
 
@@ -304,6 +386,9 @@ Nachweis anpassen (`UNKNOWN_TEST`); Funktion entfernt → Feature löschen, ID n
 Prüfbestand mit Grund; Bereich fertig → `status: katalogisiert`.
 
 **Fallstricke:**
+- **Grüner Test ≠ Funktion:** erst Akzeptanzkriterien, dann passende Tests auswählen oder schreiben; lieber ein
+  Kriterium offen im Prüfbestand als ein Scheinnachweis. Neue Nachweise im PR mit „Kriterium → Aktion → Zusicherung
+  (Datei:Zeile)“ belegen.
 - **`@DisplayName` bevorzugen** (Java) bzw. sprechende Funktionsnamen (Python): Testnamen sind die Brücke zum Katalog.
 - **Parametrisierte Tests:** Nachweis ohne Parameter-Zusatz angeben; alle Instanzen müssen bestanden haben.
 - **`@Disabled`/`skip` und fehlende Docker-Umgebung** (Testcontainers) führen zu `skipped` – das ist kein Nachweis.
@@ -317,7 +402,9 @@ Prüfbestand mit Grund; Bereich fertig → `status: katalogisiert`.
 **Abnahme:**
 - [ ] `check` ohne Fehler, Warnungen begründet.
 - [ ] Alle Bereiche `katalogisiert`, jeder Bestandteil zugeordnet oder begründet ausgenommen.
-- [ ] Jeder Nachweis hat im letzten CI-Lauf bestanden.
+- [ ] Jedes Feature hat Akzeptanzkriterien (mindestens ein Effekt, jede Regel mit Fehlercode).
+- [ ] Jedes Kriterium hat einen Nachweis, der die Fähigkeit auslöst, Effekt bzw. Regel zusichert und im letzten
+      CI-Lauf bestanden hat; Warnungen zu Statusprüfung oder fehlendem Bezug sind per Review geklärt.
 - [ ] Prüfbestand leer oder jeder Eintrag mit Grund.
 - [ ] Ansicht als CI-Artefakt mit Suche, Filtern, Navigation, aufklappbarer Technik.
 - [ ] Bereich `katalog` beschreibt das Werkzeug.

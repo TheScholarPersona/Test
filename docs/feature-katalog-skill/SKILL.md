@@ -18,8 +18,10 @@ Antworte und schreibe Katalogtexte in der Sprache des Projekts bzw. des Nutzers.
 
 1. **Eine Quelle der Wahrheit:** Der Katalog liegt als YAML im Repository (`catalog/`). Alles andere (Ansicht, JSON,
    Statistiken) wird daraus erzeugt.
-2. **Nur Nachgewiesenes steht im Katalog.** Ein Feature braucht mindestens einen automatisierten Test als Nachweis.
-   Was (noch) nicht nachgewiesen ist, steht im **Prüfbestand** (`catalog/review.yaml`), nicht im Katalog.
+2. **Nur funktional Nachgewiesenes steht im Katalog.** Ein Feature braucht prüfbare **Akzeptanzkriterien** und für
+   jedes Kriterium einen automatisierten Test, der die Fähigkeit auslöst und den erwarteten Effekt oder die Regel
+   zusichert (Abschnitt 3.4). Ein bloß bestandener Test genügt nicht. Was (noch) nicht so nachgewiesen ist, steht im
+   **Prüfbestand** (`catalog/review.yaml`), nicht im Katalog.
 3. **Die Prüfung legt nie selbst Features an.** Sie meldet nur: nicht zugeordnete Bestandteile, tote Verweise,
    fehlende oder fehlgeschlagene Nachweise. Neue Features schreibt immer ein Mensch oder du – bewusst, mit Zuschnitt
    und Beschreibung.
@@ -173,13 +175,27 @@ features:
         consumes: []
       uiRoutes: [/gaeste]
       notes: [Tabelle `rsvp`.]
-    evidence:                              # Pflicht im Katalog, mindestens ein Eintrag
+    acceptance:                            # Pflicht im Katalog, siehe 3.4
+      - id: zusage-mit-begleitung
+        kind: effekt
+        text: Eine Zusage mit Begleitung wird gespeichert; die Gästeliste zählt danach zwei Personen.
+      - id: anmeldeschluss
+        kind: regel
+        text: Nach dem Anmeldeschluss lehnt das System Änderungen durch Gäste ab.
+        code: RSVP_CLOSED
+    evidence:                              # Pflicht im Katalog, jedes Kriterium abgedeckt
       - kind: integration                  # unit | integration | e2e | scenario …
         file: tests/integration/rsvp.test.ts
         test: speichert eine Zusage mit Begleitung      # exakter Testtitel
+        covers: [zusage-mit-begleitung]
+      - kind: integration
+        file: tests/integration/rsvp.test.ts
+        test: lehnt Änderungen nach dem Anmeldeschluss ab
+        covers: [anmeldeschluss]
       - kind: e2e
         file: e2e/gaeste.spec.ts
         test: "Gäste: Zusage erfassen und in der Liste sehen"
+        covers: [zusage-mit-begleitung]
     comparisons:                           # nur wenn Vergleichssysteme definiert sind
       wettbewerber-x:
         status: erweitert                  # gleichwertig|erweitert|eingeschraenkt|neu|abweichend|nicht-einsehbar
@@ -203,7 +219,58 @@ gaps:
     related: [sitzordnung.tische]
 ```
 
-### 3.4 Schema
+### 3.4 Nachweisregeln: Test ≠ Funktionsnachweis
+
+Ein bestandener Test ist **nicht automatisch ein Funktionsnachweis**: Er kann nur den HTTP-Status prüfen, etwas
+Benachbartes testen oder das Ergebnis selbst herstellen (Mocks). Deshalb gelten diese verbindlichen Nachweisregeln.
+
+**Akzeptanzkriterien:** Jedes Feature nennt prüfbare Kriterien – die Brücke zwischen Beschreibung und Test.
+
+```yaml
+    acceptance:
+      - id: zusage-mit-begleitung
+        kind: effekt          # effekt = die Fähigkeit wirkt, mit beobachtbarem Ergebnis
+        text: Eine Zusage mit Begleitung wird gespeichert; die Gästeliste zählt danach zwei Personen.
+      - id: anmeldeschluss
+        kind: regel           # regel = fachliche Regel bzw. Grenze
+        text: Nach dem Anmeldeschluss lehnt das System Änderungen durch Gäste ab.
+        code: RSVP_CLOSED     # Fehlercode/Exception, falls vorhanden
+    evidence:
+      - kind: integration
+        file: tests/integration/rsvp.test.ts
+        test: speichert eine Zusage mit Begleitung und zählt zwei Personen
+        covers: [zusage-mit-begleitung]
+      - kind: integration
+        file: tests/integration/rsvp.test.ts
+        test: lehnt Änderungen nach dem Anmeldeschluss ab
+        covers: [anmeldeschluss]
+```
+
+| Nr. | Regel |
+|---|---|
+| N1 | Jedes Katalog-Feature hat mindestens ein Kriterium der Art **effekt**. Jede Regel mit Fehlercode aus `rules` erscheint als Kriterium der Art **regel**. |
+| N2 | Jeder Nachweis nennt unter `covers`, welche Kriterien er prüft. Ein Nachweis ohne `covers` zählt nicht. |
+| N3 | Ein Feature ist erst **nachgewiesen**, wenn **jedes** Kriterium mindestens einen Nachweis hat, der im letzten Lauf bestanden hat. Sonst gilt es als *teilweise nachgewiesen* und gehört in den Prüfbestand. |
+| N4 | Der Test **wirkt und prüft**: Er löst die Fähigkeit über einen Bestandteil des Features aus (Endpunkt, Seite, Ereignis, Komponente) und sichert mindestens einen **erwarteten Effekt** (fachlicher Wert, gespeicherter Zustand, ausgelöstes Ereignis, angezeigte Information) oder die **Regel** (abgelehnte Aktion mit Fehlercode) zu. Statuscode, „nicht null“ oder „Seite lädt“ allein genügen nicht. |
+| N5 | Der Effekt wird **von außen beobachtet** – über die Antwort, eine Lese-Schnittstelle, ein Ereignis oder die Oberfläche –, nicht nur über Aufrufe an Mocks des eigenen Codes. Rein mock-basierte Unit-Tests zählen nur für Kriterien reiner Berechnungs- oder Entscheidungslogik. |
+| N6 | Bei Kriterien der Art regel mit `code` steht der Fehlercode im Test als Zusicherung. |
+| N7 | **Review-Pflicht:** Wer einen Nachweis einträgt oder ändert, liest den Testcode und bestätigt die Zuordnung. Als LLM-Agent gibst du im PR je neuem Nachweis eine Zeile an: *Kriterium → auslösende Aktion → Zusicherung (Datei:Zeile)*. Änderungen unter `catalog/features/` sind per CODEOWNERS reviewpflichtig. |
+| N8 | **Kein Nachweis** sind: Smoke-Tests (Endpunkt antwortet, Seite lädt), Snapshot-Tests ohne fachliche Zusicherung, übersprungene Tests, Tests, die nur prüfen, was sie selbst gemockt haben. |
+| N9 | Optional, aber empfohlen für Kernfunktionen: **Mutationstests** (Stryker für JS/TS, PIT für Java, mutmut für Python) auf den Komponenten des Features. Überlebende Mutanten in abgedeckten Pfaden zeigen zu schwache Zusicherungen. |
+
+**Statische Prüfung des Testkörpers** (Heuristik, ergänzt das Review, ersetzt es nicht): Den Körper des Tests
+ermitteln (JS/TS: Block nach dem Testtitel per Klammerzählung; Java: Methodenkörper per JavaParser; Python:
+Funktionskörper per `ast`) und darin prüfen:
+
+- **Zusicherungen vorhanden:** `expect`/`assert`/`assertThat`/`assertEquals`/`andExpect`/`verify`/`pytest.raises`/
+  `assert` …
+- **Nicht nur Status:** Gibt es nur Zusicherungen auf Statuscode, `isOk()`, `toBeTruthy()`, `is not None`, gilt das als
+  reine Statusprüfung.
+- **Bezug zum Feature:** Der Körper (samt aufgerufener Test-Helfer derselben Datei) nennt einen Endpunkt, eine
+  Komponente, ein Ereignis oder eine Seite des Features.
+- **Fehlercode:** Bei Regel-Kriterien mit `code` kommt der Code im Körper vor.
+
+### 3.5 Schema
 
 Definiere das Schema als Code (z. B. Zod) und validiere **strikt** (unbekannte Felder sind Fehler). Prüfe auch
 Querverweise: Gruppe gehört zum Bereich, `dependsOn` existiert, IDs eindeutig, Feature-ID beginnt mit Bereichs-ID.
@@ -226,6 +293,14 @@ Ausgabe: je Befund **Stufe**, **Code**, Datei, Feature, verständlicher Text. Ex
 | `UNKNOWN_TEST` / `UNKNOWN_SCENARIO` | Fehler | Testtitel steht nicht (mehr) als String-Literal in der Datei |
 | `UNKNOWN_DEPENDENCY` | Fehler | `dependsOn` zeigt ins Leere |
 | `EVIDENCE_MISSING` | Fehler | Katalog-Feature ohne Nachweis |
+| `ACCEPTANCE_MISSING` | Fehler | Katalog-Feature ohne Kriterium der Art effekt (N1) |
+| `RULE_WITHOUT_ACCEPTANCE` | Fehler | Fehlercode in `rules` ohne Kriterium der Art regel (N1) |
+| `EVIDENCE_UNLINKED` | Fehler | Nachweis ohne `covers` oder mit unbekannter Kriteriums-ID (N2) |
+| `ACCEPTANCE_UNCOVERED` | Fehler | Kriterium ohne Nachweis bzw. ohne bestandenen Nachweis (N3) |
+| `EVIDENCE_NO_ASSERTION` | Fehler | Testkörper ohne Zusicherung (N4) |
+| `RULE_CODE_NOT_ASSERTED` | Fehler | Regel-Kriterium mit `code`, kein abdeckender Test enthält den Code (N6) |
+| `EVIDENCE_STATUS_ONLY` | Warnung | Testkörper sichert nur Status/Existenz zu (N4) – Review nötig |
+| `EVIDENCE_UNRELATED` | Warnung | Testkörper berührt keinen Bestandteil des Features (N4) – Review nötig |
 | `EVIDENCE_FAILED` | Fehler | Nachweis ist im Testlauf fehlgeschlagen (nur mit Berichten) |
 | `EVIDENCE_SKIPPED` | Fehler | Nachweis wurde übersprungen – **übersprungen zählt nicht als bestanden** |
 | `EVIDENCE_NOT_RUN` | Fehler | Testart lief, der Nachweis kam darin aber nicht vor |
@@ -305,6 +380,9 @@ Werkzeugs. Mindest-Tests des Werkzeugs:
 - „legt nie selbst Features an, sondern meldet nur“
 - „meldet Verweise auf Entferntes“
 - „kennzeichnet Features, deren Nachweis im Testlauf fehlschlägt, übersprungen wird oder fehlt“
+- „verlangt für jedes Akzeptanzkriterium einen bestandenen Nachweis“
+- „erkennt Nachweise ohne Zusicherung, mit reiner Statusprüfung oder ohne Bezug zum Feature“
+- „verlangt den Fehlercode einer Regel als Zusicherung im Test“
 - „erkennt Aufrufe mit Methode und Parametern, nicht aber bloße Pfadlisten“
 - „verlangt bei vollständigem Vergleich eine Einstufung für jedes Feature“ (falls Vergleich genutzt)
 
@@ -319,6 +397,8 @@ Werkzeugs. Mindest-Tests des Werkzeugs:
 | Test umbenannt | Testtitel im Nachweis anpassen (die Prüfung meldet `UNKNOWN_TEST`) |
 | Funktion entfernt | Feature löschen; ID nicht wiederverwenden |
 | Funktion ohne Test | Test schreiben; bis dahin Prüfbestand mit `reason` |
+| Neuer oder geänderter Nachweis | Testcode lesen, `covers` setzen, im PR „Kriterium → Aktion → Zusicherung (Datei:Zeile)“ angeben |
+| Verhalten geändert | Akzeptanzkriterien anpassen, dann die abdeckenden Tests |
 | Bereich fertig | `status: katalogisiert` – ab dann sind Lücken Fehler |
 | Lücke zum Vergleichssystem geschlossen | Eintrag aus `comparisons/` entfernen, Einstufung des Features setzen |
 
@@ -328,6 +408,10 @@ aktualisiere ihn bei größeren Änderungen.
 ---
 
 ## 9. Erfahrungen und Fallstricke
+
+- **Grüner Test ≠ Funktion:** Erst Akzeptanzkriterien formulieren, dann Tests danach auswählen oder schreiben – nicht
+  umgekehrt vorhandene Tests einem Feature „zuordnen, weil sie passen klingen“. Lieber ein Kriterium offen im
+  Prüfbestand als ein Scheinnachweis.
 
 - **YAML:** Werte mit Doppelpunkt (`"Gäste: Zusage erfassen"`) oder mit `{`/`[` in Fluss-Listen in Anführungszeichen.
   Mehrzeilige Texte mit `|`. Für Massenänderungen YAML **verlustfrei** bearbeiten (z. B. `yaml`-Paket mit
@@ -350,7 +434,9 @@ aktualisiere ihn bei größeren Änderungen.
 
 - [ ] `catalog:check` ohne Fehler; Warnungen begründet oder behoben.
 - [ ] Alle Bereiche `katalogisiert`; jeder erkannte Bestandteil ist zugeordnet oder begründet ausgenommen.
-- [ ] Jedes Katalog-Feature hat mindestens einen Nachweis, der im letzten CI-Lauf **bestanden** hat.
+- [ ] Jedes Katalog-Feature hat Akzeptanzkriterien (mindestens ein Effekt, jede Regel mit Fehlercode).
+- [ ] Jedes Kriterium hat einen Nachweis, der die Fähigkeit auslöst, den Effekt bzw. die Regel zusichert und im
+      letzten CI-Lauf **bestanden** hat; keine offenen `EVIDENCE_STATUS_ONLY`/`EVIDENCE_UNRELATED` ohne Review-Vermerk.
 - [ ] Prüfbestand leer oder jeder Eintrag mit Grund und Plan.
 - [ ] Ansicht als CI-Artefakt; Suche, Filter, Navigation und aufklappbare Technik funktionieren.
 - [ ] Der Katalog beschreibt sich selbst (Bereich `katalog`).
