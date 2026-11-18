@@ -20,6 +20,19 @@ features:
     rules:
       - Idempotent je `messageId` (eindeutig je Richtung).
       - Nur mit Admin-Recht (Service-Token von Node-RED).
+    acceptance:
+      - id: artikel
+        kind: effekt
+        text: Eine Artikelnachricht legt das Produkt an oder ändert es; das Protokoll führt sie als verarbeitet.
+      - id: idempotent
+        kind: regel
+        text: Dieselbe Nachrichten-ID wird nur einmal verarbeitet.
+      - id: auftraege
+        kind: effekt
+        text: Avise und Auslageraufträge entstehen aus der Nachricht (mit Packplatz) und lassen sich auf Anweisung stornieren.
+      - id: formal
+        kind: regel
+        text: Formal ungültige Nachrichten werden mit Feldangabe abgelehnt und nicht protokolliert.
     dependsOn: [bestand.produktstamm, wareneingang.avis, auslagerung.auftrag]
     technical:
       components:
@@ -36,12 +49,15 @@ features:
       - kind: integration
         file: apps/api/test/integration/erp.integration.test.ts
         test: legt Artikel an und aktualisiert sie; dieselbe Nachrichten-ID wird nur einmal verarbeitet
+        covers: [artikel, idempotent]
       - kind: integration
         file: apps/api/test/integration/erp.integration.test.ts
         test: lehnt formal ungültige Nachrichten ab, ohne sie zu protokollieren
+        covers: [formal]
       - kind: integration
         file: apps/api/test/integration/erp.integration.test.ts
         test: legt Auslageraufträge mit Packplatz an und storniert Aufträge auf Anweisung
+        covers: [auftraege]
     comparisons:
       openwms:
         status: nicht-einsehbar
@@ -68,6 +84,16 @@ features:
     rules:
       - Nur mit `ERP_EXPORT_ENABLED=true` werden Rückmeldungen erzeugt.
       - Warenausgang einer Sendung kommt gesammelt mit allen TUs; die Einzelabgänge der Sendung werden nicht zusätzlich gemeldet.
+    acceptance:
+      - id: wareneingang
+        kind: effekt
+        text: Ein Wareneingang erzeugt eine Rückmeldung, die genau einmal ausgeliefert und nach Quittung als zugestellt geführt wird.
+      - id: warenausgang
+        kind: effekt
+        text: Warenausgang am Pick und Bestandskorrekturen erzeugen passende Rückmeldungen; Abgänge einer Sendung werden nicht einzeln gemeldet.
+      - id: wiederholung
+        kind: effekt
+        text: Fehlgeschlagene Zustellungen werden mit wachsender Wartezeit wiederholt, nach zu vielen Versuchen aufgegeben; nicht quittierte nach Fristablauf erneut ausgeliefert.
     dependsOn: [erp.import, wareneingang.erfassung, versand.warenausgang, bestand.korrektur]
     technical:
       components:
@@ -84,18 +110,23 @@ features:
       - kind: unit
         file: apps/api/test/unit/erp/erp-mapping.test.ts
         test: "unterscheidet Abgänge nach Bezug: Pick, Versand oder sonstiger Abgang"
+        covers: [warenausgang]
       - kind: integration
         file: apps/api/test/integration/erp.integration.test.ts
         test: meldet den Wareneingang, liefert ihn einmal aus und bestätigt die Zustellung
+        covers: [wareneingang]
       - kind: integration
         file: apps/api/test/integration/erp.integration.test.ts
         test: meldet Warenausgang am Pick und Bestandskorrekturen
+        covers: [warenausgang]
       - kind: integration
         file: apps/api/test/integration/erp.integration.test.ts
         test: wiederholt nach Fehlschlag mit Wartezeit, gibt nach zu vielen Versuchen auf und lässt sich erneut anstoßen
+        covers: [wiederholung]
       - kind: integration
         file: apps/api/test/integration/erp.integration.test.ts
         test: liefert abgeholte, aber nicht quittierte Nachrichten nach Ablauf der Frist erneut aus
+        covers: [wiederholung]
     comparisons:
       openwms:
         status: nicht-einsehbar
@@ -115,6 +146,10 @@ features:
         text: "`POST /v1/erp/stock-snapshots`; Abholung wie alle Rückmeldungen."
     rules:
       - Auslösen darf der Leitstand.
+    acceptance:
+      - id: abgleich
+        kind: effekt
+        text: Der Bestandsabgleich enthält den Gesamtbestand je Artikel und Charge als ausgehende Nachricht.
     dependsOn: [erp.rueckmeldungen, bestand.summen]
     technical:
       components:
@@ -125,6 +160,7 @@ features:
       - kind: integration
         file: apps/api/test/integration/erp.integration.test.ts
         test: stellt einen Bestandsabgleich je Artikel und Charge bereit
+        covers: [abgleich]
     comparisons:
       openwms:
         status: nicht-einsehbar
@@ -145,6 +181,13 @@ features:
     rules:
       - Erneut anstoßen nur bei FAILED; Eingang wird neu verarbeitet, Ausgang wieder zur Abholung bereitgestellt.
       - Kennzahl `wms_erp_messages` je Richtung und Zustand unter `/metrics`.
+    acceptance:
+      - id: protokoll
+        kind: effekt
+        text: Fachliche Fehler stehen mit Fehlertext im Protokoll und als Ereignis; nach Korrektur verarbeitet erneutes Anstoßen die Nachricht.
+      - id: kennzahl
+        kind: effekt
+        text: "`/metrics` zählt die Nachrichten je Richtung und Zustand."
     dependsOn: [erp.import, erp.rueckmeldungen]
     technical:
       components:
@@ -162,12 +205,15 @@ features:
       - kind: integration
         file: apps/api/test/integration/erp.integration.test.ts
         test: protokolliert fachliche Fehler, meldet sie und verarbeitet nach Korrektur erneut
+        covers: [protokoll]
       - kind: integration
         file: apps/api/test/integration/erp.integration.test.ts
         test: zählt Nachrichten je Richtung und Zustand
+        covers: [kennzahl]
       - kind: web-e2e
         file: apps/web/e2e/seiten.spec.ts
         test: "ERP: Protokoll mit Fehler, erneut anstoßen und Bestandsabgleich senden"
+        covers: [protokoll]
     comparisons:
       openwms:
         status: nicht-einsehbar
@@ -192,6 +238,17 @@ features:
     rules:
       - Fehlerhafte Dateien werden mit Zeilennummer bzw. Segment gemeldet (`ERP_FORMAT`); XML ohne externe Entitäten.
       - Die Zuordnung der SAP-Felder und Bewegungsarten ist mit dem jeweiligen SAP-Customizing abzustimmen.
+    acceptance:
+      - id: eingang
+        kind: effekt
+        text: Artikel-, Avis- und Auftragsdateien (CSV) sowie SAP-IDocs (ORDERS, DELVRY) werden zu kanonischen Nachrichten.
+      - id: ausgang
+        kind: effekt
+        text: Rückmeldungen werden als SAP-IDoc WMMBXY mit passender Bewegungsart oder als CSV (auf Wunsch mit Dezimalkomma) geschrieben.
+      - id: erp-format
+        kind: regel
+        text: Fehlerhafte Dateien werden mit Zeilennummer bzw. Segment gemeldet (`ERP_FORMAT`).
+        code: ERP_FORMAT
     dependsOn: [erp.import, erp.rueckmeldungen]
     technical:
       components:
@@ -206,17 +263,28 @@ features:
       - kind: unit
         file: packages/node-red-nodes/test/erp-formats.test.mjs
         test: macht aus Artikel-, Avis- und Auftragsdateien kanonische Nachrichten
+        covers: [eingang]
       - kind: unit
         file: packages/node-red-nodes/test/erp-formats.test.mjs
         test: macht aus einer Bestellung (ORDERS) ein Avis und aus einer Auslieferung (DELVRY) einen Auslagerauftrag
+        covers: [eingang]
       - kind: unit
         file: packages/node-red-nodes/test/erp-formats.test.mjs
         test: schreibt Wareneingang, Warenausgang und Bestandsänderung als WMMBXY mit passender Bewegungsart
+        covers: [ausgang]
       - kind: unit
         file: packages/node-red-nodes/test/erp-formats.test.mjs
         test: schreibt Rückmeldungen als CSV, auf Wunsch mit Dezimalkomma
+        covers: [ausgang]
       - kind: scenario
         id: erp-flow
+        rationale: Das Szenario schickt CSV- und IDoc-Dateien durch den Beispiel-Flow; die Formate sind Bibliotheksfunktionen ohne eigenen Endpunkt.
+        covers: [eingang, ausgang]
+      - kind: unit
+        file: packages/node-red-nodes/test/erp-nodes.test.mjs
+        test: wms-erp-in setzt den Packplatz für Auslieferungen aus SAP und meldet Formatfehler
+        rationale: Prüft die Formatfehler-Meldung über den Node `wms-erp-in`, der die Formatbibliothek nutzt.
+        covers: [eingang, erp-format]
     comparisons:
       openwms:
         status: nicht-einsehbar
@@ -237,6 +305,16 @@ features:
     usage:
       - channel: node-red
         text: "Tab **Beispiel: ERP-Anbindung** – `POST /examples/erp/json`, `…/csv/:kind`, `…/idoc?target=…`, `POST /examples/erp/export`, `GET /examples/erp/simulator`."
+    acceptance:
+      - id: einlesen
+        kind: effekt
+        text: "`wms-erp-in` übersetzt eine Datei und übergibt jede Nachricht einzeln."
+      - id: ausgeben
+        kind: effekt
+        text: "`wms-erp-out` gibt Rückmeldungen im Zielformat aus; nicht übersetzbare zählen sofort als Fehlversuch."
+      - id: quittieren
+        kind: effekt
+        text: "`wms-erp-ack` bestätigt Erfolg mit Beleg und meldet HTTP-Fehler als Fehlversuch."
     dependsOn: [erp.formate, integration.node-red-nodes]
     technical:
       components:
@@ -250,18 +328,22 @@ features:
       - kind: unit
         file: packages/node-red-nodes/test/erp-nodes.test.mjs
         test: wms-erp-in übersetzt eine CSV-Datei und übergibt jede Nachricht einzeln
+        covers: [einlesen]
       - kind: unit
         file: packages/node-red-nodes/test/erp-nodes.test.mjs
         test: wms-erp-out gibt Rückmeldungen im Zielformat aus und meldet nicht übersetzbare sofort als Fehlversuch
+        covers: [ausgeben]
       - kind: unit
         file: packages/node-red-nodes/test/erp-nodes.test.mjs
         test: wms-erp-ack bestätigt Erfolg mit Beleg und meldet HTTP-Fehler als Fehlversuch
+        covers: [quittieren]
       - kind: scenario
         id: erp-flow
+        rationale: Das Szenario läuft über den Beispiel-Flow mit den ERP-Nodes; deren Typen stehen im Flow, nicht im Szenario.
+        covers: [einlesen, ausgeben, quittieren]
     comparisons:
       openwms:
         status: neu
         note: OpenWMS bindet ERPs über eigene (private) Adapter-Dienste an; Bausteine zum Zusammenstecken ohne Programmierung gibt es dort nicht.
         refs:
           - Analyse 1.1
-

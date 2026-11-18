@@ -7,10 +7,17 @@
   const CHANNELS = { leitstand: 'Leitstand', scanner: 'Scanner', api: 'API', 'node-red': 'Node-RED', mqtt: 'MQTT', entwicklung: 'Entwicklung (CLI, CI)' };
   const ROLES = ['admin', 'leitstand', 'lager', 'anlage', 'lesen'];
   const PROOF = {
-    nachgewiesen: ['ok', 'nachgewiesen', 'Alle Nachweise haben im letzten Testlauf bestanden'],
-    statisch: ['warn', 'Nachweis vorhanden', 'Tests und Szenarien existieren; ohne Testbericht erzeugt, daher nicht als bestanden bestätigt'],
-    'nicht-nachgewiesen': ['bad', 'nicht nachgewiesen', 'Mindestens ein Nachweis fehlt, ist fehlgeschlagen oder lief nicht'],
+    nachgewiesen: ['ok', 'nachgewiesen', 'Jedes Akzeptanzkriterium ist durch einen Test mit Zusicherung belegt, der im letzten Testlauf bestanden hat'],
+    teilweise: ['warn', 'teilweise nachgewiesen', 'Einige Akzeptanzkriterien sind belegt, andere nicht – ihr Test fehlt, ist fehlgeschlagen oder lief nicht'],
+    statisch: ['warn', 'Nachweis vorhanden', 'Jedes Kriterium hat einen Test mit Zusicherung; ohne Testbericht erzeugt, daher nicht als bestanden bestätigt'],
+    'nicht-nachgewiesen': ['bad', 'nicht nachgewiesen', 'Kein Akzeptanzkriterium ist durch einen bestandenen Test belegt'],
   };
+  const CRITERION = {
+    nachgewiesen: ['ok', 'belegt', 'Ein zugeordneter Test mit Zusicherung hat im letzten Testlauf bestanden'],
+    statisch: ['warn', 'Test vorhanden', 'Ein zugeordneter Test mit Zusicherung existiert; ohne Testbericht nicht bestätigt'],
+    offen: ['bad', 'offen', 'Kein gültiger, bestandener Test belegt dieses Kriterium'],
+  };
+  const CRITERION_KIND = { effekt: 'Effekt', regel: 'Regel' };
   const RESULT = { bestanden: ['ok', 'bestanden'], fehlgeschlagen: ['bad', 'fehlgeschlagen'], uebersprungen: ['warn', 'übersprungen'], 'nicht-ausgefuehrt': ['bad', 'nicht ausgeführt'] };
   const COMPARISON = {
     gleichwertig: ['', 'gleichwertig'],
@@ -94,7 +101,24 @@
   function evidenceRow(e) {
     const what = e.kind === 'scenario' ? `<code>${esc(e.id)}</code>` : `${esc(e.test)}<br><span class="muted">${esc(e.file)}</span>`;
     const result = !e.exists ? badge('bad', 'fehlt') : e.result ? badge(...RESULT[e.result]) : badge('', 'nicht im Bericht');
-    return `<tr><td>${esc(EVIDENCE_KIND[e.kind])}</td><td>${what}${e.note ? `<br><span class="muted">${esc(e.note)}</span>` : ''}</td><td>${result}</td></tr>`;
+    const covers = e.covers?.length ? `<br><span class="muted">belegt: ${e.covers.map((c) => `<code>${esc(c)}</code>`).join(' ')}</span>` : '';
+    const quality = e.exists && e.assertions !== undefined ? `<br><span class="muted">${e.assertions} Zusicherung${e.assertions === 1 ? '' : 'en'}${e.statusOnly ? ' · nur Status' : ''}${e.related === false ? ' · Bezug indirekt' : ''}</span>` : '';
+    const why = e.rationale ? `<br><span class="muted">Begründung: ${inline(e.rationale)}</span>` : '';
+    return `<tr><td>${esc(EVIDENCE_KIND[e.kind])}</td><td>${what}${e.note ? `<br><span class="muted">${esc(e.note)}</span>` : ''}${covers}${why}</td><td>${result}${quality}</td></tr>`;
+  }
+
+  function acceptance(f) {
+    if (!f.acceptance?.length) return '';
+    const rows = f.acceptance
+      .map((c) => {
+        const s = CRITERION[c.status];
+        const by = c.coveredBy.map((i) => f.evidence[i]).map((e) => (e.kind === 'scenario' ? `Szenario ${e.id}` : e.test));
+        return `<li>${badge(s[0], s[1], s[2])} <strong>${esc(CRITERION_KIND[c.kind])}:</strong> ${inline(c.text)}${c.code && !c.text.includes(c.code) ? ` <code>${esc(c.code)}</code>` : ''}${
+          by.length ? `<br><span class="muted">geprüft durch: ${by.map(esc).join(' · ')}</span>` : ''
+        }</li>`;
+      })
+      .join('');
+    return `<h4>Akzeptanzkriterien</h4><ul class="criteria">${rows}</ul>`;
   }
 
   function technical(f) {
@@ -142,6 +166,7 @@
         <h4>Was es leistet</h4>${md(f.description)}
         ${f.usage.length ? `<h4>So wird es verwendet</h4><ul>${f.usage.map((u) => `<li><strong>${esc(CHANNELS[u.channel])}:</strong> ${inline(u.text)}</li>`).join('')}</ul>` : ''}
         ${f.rules.length ? `<h4>Regeln und Grenzen</h4><ul>${f.rules.map((r) => `<li>${inline(r)}</li>`).join('')}</ul>` : ''}
+        ${acceptance(f)}
         ${f.settings.length ? `<h4>Einstellbar</h4><ul>${f.settings.map((s) => `<li><strong>${esc(s.name)}</strong> – ${inline(s.description)}${s.where ? ` <span class="muted">(${inline(s.where)})</span>` : ''}</li>`).join('')}</ul>` : ''}
         ${f.dependsOn.length ? `<h4>Setzt voraus</h4><ul>${f.dependsOn.map((d) => `<li>${link(d)}</li>`).join('')}</ul>` : ''}
         ${f.usedBy.length ? `<h4>Grundlage für</h4><ul>${f.usedBy.map((d) => `<li>${link(d)}</li>`).join('')}</ul>` : ''}
@@ -285,8 +310,10 @@
   }
 
   const proven = data.features.filter((f) => f.proof === 'nachgewiesen').length;
+  const criteria = data.features.flatMap((f) => f.acceptance ?? []);
+  const criteriaProven = criteria.filter((c) => c.status === 'nachgewiesen').length;
   const catalogued = data.areas.filter((a) => a.status === 'katalogisiert').length;
-  $('stats').textContent = `${data.features.length} Features · ${proven} im Testlauf nachgewiesen · ${data.review.length} im Prüfbestand · ${catalogued} von ${data.areas.length} Bereichen katalogisiert`;
+  $('stats').textContent = `${data.features.length} Features · ${proven} im Testlauf nachgewiesen · ${criteriaProven} von ${criteria.length} Akzeptanzkriterien belegt · ${data.review.length} im Prüfbestand · ${catalogued} von ${data.areas.length} Bereichen katalogisiert`;
 
   function goto(id) {
     const inReview = data.review.some((f) => f.id === id);

@@ -17,6 +17,25 @@ features:
       - Je TU höchstens eine offene Bewegung (`MOVEMENT_EXISTS`, per Datenbank abgesichert).
       - Bereits reservierte Ziele werden abgelehnt; findet die Strategie keinen Platz, wird nichts angelegt (`NO_TARGET_LOCATION`).
       - Typen `INBOUND`, `RELOCATION`, `REPLENISHMENT`, `OUTBOUND`, `EMPTIES`, `CLEARING`, `MANUAL`.
+    acceptance:
+      - id: festes-ziel
+        kind: effekt
+        text: Eine Bewegung mit festem Ziel entsteht im Zustand `OPEN` und reserviert den Zielplatz.
+      - id: zielbereich
+        kind: effekt
+        text: Bei einem Zielbereich wählt die Einlagerstrategie den Platz, auch abhängig vom Bewegungstyp.
+      - id: ziel-reserviert
+        kind: regel
+        text: Ein bereits reserviertes Ziel wird abgelehnt.
+        code: PLACEMENT_REJECTED
+      - id: movement-exists
+        kind: regel
+        text: Je TU höchstens eine offene Bewegung (`MOVEMENT_EXISTS`, per Datenbank abgesichert).
+        code: MOVEMENT_EXISTS
+      - id: no-target-location
+        kind: regel
+        text: Findet die Strategie keinen Platz, wird nichts angelegt (`NO_TARGET_LOCATION`).
+        code: NO_TARGET_LOCATION
     dependsOn: [transporteinheiten.anlegen, strategien.einlagerplatz]
     technical:
       components:
@@ -33,26 +52,34 @@ features:
       - kind: integration
         file: apps/api/test/integration/movement.integration.test.ts
         test: legt eine Bewegung mit festem Ziel an und reserviert es
+        covers: [festes-ziel]
       - kind: integration
         file: apps/api/test/integration/movement.integration.test.ts
         test: erlaubt je TU nur eine offene Bewegung
+        covers: [movement-exists]
       - kind: integration
         file: apps/api/test/integration/movement.integration.test.ts
         test: lehnt ein bereits reserviertes Ziel ab
+        covers: [ziel-reserviert]
       - kind: integration
         file: apps/api/test/integration/movement.integration.test.ts
         test: bestimmt das Ziel aus einer Gruppe über die Einlagerstrategie
+        covers: [zielbereich]
       - kind: integration
         file: apps/api/test/integration/movement.integration.test.ts
         test: nutzt den Bewegungstyp in Regelsätzen (Leergut in die Leergutzone)
+        covers: [zielbereich]
       - kind: integration
         file: apps/api/test/integration/movement.integration.test.ts
         test: legt nichts an, wenn kein Zielplatz frei ist
+        covers: [no-target-location]
       - kind: integration
         file: apps/api/test/integration/movement.integration.test.ts
         test: legt für eine TU auch bei gleichzeitigen Anfragen nur eine offene Bewegung an
+        covers: [movement-exists]
       - kind: scenario
         id: movement-flow
+        covers: [festes-ziel, zielbereich]
     comparisons:
       openwms:
         status: gleichwertig
@@ -70,6 +97,10 @@ features:
         text: "`GET /v1/movements?state=OPEN,IN_PROGRESS&type=INBOUND&assignedTo=…&group=…`"
       - channel: leitstand
         text: Seite **Transport** – offene Bewegungen, dringendste zuerst.
+    acceptance:
+      - id: sortiert
+        kind: effekt
+        text: Die Liste zeigt die Bewegungen nach Priorität, dann nach Alter, filterbar nach Zustand und Typ.
     technical:
       components:
         - apps/api/src/modules/movement/application/movement.service.ts
@@ -81,9 +112,11 @@ features:
       - kind: integration
         file: apps/api/test/integration/movement.integration.test.ts
         test: sortiert nach Priorität, dann nach Alter, und filtert nach Zustand und Typ
+        covers: [sortiert]
       - kind: web-e2e
         file: apps/web/e2e/seiten.spec.ts
         test: "Transport: Lagerbewegung und Transportauftrag bedienen"
+        covers: [sortiert]
     comparisons:
       openwms:
         status: gleichwertig
@@ -108,6 +141,24 @@ features:
     rules:
       - Zustände `OPEN` → `IN_PROGRESS` → `DONE`, Storno nach `CANCELLED`; sonst `INVALID_STATE_TRANSITION`.
       - TUs mit offener Bewegung und Plätze, die Ziel einer offenen Bewegung sind, können nicht gelöscht werden.
+    acceptance:
+      - id: abgeschlossen
+        kind: effekt
+        text: Beginnen, Zurückgeben und Abschließen führen die Bewegung; der Abschluss bucht die TU am Ziel und meldet Quelle und Ziel.
+      - id: abweichung
+        kind: effekt
+        text: Beim Abschluss gelten die Platzregeln; ein abweichendes Ziel wird vermerkt.
+      - id: storno
+        kind: effekt
+        text: Ein Storno gibt die Reservierung des Ziels frei.
+      - id: geschuetzt
+        kind: regel
+        text: TUs mit offener Bewegung und Plätze, die Ziel einer offenen Bewegung sind, lassen sich nicht löschen.
+        code: TU_IN_USE
+      - id: invalid-state-transition
+        kind: regel
+        text: Sonst `INVALID_STATE_TRANSITION`.
+        code: INVALID_STATE_TRANSITION
     dependsOn: [lagerbewegungen.anlegen, transporteinheiten.platzierungspruefung]
     technical:
       components:
@@ -127,26 +178,35 @@ features:
       - kind: integration
         file: apps/api/test/integration/movement.integration.test.ts
         test: beginnt, gibt zurück und beginnt erneut
+        covers: [abgeschlossen, invalid-state-transition]
       - kind: integration
         file: apps/api/test/integration/movement.integration.test.ts
         test: schließt ab, bucht die TU und meldet Quelle und Ziel
+        covers: [abgeschlossen, invalid-state-transition]
       - kind: integration
         file: apps/api/test/integration/movement.integration.test.ts
         test: prüft beim Abschluss die Platzregeln und vermerkt Abweichungen vom Ziel
+        covers: [abweichung]
       - kind: integration
         file: apps/api/test/integration/movement.integration.test.ts
         test: storniert und gibt die Reservierung frei
+        covers: [storno]
       - kind: integration
         file: apps/api/test/integration/movement.integration.test.ts
         test: schützt TUs mit offener Bewegung und Plätze, die Ziel einer offenen Bewegung sind
+        rationale: Prüft den Löschschutz über `DELETE` auf TU und Platz – die Regel gehört zur Bewegung, die Endpunkte zu TUs und Plätzen.
+        covers: [geschuetzt]
       - kind: unit
         file: apps/api/test/unit/movement/movement-state.test.ts
         test: kennt Endzustände und erlaubte Aktionen
+        covers: [abgeschlossen]
       - kind: scenario
         id: movement-flow
+        covers: [abgeschlossen, invalid-state-transition]
       - kind: web-e2e
         file: apps/web/e2e/seiten.spec.ts
         test: "Transport: Lagerbewegung und Transportauftrag bedienen"
+        covers: [abgeschlossen]
     comparisons:
       openwms:
         status: erweitert
@@ -175,6 +235,29 @@ features:
       - Sind alle Bewegungen beendet, ist die Gruppe erledigt und nimmt nichts mehr auf (`GROUP_CLOSED`).
       - Zustand abgeleitet – `IN_PROGRESS`, sobald eine Bewegung läuft; `DONE`/`CANCELLED`, wenn alle beendet sind.
       - Bilden, Ändern und Zuteilen darf der Leitstand; Beginnen und Zurückgeben auch die Rolle lager.
+    acceptance:
+      - id: gebildet
+        kind: effekt
+        text: Offene Bewegungen werden zu einer Gruppe mit Bediener gebündelt; Bewegungen lassen sich aufnehmen und entfernen.
+      - id: begonnen
+        kind: effekt
+        text: Der zugeteilte Bediener beginnt alle Bewegungen der Gruppe mit einem Aufruf und kann sie zurückgeben.
+      - id: abgeleitet
+        kind: regel
+        text: "Der Gruppenzustand folgt den Bewegungen: `IN_PROGRESS`, sobald eine läuft; erledigt, wenn alle beendet sind."
+        code: IN_PROGRESS
+      - id: movement-grouped
+        kind: regel
+        text: Eine Bewegung gehört höchstens zu einer Gruppe (`MOVEMENT_GROUPED`).
+        code: MOVEMENT_GROUPED
+      - id: movement-closed
+        kind: regel
+        text: Nur offene oder laufende Bewegungen (`MOVEMENT_CLOSED`).
+        code: MOVEMENT_CLOSED
+      - id: group-closed
+        kind: regel
+        text: Sind alle Bewegungen beendet, ist die Gruppe erledigt und nimmt nichts mehr auf (`GROUP_CLOSED`).
+        code: GROUP_CLOSED
     dependsOn: [lagerbewegungen.anlegen, lagerbewegungen.ausfuehren]
     technical:
       components:
@@ -199,18 +282,23 @@ features:
       - kind: integration
         file: apps/api/test/integration/movement.integration.test.ts
         test: bündelt offene Bewegungen zu einer Gruppe und lehnt Doppelzuordnung ab
+        covers: [gebildet, movement-grouped, movement-closed]
       - kind: integration
         file: apps/api/test/integration/movement.integration.test.ts
         test: nimmt Bewegungen auf und entfernt sie wieder
+        covers: [gebildet]
       - kind: integration
         file: apps/api/test/integration/movement.integration.test.ts
         test: beginnt alle Bewegungen für den zugeteilten Bediener und gibt sie zurück
+        covers: [begonnen, abgeleitet]
       - kind: integration
         file: apps/api/test/integration/movement.integration.test.ts
         test: wird erledigt, wenn alle Bewegungen abgeschlossen sind, und nimmt dann nichts mehr auf
+        covers: [abgeleitet, group-closed]
       - kind: web-e2e
         file: apps/web/e2e/seiten.spec.ts
         test: "Bewegungsgruppen: bilden, zuteilen, beginnen und zurückgeben"
+        covers: [gebildet, begonnen]
     comparisons:
       openwms:
         status: erweitert

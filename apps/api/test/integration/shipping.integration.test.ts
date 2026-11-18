@@ -11,6 +11,7 @@ import { fetchPdf, pdfText } from './support/pdf.js';
  *
  *   LAGER  A1 – S1: 10 PCS ART           PACKPLATZ  P1 – S3: 6 PCS ART2 (ganze Palette), V-1/V-2 leer
  *   Auftrag AUF-1: 4 PCS ART → P1, Kunde K-1   Auftrag AUF-2: 6 PCS ART2 → P1   Auftrag AUF-3: ohne Ziel
+ *   Nach der Zuteilung: S4 (2 PCS ART2) und S5 (3 PCS ART) auf P1 für Ladekontrolle und Sperren beim Warenausgang
  */
 describe('Versand', () => {
   let env: TestEnvironment;
@@ -60,6 +61,9 @@ describe('Versand', () => {
       expect((await api.post('/v1/outbound-orders', { orderId, lines: [{ sku, quantity: { amount, unit: 'PCS' } }], ...extra })).status).toBe(201);
       const allocated = await api.post(`/v1/outbound-orders/${orderId}/allocate`, { transport: 'none' });
       picks[orderId] = allocated.body.picks[0].id;
+    }
+    for (const [barcode, sku, amount] of [['S4', 'ART2', '2'], ['S5', 'ART', '3']] as const) {
+      expect((await api.post('/v1/receiving-blind-captures', { sku, quantity: { amount, unit: 'PCS' }, unit: { barcode, typeCode: 'EURO' }, location: { erpCode: 'P1' } })).status).toBe(201);
     }
   });
 
@@ -127,6 +131,16 @@ describe('Versand', () => {
       await collector.waitFor((m) => m.topic === 'wms/shipment/changed' && (m.body['payload'] as { change: string }).change === 'loaded');
       expect(await api.post(`/v1/shipments/${sh1}/load`, { barcode: 'V-1' })).toMatchObject({ status: 409, body: { code: 'SHIPMENT_STATE' } });
     });
+
+    it('meldet eine doppelt gescannte TU und bleibt offen, bis alle TUs verladen sind', async () => {
+      const created = await api.post('/v1/shipments', { orderId: 'AUF-2', units: ['S3', 'S4'] });
+      expect(created.status, JSON.stringify(created.body)).toBe(201);
+      const number = created.body.number as string;
+      expect((await api.post(`/v1/shipments/${number}/load`, { barcode: 'S3' })).body).toMatchObject({ state: 'OPEN', counts: { units: 2, loaded: 1 } });
+      expect(await api.post(`/v1/shipments/${number}/load`, { barcode: 'S3' })).toMatchObject({ status: 409, body: { code: 'UNIT_ALREADY_LOADED' } });
+      expect((await api.get(`/v1/shipments/${number}`)).body).toMatchObject({ state: 'OPEN', counts: { units: 2, loaded: 1 } });
+      expect((await api.post(`/v1/shipments/${number}/cancel`, {})).body.state).toBe('CANCELLED');
+    });
   });
 
   describe('Warenausgang', () => {
@@ -144,6 +158,35 @@ describe('Versand', () => {
       // Historie bleibt lesbar
       expect((await api.get(`/v1/shipments/${sh1}`)).body.units[0].contents).toHaveLength(1);
       expect((await api.post(`/v1/shipments/${sh1}/cancel`, {})).body.code).toBe('SHIPMENT_STATE');
+    });
+
+    it('bucht nicht aus, solange Bestand reserviert ist, TUs daraufstehen oder eine Bewegung offen ist', async () => {
+      const created = await api.post('/v1/shipments', { orderId: 'AUF-1', units: ['S5'] });
+      const number = created.body.number as string;
+      expect((await api.post(`/v1/shipments/${number}/load`, { barcode: 'S5' })).body.state).toBe('LOADED');
+      const ship = () => api.post(`/v1/shipments/${number}/ship`, {});
+
+      const [item] = (await api.get('/v1/stock?barcode=S5')).body.items;
+      const reservation = await api.post(`/v1/stock/${item.id}/reservations`, { quantity: { amount: '1', unit: 'PCS' }, reference: 'TEST-1' });
+      expect(reservation.status, JSON.stringify(reservation.body)).toBe(201);
+      expect(await ship()).toMatchObject({ status: 409, body: { code: 'STOCK_RESERVED' } });
+      expect((await api.delete(`/v1/stock-reservations/${reservation.body.id}`)).status).toBe(204);
+
+      await api.put('/v1/transport-unit-types/EURO/stacking-rules', [{ allowedTypeCode: 'EURO', maxCount: 1 }]);
+      expect((await api.post('/v1/transport-units/V-2/stack', { onto: 'S5' })).status).toBe(200);
+      expect(await ship()).toMatchObject({ status: 409, body: { code: 'TU_HAS_CHILDREN' } });
+      expect((await api.post('/v1/transport-units/V-2/unstack', {})).status).toBe(200);
+
+      const movement = await api.post('/v1/movements', { barcode: 'S5', type: 'RELOCATION', target: { location: { erpCode: 'A1' } } });
+      expect(movement.status, JSON.stringify(movement.body)).toBe(201);
+      expect(await ship()).toMatchObject({ status: 409, body: { code: 'TU_IN_USE' } });
+      expect((await api.post(`/v1/movements/${movement.body.number}/cancel`, {})).status).toBe(200);
+
+      // Nichts wurde gebucht: Sendung verladen, TU und Bestand unverändert
+      expect((await api.get(`/v1/shipments/${number}`)).body.state).toBe('LOADED');
+      expect(await stock('S5')).toEqual(['ART:3/0']);
+      expect((await api.get(`/v1/stock-bookings?reference=shipment:${number}`)).body.items).toEqual([]);
+      expect((await api.post(`/v1/shipments/${number}/cancel`, {})).body.state).toBe('CANCELLED');
     });
 
     it('lässt TUs und Bestand beim Storno stehen und gibt die TU für eine neue Sendung frei', async () => {
@@ -193,7 +236,9 @@ describe('Versand', () => {
       for (const expected of [`Ladeliste ${sh1}`, 'V-1', '(tor-3)', 'SHIPPED']) expect(list).toContain(expected);
       const labels = await text(documents.get(`/v1/documents/shipping-labels/${sh1}`));
       for (const expected of ['Versandetikett', 'Musterkunde GmbH', '1 von 1']) expect(labels).toContain(expected);
-      expect((await documents.get(`/v1/documents/shipping-labels/${sh1}?unit=S3`)).status).toBe(404);
+      const foreign = await documents.get(`/v1/documents/shipping-labels/${sh1}?unit=S3`);
+      expect(foreign.status).toBe(404);
+      expect(JSON.parse(foreign.body.toString('utf8'))).toMatchObject({ code: 'UNIT_NOT_IN_SHIPMENT' });
     });
 
     it('nimmt für offene Sendungen den aktuellen Bestand', async () => {

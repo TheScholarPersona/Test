@@ -17,6 +17,13 @@ features:
         text: Seite **Wareneingang** – Avis anlegen (Rolle leitstand), Auftragsliste neueste zuerst.
     rules:
       - Auftragsnummer eindeutig; Produkte und Einheiten müssen existieren und passen.
+    acceptance:
+      - id: angelegt
+        kind: effekt
+        text: Ein Avis steht mit Mengen- und TU-Positionen bereit und ist nach Lieferant und Zustand auffindbar.
+      - id: gueltig
+        kind: regel
+        text: Doppelte Auftragsnummern, unbekannte Produkte und unpassende Einheiten werden abgelehnt.
     dependsOn: [bestand.produktstamm]
     technical:
       components:
@@ -37,17 +44,22 @@ features:
       - kind: integration
         file: apps/api/test/integration/receiving.integration.test.ts
         test: legt einen Auftrag mit Mengen- und TU-Positionen an
+        covers: [angelegt]
       - kind: integration
         file: apps/api/test/integration/receiving.integration.test.ts
         test: prüft Auftragsnummer, Produkte und Einheiten
+        covers: [gueltig]
       - kind: scenario
         id: receiving-flow
+        covers: [angelegt]
       - kind: web-e2e
         file: apps/web/e2e/seiten.spec.ts
         test: "Wareneingang: Avis anlegen, Ware erfassen, Auftrag abschließen"
+        covers: [angelegt]
       - kind: integration
         file: apps/api/test/integration/receiving.integration.test.ts
         test: listet Aufträge, gefiltert nach Lieferant und Zustand
+        covers: [angelegt]
     comparisons:
       openwms:
         status: eingeschraenkt
@@ -76,6 +88,30 @@ features:
       - Überlieferung nur, wenn das Produkt sie erlaubt (`OVERDELIVERY_NOT_ALLOWED` mit Restmengen).
       - Keine Erfassung auf abgeschlossene Aufträge (`ORDER_CLOSED`).
       - Bestand erhält den Bezug `receiving:<orderId>/<posNo>`.
+    acceptance:
+      - id: erfasst
+        kind: effekt
+        text: Die Erfassung bucht Bestand auf eine TU und ordnet ihn der passenden Position zu; Bestand gleicher Art wird zusammengeführt.
+      - id: ueberlieferung
+        kind: effekt
+        text: Erlaubte Überlieferung wird gebucht und schließt die Position.
+      - id: einlagerung
+        kind: effekt
+        text: Auf Wunsch entsteht direkt die Einlagerbewegung.
+      - id: erfassungen
+        kind: effekt
+        text: Die Erfassungen eines Auftrags sind abrufbar.
+      - id: parallel
+        kind: regel
+        text: Gleichzeitige Erfassungen auf einen Auftrag verlieren keine Menge.
+      - id: overdelivery-not-allowed
+        kind: regel
+        text: Überlieferung nur, wenn das Produkt sie erlaubt (`OVERDELIVERY_NOT_ALLOWED` mit Restmengen).
+        code: OVERDELIVERY_NOT_ALLOWED
+      - id: order-closed
+        kind: regel
+        text: Keine Erfassung auf abgeschlossene Aufträge (`ORDER_CLOSED`).
+        code: ORDER_CLOSED
     settings:
       - name: Überlieferung je Produkt
         description: "`overdeliveryAllowed` am Produkt."
@@ -103,35 +139,46 @@ features:
       - kind: integration
         file: apps/api/test/integration/receiving.integration.test.ts
         test: erfasst eine Teilmenge auf eine neue TU und bucht Bestand
+        covers: [erfasst]
       - kind: integration
         file: apps/api/test/integration/receiving.integration.test.ts
         test: nimmt die Position, deren Restmenge reicht, und führt Bestand zusammen
+        covers: [erfasst]
       - kind: integration
         file: apps/api/test/integration/receiving.integration.test.ts
         test: lehnt Überlieferung ab, wenn das Produkt sie nicht erlaubt, und ändert nichts
+        covers: [overdelivery-not-allowed]
       - kind: integration
         file: apps/api/test/integration/receiving.integration.test.ts
         test: bucht erlaubte Überlieferung und schließt die Position
+        covers: [ueberlieferung]
       - kind: integration
         file: apps/api/test/integration/receiving.integration.test.ts
         test: erfasst eine avisierte TU per Barcode
+        covers: [erfasst]
       - kind: integration
         file: apps/api/test/integration/receiving.integration.test.ts
         test: legt auf Wunsch direkt die Einlagerbewegung an
+        covers: [einlagerung]
       - kind: integration
         file: apps/api/test/integration/receiving.integration.test.ts
         test: listet die Erfassungen eines Auftrags
+        covers: [erfassungen]
       - kind: integration
         file: apps/api/test/integration/receiving.integration.test.ts
         test: verliert bei gleichzeitigen Erfassungen auf einen Auftrag keine Menge
+        covers: [parallel]
       - kind: unit
         file: packages/node-red-nodes/test/nodes.test.mjs
         test: wms-receive erfasst blind oder gegen einen Auftrag
+        covers: [erfasst]
       - kind: scenario
         id: receiving-flow
+        covers: [erfasst, overdelivery-not-allowed, order-closed]
       - kind: web-e2e
         file: apps/web/e2e/seiten.spec.ts
         test: "Wareneingang: Avis anlegen, Ware erfassen, Auftrag abschließen"
+        covers: [erfasst]
     comparisons:
       openwms:
         status: erweitert
@@ -156,6 +203,28 @@ features:
     rules:
       - Position stornieren nur unberührt (`POSITION_NOT_OPEN`), schließen nur teilweise erfasst (`POSITION_NOT_IN_PROGRESS`).
       - Auftrag stornieren nur ohne Erfassungen (`CANCELLATION_DENIED`).
+    acceptance:
+      - id: abgeschlossen
+        kind: effekt
+        text: Teilweise erfasste Positionen schließen mit Fehlmenge; der Auftragsabschluss schließt die restlichen Positionen.
+      - id: storniert
+        kind: effekt
+        text: Ein Auftrag ohne Erfassungen wird vollständig storniert.
+      - id: erledigt
+        kind: regel
+        text: Eine Position ist erst bei voller Menge erledigt.
+      - id: position-not-open
+        kind: regel
+        text: Position stornieren nur unberührt (`POSITION_NOT_OPEN`), schließen nur teilweise erfasst (`POSITION_NOT_IN_PROGRESS`).
+        code: POSITION_NOT_OPEN
+      - id: position-not-in-progress
+        kind: regel
+        text: Position stornieren nur unberührt (`POSITION_NOT_OPEN`), schließen nur teilweise erfasst (`POSITION_NOT_IN_PROGRESS`).
+        code: POSITION_NOT_IN_PROGRESS
+      - id: cancellation-denied
+        kind: regel
+        text: Auftrag stornieren nur ohne Erfassungen (`CANCELLATION_DENIED`).
+        code: CANCELLATION_DENIED
     dependsOn: [wareneingang.avis]
     technical:
       components:
@@ -174,20 +243,26 @@ features:
       - kind: integration
         file: apps/api/test/integration/receiving.integration.test.ts
         test: storniert nur unberührte Positionen und schließt teilweise erfasste mit Fehlmenge
+        covers: [abgeschlossen, position-not-open, position-not-in-progress]
       - kind: integration
         file: apps/api/test/integration/receiving.integration.test.ts
         test: storniert keinen Auftrag mit Erfassungen; Abschluss schließt die restlichen Positionen
+        covers: [abgeschlossen, cancellation-denied]
       - kind: integration
         file: apps/api/test/integration/receiving.integration.test.ts
         test: storniert einen Auftrag ohne Erfassungen vollständig
+        covers: [storniert]
       - kind: unit
         file: apps/api/test/unit/receiving/receiving-rules.test.ts
         test: setzt Positionen erst bei voller Menge auf erledigt
+        covers: [erledigt]
       - kind: scenario
         id: receiving-flow
+        covers: [abgeschlossen]
       - kind: web-e2e
         file: apps/web/e2e/seiten.spec.ts
         test: "Wareneingang: Avis anlegen, Ware erfassen, Auftrag abschließen"
+        covers: [abgeschlossen]
     comparisons:
       openwms:
         status: erweitert
@@ -209,6 +284,10 @@ features:
         text: "`POST /v1/receiving-blind-captures` mit `sku`, `quantity`, `unit`, `location`, `lot?`, `bestBefore?`."
       - channel: node-red
         text: Node `wms-receive` ohne Auftragsnummer.
+    acceptance:
+      - id: gebucht
+        kind: effekt
+        text: Ware ohne Avis wird direkt als Bestand auf eine TU gebucht, auch am Scanner.
     dependsOn: [bestand.bestand-je-tu]
     technical:
       components:
@@ -224,11 +303,14 @@ features:
       - kind: integration
         file: apps/api/test/integration/receiving.integration.test.ts
         test: bucht Ware ohne Avis
+        covers: [gebucht]
       - kind: web-e2e
         file: apps/web/e2e/scanner.spec.ts
         test: "Scanner: Wareneingang ohne Avis"
+        covers: [gebucht]
       - kind: scenario
         id: stock-flow
+        covers: [gebucht]
     comparisons:
       openwms:
         status: gleichwertig
@@ -255,6 +337,21 @@ features:
       - Erfassung gegen ein gesperrtes Avis → 409 `ORDER_LOCKED`.
       - Abgeschlossene oder stornierte Avise lassen sich weder ändern noch sperren (`ORDER_CLOSED`).
       - Ändern und Sperren darf der Leitstand.
+    acceptance:
+      - id: sortiert
+        kind: effekt
+        text: Avise tragen Priorität und Attribute und sind nach Priorität und Termin sortiert.
+      - id: geaendert
+        kind: effekt
+        text: Änderungen an Priorität, Termin und Attributen melden die geänderten Felder.
+      - id: order-locked
+        kind: regel
+        text: Erfassung gegen ein gesperrtes Avis → 409 `ORDER_LOCKED`.
+        code: ORDER_LOCKED
+      - id: order-closed
+        kind: regel
+        text: Abgeschlossene oder stornierte Avise lassen sich weder ändern noch sperren (`ORDER_CLOSED`).
+        code: ORDER_CLOSED
     dependsOn: [wareneingang.avis]
     technical:
       components:
@@ -274,18 +371,23 @@ features:
       - kind: integration
         file: apps/api/test/integration/receiving.integration.test.ts
         test: legt Avise mit Priorität und Attributen an und sortiert nach Priorität und Termin
+        covers: [sortiert]
       - kind: integration
         file: apps/api/test/integration/receiving.integration.test.ts
         test: ändert Priorität, Termin und Attribute und meldet die geänderten Felder
+        covers: [geaendert]
       - kind: integration
         file: apps/api/test/integration/receiving.integration.test.ts
         test: lehnt die Erfassung gegen ein gesperrtes Avis ab, bis es entsperrt wird
+        covers: [order-locked]
       - kind: integration
         file: apps/api/test/integration/receiving.integration.test.ts
         test: ändert und sperrt abgeschlossene Avise nicht mehr
+        covers: [order-closed]
       - kind: web-e2e
         file: apps/web/e2e/seiten.spec.ts
         test: "Wareneingang: Avis mit Priorität und Attribut, Sperre verhindert die Erfassung"
+        covers: [sortiert, order-locked]
     comparisons:
       openwms:
         status: erweitert

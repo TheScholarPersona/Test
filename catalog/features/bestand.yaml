@@ -23,6 +23,22 @@ features:
       - Die SKU ist eindeutig; ein zweites Anlegen wird mit `PRODUCT_EXISTS` abgelehnt.
       - Eine alternative Einheit darf nicht wie die Basiseinheit heißen (`UNIT_CONFLICT`); der Faktor muss größer als 0 sein.
       - Die Basiseinheit ist nur änderbar, solange kein Bestand des Produkts existiert (`PRODUCT_UNIT_IN_USE`).
+    acceptance:
+      - id: angelegt
+        kind: effekt
+        text: Ein Produkt steht mit Basiseinheit und alternativen Einheiten samt Faktor bereit und ist einzeln und in der Liste lesbar.
+      - id: product-exists
+        kind: regel
+        text: Ein zweites Anlegen wird mit `PRODUCT_EXISTS` abgelehnt.
+        code: PRODUCT_EXISTS
+      - id: unit-conflict
+        kind: regel
+        text: Eine alternative Einheit darf nicht wie die Basiseinheit heißen (`UNIT_CONFLICT`).
+        code: UNIT_CONFLICT
+      - id: product-unit-in-use
+        kind: regel
+        text: Die Basiseinheit ist nur änderbar, solange kein Bestand des Produkts existiert (`PRODUCT_UNIT_IN_USE`).
+        code: PRODUCT_UNIT_IN_USE
     settings:
       - name: Alternative Einheiten
         description: Einheit und Faktor zur Basiseinheit, z. B. `KAR` = 12, `PAL` = 480.
@@ -49,15 +65,23 @@ features:
       - kind: integration
         file: apps/api/test/integration/stock.integration.test.ts
         test: legt Produkte mit alternativen Einheiten an und prüft sie
+        covers: [angelegt, unit-conflict]
       - kind: integration
         file: apps/api/test/integration/receiving.integration.test.ts
         test: schützt TUs mit Bestand vor dem Löschen und Produkte mit Bestand vor Einheitenwechsel
         note: Basiseinheit bei vorhandenem Bestand nicht änderbar
+        covers: [product-unit-in-use]
       - kind: scenario
         id: stock-flow
+        covers: [angelegt]
       - kind: integration
         file: apps/api/test/integration/stock.integration.test.ts
         test: liest Produkte einzeln und als Liste
+        covers: [angelegt]
+      - kind: integration
+        file: apps/api/test/integration/receiving.integration.test.ts
+        test: legt Produkte an und prüft Kennung und Einheit
+        covers: [angelegt, product-exists]
     comparisons:
       openwms:
         status: nicht-einsehbar
@@ -84,6 +108,14 @@ features:
       - Die Datenbank sichert zusätzlich `0 ≤ reserviert ≤ Menge` ab.
       - Eine TU mit Bestand oder laufender Inventur kann nicht gelöscht werden.
       - Zugänge entstehen über den Wareneingang (Ereignis `stock.received`).
+    acceptance:
+      - id: je-tu
+        kind: effekt
+        text: Die Bestandsabfrage liefert je TU die Posten mit Produkt, Menge, Charge und MHD, filterbar nach Gruppe (mit Untergruppen), Platz und Charge.
+      - id: tu-geschuetzt
+        kind: regel
+        text: Eine TU mit Bestand lässt sich nicht löschen.
+        code: TU_IN_USE
     dependsOn: [bestand.produktstamm]
     technical:
       components:
@@ -102,13 +134,17 @@ features:
       - kind: integration
         file: apps/api/test/integration/stock.integration.test.ts
         test: filtert nach Gruppe (mit Untergruppen), Platz und Charge
+        covers: [je-tu]
       - kind: integration
         file: apps/api/test/integration/receiving.integration.test.ts
         test: schützt TUs mit Bestand vor dem Löschen und Produkte mit Bestand vor Einheitenwechsel
         note: Löschschutz für TUs mit Bestand
+        rationale: Prüft den Löschschutz einer TU mit Bestand über `DELETE /v1/transport-units/{barcode}` – die Regel gehört zum Bestand, der Endpunkt zu den TUs.
+        covers: [tu-geschuetzt]
       - kind: web-e2e
         file: apps/web/e2e/leitstand.spec.ts
         test: Bestand zeigt Posten und aktualisiert sich live nach einem Abgang
+        covers: [je-tu]
     comparisons:
       openwms:
         status: nicht-einsehbar
@@ -131,6 +167,18 @@ features:
       - Höchstens 3 Nachkommastellen nach der Umrechnung, sonst `INVALID_QUANTITY`.
       - Nur Basiseinheit oder hinterlegte alternative Einheiten sind zulässig.
       - Der Wareneingang bucht in der Basiseinheit.
+    acceptance:
+      - id: umgerechnet
+        kind: effekt
+        text: Abgang und Korrektur in einer alternativen Einheit werden exakt in die Basiseinheit umgerechnet gebucht.
+      - id: nur-bekannte
+        kind: regel
+        text: Unbekannte Einheiten werden mit Angabe der zulässigen Einheiten abgelehnt.
+        code: UNIT_MISMATCH
+      - id: invalid-quantity
+        kind: regel
+        text: Höchstens 3 Nachkommastellen nach der Umrechnung, sonst `INVALID_QUANTITY`.
+        code: INVALID_QUANTITY
     dependsOn: [bestand.produktstamm]
     technical:
       components:
@@ -141,12 +189,18 @@ features:
       - kind: integration
         file: apps/api/test/integration/stock.integration.test.ts
         test: bucht einen Abgang in einer alternativen Einheit um
+        rationale: Querschnittsfunktion ohne eigenen Endpunkt; geprüft über den Abgang in einer alternativen Einheit.
+        covers: [umgerechnet]
       - kind: integration
         file: apps/api/test/integration/stock.integration.test.ts
         test: lehnt unbekannte Einheiten, zu viel und unzulässige Genauigkeit ab
+        rationale: Querschnittsfunktion ohne eigenen Endpunkt; geprüft über Abgänge mit unbekannter Einheit und unzulässiger Genauigkeit.
+        covers: [nur-bekannte, invalid-quantity]
       - kind: integration
         file: apps/api/test/integration/stock.integration.test.ts
         test: korrigiert in alternativer Einheit, negativ und positiv
+        rationale: Querschnittsfunktion ohne eigenen Endpunkt; geprüft über Korrekturen in einer alternativen Einheit.
+        covers: [umgerechnet]
     comparisons:
       openwms:
         status: nicht-einsehbar
@@ -171,6 +225,29 @@ features:
       - Höchstens die verfügbare Menge (`STOCK_INSUFFICIENT`, bei Reservierungen `STOCK_RESERVED`).
       - Mit `reservationId` höchstens die reservierte Menge (`EXCEEDS_RESERVATION`).
       - Während einer Inventur der TU gesperrt (`COUNT_IN_PROGRESS`).
+    acceptance:
+      - id: abgebucht
+        kind: effekt
+        text: Ein Abgang verringert den Bestand des Postens und steht im Journal; verbraucht er alles, verschwindet der Posten.
+      - id: gegen-reservierung
+        kind: effekt
+        text: Ein Abgang mit Reservierung verbraucht die reservierte Menge.
+      - id: stock-insufficient
+        kind: regel
+        text: Höchstens die verfügbare Menge (`STOCK_INSUFFICIENT`, bei Reservierungen `STOCK_RESERVED`).
+        code: STOCK_INSUFFICIENT
+      - id: stock-reserved
+        kind: regel
+        text: Höchstens die verfügbare Menge (`STOCK_INSUFFICIENT`, bei Reservierungen `STOCK_RESERVED`).
+        code: STOCK_RESERVED
+      - id: exceeds-reservation
+        kind: regel
+        text: Mit `reservationId` höchstens die reservierte Menge (`EXCEEDS_RESERVATION`).
+        code: EXCEEDS_RESERVATION
+      - id: count-in-progress
+        kind: regel
+        text: Während einer Inventur der TU gesperrt (`COUNT_IN_PROGRESS`).
+        code: COUNT_IN_PROGRESS
     dependsOn: [bestand.bestand-je-tu]
     technical:
       components:
@@ -186,14 +263,30 @@ features:
       - kind: integration
         file: apps/api/test/integration/stock.integration.test.ts
         test: bucht einen Abgang in einer alternativen Einheit um
+        covers: [abgebucht]
       - kind: integration
         file: apps/api/test/integration/stock.integration.test.ts
         test: entfernt den Posten, wenn der Abgang alles verbraucht
+        covers: [abgebucht]
       - kind: web-e2e
         file: apps/web/e2e/leitstand.spec.ts
         test: Bestand zeigt Posten und aktualisiert sich live nach einem Abgang
+        covers: [abgebucht]
       - kind: scenario
         id: stock-flow
+        covers: [abgebucht, stock-reserved, count-in-progress]
+      - kind: integration
+        file: apps/api/test/integration/stock.integration.test.ts
+        test: lehnt unbekannte Einheiten, zu viel und unzulässige Genauigkeit ab
+        covers: [stock-insufficient]
+      - kind: integration
+        file: apps/api/test/integration/stock.integration.test.ts
+        test: verbraucht die Reservierung mit einem Abgang
+        covers: [gegen-reservierung, exceeds-reservation]
+      - kind: integration
+        file: apps/api/test/integration/stock.integration.test.ts
+        test: reserviert verfügbaren Bestand und schützt ihn vor Abgang, Umbuchung und Korrektur
+        covers: [stock-reserved]
     comparisons:
       openwms:
         status: nicht-einsehbar
@@ -215,6 +308,13 @@ features:
     rules:
       - Nur verfügbare (nicht reservierte) Menge.
       - Weder Ausgangs- noch Ziel-TU dürfen in einer laufenden Inventur sein.
+    acceptance:
+      - id: umgebucht
+        kind: effekt
+        text: Eine Teilmenge wandert mit Charge und MHD auf die Ziel-TU und wird dort mit gleichen Posten zusammengeführt.
+      - id: neuer-posten
+        kind: effekt
+        text: Auf einer leeren TU entsteht ein neuer Posten; ein leerer Ausgangsposten wird entfernt.
     dependsOn: [bestand.bestand-je-tu]
     technical:
       components:
@@ -229,11 +329,14 @@ features:
       - kind: integration
         file: apps/api/test/integration/stock.integration.test.ts
         test: bucht eine Teilmenge mit Charge und MHD auf eine andere TU und führt dort zusammen
+        covers: [umgebucht]
       - kind: integration
         file: apps/api/test/integration/stock.integration.test.ts
         test: legt auf einer leeren TU einen neuen Posten an und entfernt den leeren
+        covers: [neuer-posten]
       - kind: scenario
         id: stock-flow
+        covers: [umgebucht]
     comparisons:
       openwms:
         status: nicht-einsehbar
@@ -254,6 +357,10 @@ features:
     rules:
       - Nie unter 0 und nie unter die reservierte Menge.
       - Grund ist Pflicht und steht im Journal.
+    acceptance:
+      - id: korrigiert
+        kind: effekt
+        text: Eine Korrektur gleicht den Bestand nach oben oder unten an und steht mit Grund im Journal.
     dependsOn: [bestand.bestand-je-tu]
     technical:
       components:
@@ -268,8 +375,10 @@ features:
       - kind: integration
         file: apps/api/test/integration/stock.integration.test.ts
         test: korrigiert in alternativer Einheit, negativ und positiv
+        covers: [korrigiert]
       - kind: scenario
         id: stock-flow
+        covers: [korrigiert]
     comparisons:
       openwms:
         status: nicht-einsehbar
@@ -290,6 +399,13 @@ features:
         text: Wirkt automatisch bei allen Bestandsbuchungen; keine Bedienung nötig.
     rules:
       - Sperren in fester Reihenfolge (nach TU-id) – keine Verklemmung.
+    acceptance:
+      - id: nie-mehr
+        kind: effekt
+        text: Gleichzeitige Abgänge und Reservierungen vergeben zusammen nie mehr als vorhanden.
+      - id: keine-verklemmung
+        kind: regel
+        text: Gegenläufige Umbuchungen verklemmen sich nicht, beide werden gebucht.
     technical:
       components:
         - apps/api/src/modules/inventory/application/inventory.service.ts
@@ -299,9 +415,13 @@ features:
       - kind: integration
         file: apps/api/test/integration/stock.integration.test.ts
         test: vergibt bei gleichzeitigen Abgängen und Reservierungen nie mehr als vorhanden
+        rationale: Querschnittsfunktion ohne eigenen Endpunkt; geprüft über gleichzeitige Abgänge und Reservierungen.
+        covers: [nie-mehr]
       - kind: integration
         file: apps/api/test/integration/stock.integration.test.ts
         test: verklemmt sich bei gegenläufigen Umbuchungen nicht
+        rationale: Querschnittsfunktion ohne eigenen Endpunkt; geprüft über gegenläufige Umbuchungen.
+        covers: [keine-verklemmung]
     comparisons:
       openwms:
         status: nicht-einsehbar
@@ -323,6 +443,20 @@ features:
     rules:
       - Nur verfügbarer Bestand (`STOCK_NOT_AVAILABLE` mit Angabe der verfügbaren Menge).
       - Reservierter Bestand ist vor Abgang, Umbuchung und Korrektur geschützt.
+    acceptance:
+      - id: reserviert
+        kind: effekt
+        text: Eine Reservierung senkt die verfügbare Menge, ohne den Bestand zu ändern; Abgang, Umbuchung und Korrektur können sie nicht unterlaufen.
+      - id: verbraucht
+        kind: effekt
+        text: Ein Abgang gegen die Reservierung verbraucht sie.
+      - id: aufgehoben
+        kind: effekt
+        text: Eine aufgehobene Reservierung gibt die Menge wieder frei.
+      - id: stock-not-available
+        kind: regel
+        text: Nur verfügbarer Bestand (`STOCK_NOT_AVAILABLE` mit Angabe der verfügbaren Menge).
+        code: STOCK_NOT_AVAILABLE
     dependsOn: [bestand.bestand-je-tu]
     technical:
       components:
@@ -340,14 +474,18 @@ features:
       - kind: integration
         file: apps/api/test/integration/stock.integration.test.ts
         test: reserviert verfügbaren Bestand und schützt ihn vor Abgang, Umbuchung und Korrektur
+        covers: [reserviert, stock-not-available]
       - kind: integration
         file: apps/api/test/integration/stock.integration.test.ts
         test: verbraucht die Reservierung mit einem Abgang
+        covers: [verbraucht]
       - kind: integration
         file: apps/api/test/integration/stock.integration.test.ts
         test: hebt eine Reservierung auf
+        covers: [aufgehoben]
       - kind: scenario
         id: stock-flow
+        covers: [reserviert]
     comparisons:
       openwms:
         status: nicht-einsehbar
@@ -367,6 +505,10 @@ features:
         text: Seite **Bestand** – Umschalter „je Produkt“ / „je Platz“.
       - channel: api
         text: "`GET /v1/stock/summary?by=product|location&sku=…&group=…`"
+    acceptance:
+      - id: summiert
+        kind: effekt
+        text: Die Summen nennen je Produkt und je Platz Menge, reserviert und verfügbar.
     dependsOn: [bestand.bestand-je-tu]
     technical:
       components:
@@ -379,8 +521,10 @@ features:
       - kind: integration
         file: apps/api/test/integration/stock.integration.test.ts
         test: summiert je Produkt und je Platz
+        covers: [summiert]
       - kind: scenario
         id: stock-flow
+        covers: [summiert]
     comparisons:
       openwms:
         status: nicht-einsehbar
@@ -402,6 +546,18 @@ features:
         text: "`GET /v1/stock-bookings?barcode=…&sku=…&reference=…`"
     rules:
       - Journal-Typen `RECEIPT`, `ISSUE`, `TRANSFER_OUT`, `TRANSFER_IN`, `CORRECTION`.
+    acceptance:
+      - id: nachvollziehbar
+        kind: effekt
+        text: Jede Buchung steht im Journal mit Typ, Menge, Bezug und Zeitpunkt und ist nach Bezug abfragbar.
+      - id: transfer-out
+        kind: regel
+        text: Journal-Typen `RECEIPT`, `ISSUE`, `TRANSFER_OUT`, `TRANSFER_IN`, `CORRECTION`.
+        code: TRANSFER_OUT
+      - id: transfer-in
+        kind: regel
+        text: Journal-Typen `RECEIPT`, `ISSUE`, `TRANSFER_OUT`, `TRANSFER_IN`, `CORRECTION`.
+        code: TRANSFER_IN
     dependsOn: [bestand.bestand-je-tu]
     technical:
       components:
@@ -417,12 +573,15 @@ features:
         file: apps/api/test/integration/stock.integration.test.ts
         test: bucht einen Abgang in einer alternativen Einheit um
         note: Journaleintrag des Abgangs
+        covers: [nachvollziehbar]
       - kind: integration
         file: apps/api/test/integration/stock.integration.test.ts
         test: bucht eine Teilmenge mit Charge und MHD auf eine andere TU und führt dort zusammen
         note: zusammengehörige Umbuchungs-Einträge
+        covers: [nachvollziehbar, transfer-out, transfer-in]
       - kind: scenario
         id: stock-flow
+        covers: [nachvollziehbar]
     comparisons:
       openwms:
         status: nicht-einsehbar
@@ -440,6 +599,10 @@ features:
     usage:
       - channel: leitstand
         text: Menü **Bestand**; Filter nach SKU und Barcode, Umschalter je Produkt / je Platz.
+    acceptance:
+      - id: live
+        kind: effekt
+        text: Die Bestandsseite zeigt die Posten und aktualisiert sich ohne Neuladen, sobald ein Abgang gebucht wird.
     dependsOn: [bestand.bestand-je-tu, bestand.summen, bestand.buchungsjournal]
     technical:
       components:
@@ -454,6 +617,7 @@ features:
       - kind: web-e2e
         file: apps/web/e2e/leitstand.spec.ts
         test: Bestand zeigt Posten und aktualisiert sich live nach einem Abgang
+        covers: [live]
     comparisons:
       openwms:
         status: nicht-einsehbar
@@ -476,6 +640,20 @@ features:
       - Während der Inventur sind alle anderen Buchungen auf der TU gesperrt (`COUNT_IN_PROGRESS`); auch die Auslagerung nimmt diesen Bestand nicht.
       - Je TU höchstens eine offene Inventur.
       - Zustände `OPEN` → `COUNTED` → `CLOSED`, Abbruch nach `CANCELLED`.
+    acceptance:
+      - id: gesperrt
+        kind: effekt
+        text: Eine Inventur öffnet mit Soll-Bestand und sperrt die TU für andere Buchungen.
+      - id: gezaehlt
+        kind: effekt
+        text: Das Zählergebnis nennt Differenzen, nicht Gezähltes und Funde.
+      - id: abgeschlossen
+        kind: effekt
+        text: Der Abschluss bucht die Differenzen und hebt die Sperre auf; ein Abbruch bucht nichts.
+      - id: count-in-progress
+        kind: regel
+        text: Während der Inventur sind alle anderen Buchungen auf der TU gesperrt (`COUNT_IN_PROGRESS`).
+        code: COUNT_IN_PROGRESS
     dependsOn: [bestand.bestand-je-tu, bestand.korrektur]
     technical:
       components:
@@ -496,20 +674,26 @@ features:
       - kind: integration
         file: apps/api/test/integration/stock.integration.test.ts
         test: öffnet eine Inventur mit Soll-Bestand und sperrt die TU
+        covers: [gesperrt, count-in-progress]
       - kind: integration
         file: apps/api/test/integration/stock.integration.test.ts
         test: erfasst das Zählergebnis mit Differenzen, nicht Gezähltem und Fund
+        covers: [gezaehlt]
       - kind: integration
         file: apps/api/test/integration/stock.integration.test.ts
         test: bucht beim Abschluss die Differenzen und hebt die Sperre auf
+        covers: [abgeschlossen]
       - kind: integration
         file: apps/api/test/integration/stock.integration.test.ts
         test: bricht eine Inventur ohne Buchung ab
+        covers: [abgeschlossen]
       - kind: scenario
         id: stock-flow
+        covers: [gesperrt, abgeschlossen, count-in-progress]
       - kind: integration
         file: apps/api/test/integration/stock.integration.test.ts
         test: liest eine abgeschlossene Inventur mit Soll, Ist und Differenz
+        covers: [gezaehlt]
     comparisons:
       openwms:
         status: nicht-einsehbar

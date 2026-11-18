@@ -50,6 +50,9 @@ const taxonomy = Taxonomy.parse({
   ],
 });
 
+const DINGE = 'apps/api/test/integration/dinge.test.ts';
+const DINGE_TEST = "it('legt Dinge an', async () => { expect(await api.post('/v1/dinge', {})).toMatchObject({ status: 201, body: { name: 'A' } }); })";
+
 function discovery(overrides: Partial<Discovery> = {}): Discovery {
   return {
     root: REPO_ROOT,
@@ -63,8 +66,8 @@ function discovery(overrides: Partial<Discovery> = {}): Discovery {
     uiRoutes: new Set(),
     nodeRedNodes: new Set(),
     scenarios: new Set(['dinge-flow']),
-    testFiles: [{ path: 'apps/api/test/integration/dinge.test.ts', text: "it('legt Dinge an', () => api.post('/v1/dinge', {}))" }],
-    callingFiles: [{ path: 'apps/api/test/integration/dinge.test.ts', text: "it('legt Dinge an', () => api.post('/v1/dinge', {}))" }],
+    testFiles: [{ path: DINGE, text: DINGE_TEST }],
+    callingFiles: [{ path: DINGE, text: DINGE_TEST }],
     ...overrides,
   };
 }
@@ -78,7 +81,8 @@ const feature = (overrides: Record<string, unknown> = {}) =>
     description: 'x',
     usage: [{ channel: 'api', text: 'x' }],
     technical: { components: ['packages/feature-catalog/src'], endpoints: ['POST /v1/dinge'], events: { emits: ['ding.angelegt'] } },
-    evidence: [{ kind: 'integration', file: 'apps/api/test/integration/dinge.test.ts', test: 'legt Dinge an' }],
+    acceptance: [{ id: 'angelegt', kind: 'effekt', text: 'Das Ding steht mit Namen bereit.' }],
+    evidence: [{ kind: 'integration', file: DINGE, test: 'legt Dinge an', covers: ['angelegt'] }],
     ...overrides,
   });
 
@@ -112,8 +116,8 @@ describe('Prüfregeln', () => {
     const f = feature({
       technical: { components: ['gibt/es/nicht.ts'], endpoints: ['DELETE /v1/dinge'], events: { emits: ['ding.weg'] } },
       evidence: [
-        { kind: 'integration', file: 'apps/api/test/integration/dinge.test.ts', test: 'gibt es nicht' },
-        { kind: 'scenario', id: 'weg-flow' },
+        { kind: 'integration', file: DINGE, test: 'gibt es nicht', covers: ['angelegt'] },
+        { kind: 'scenario', id: 'weg-flow', covers: ['angelegt'] },
       ],
     });
     const found = codes(catalog([f])).map((c) => c.split(':')[1]);
@@ -130,6 +134,79 @@ describe('Prüfregeln', () => {
     expect(analyze(data, discovery(), failed).findings.map((f) => f.code)).toContain('EVIDENCE_FAILED');
     expect(analyze(data, discovery(), other).findings.map((f) => f.code)).toContain('EVIDENCE_NOT_RUN');
     expect(analyze(data, discovery(), failed).features[0]!.proof).toBe('nicht-nachgewiesen');
+  });
+
+  it('verlangt für jedes Akzeptanzkriterium einen bestandenen Nachweis', () => {
+    const at = 'features/lager.yaml: lager.anlegen';
+    // ohne Kriterium und ohne Zuordnung
+    const bare = codes(catalog([feature({ acceptance: [], evidence: [{ kind: 'integration', file: DINGE, test: 'legt Dinge an' }] })]));
+    expect(bare).toEqual(expect.arrayContaining([`fehler:ACCEPTANCE_MISSING:${at}`, `fehler:EVIDENCE_UNLINKED:${at}`]));
+    // Kriterium ohne Nachweis und Verweis auf ein unbekanntes Kriterium
+    const twoCriteria = [
+      { id: 'angelegt', kind: 'effekt', text: 'Das Ding steht bereit.' },
+      { id: 'gemeldet', kind: 'effekt', text: 'Ein Ereignis meldet das Ding.' },
+    ];
+    const uncovered = analyze(catalog([feature({ acceptance: twoCriteria })]), discovery());
+    expect(uncovered.findings.filter((f) => f.code === 'ACCEPTANCE_UNCOVERED').map((f) => f.message)).toEqual(['Kriterium „gemeldet“ hat keinen Nachweis']);
+    expect(codes(catalog([feature({ evidence: [{ kind: 'integration', file: DINGE, test: 'legt Dinge an', covers: ['angelegt', 'gibtsnicht'] }] })]))).toContain(`fehler:EVIDENCE_UNLINKED:${at}`);
+
+    // Ein Kriterium bestanden, das andere fehlgeschlagen → teilweise nachgewiesen
+    const text = `${DINGE_TEST}\nit('meldet Dinge', async () => { expect((await collector.waitFor((m) => m.topic === 'wms/ding/angelegt')).body).toMatchObject({ name: 'A' }); })`;
+    const d = discovery({ testFiles: [{ path: DINGE, text }], callingFiles: [{ path: DINGE, text }] });
+    const both = feature({
+      acceptance: twoCriteria,
+      evidence: [
+        { kind: 'integration', file: DINGE, test: 'legt Dinge an', covers: ['angelegt'] },
+        { kind: 'integration', file: DINGE, test: 'meldet Dinge', covers: ['gemeldet'] },
+      ],
+    });
+    const run = parseJunit(
+      '<testcase classname="test/integration/dinge.test.ts" name="Dinge &gt; legt Dinge an"/>' +
+        '<testcase classname="test/integration/dinge.test.ts" name="Dinge &gt; meldet Dinge"><failure message="x"/></testcase>',
+    );
+    const result = analyze(catalog([both]), d, run).features[0]!;
+    expect(result.proof).toBe('teilweise');
+    expect(result.acceptance.map((c) => [c.criterion.id, c.status])).toEqual([['angelegt', 'nachgewiesen'], ['gemeldet', 'offen']]);
+    const green = parseJunit('<testcase classname="test/integration/dinge.test.ts" name="Dinge &gt; legt Dinge an"/><testcase classname="test/integration/dinge.test.ts" name="Dinge &gt; meldet Dinge"/>');
+    expect(analyze(catalog([both]), d, green).features[0]!.proof).toBe('nachgewiesen');
+  });
+
+  it('erkennt Nachweise ohne Zusicherung, mit reiner Statusprüfung oder ohne Bezug zum Feature', () => {
+    const text = [
+      "it('ruft nur auf', async () => { await api.post('/v1/dinge', {}); })",
+      "it('prüft nur den Status', async () => { expect((await api.post('/v1/dinge', {})).status).toBe(201); })",
+      "it('prüft etwas anderes', async () => { expect((await api.get('/v1/rest')).body).toMatchObject({ name: 'A' }); })",
+    ].join('\n');
+    const d = discovery({ testFiles: [{ path: DINGE, text }], callingFiles: [{ path: DINGE, text }] });
+    const ids: Record<string, string> = { 'ruft nur auf': 'lager.ohne', 'prüft nur den Status': 'lager.status', 'prüft etwas anderes': 'lager.fremd' };
+    const ev = (test: string, extra: Record<string, unknown> = {}) => feature({ id: ids[test], evidence: [{ kind: 'integration', file: DINGE, test, covers: ['angelegt'], ...extra }] });
+    const found = analyze(catalog([ev('ruft nur auf'), ev('prüft nur den Status'), ev('prüft etwas anderes')]), d).findings.map((f) => `${f.level}:${f.code}:${f.subject.split(': ')[1]}`);
+    expect(found).toEqual(expect.arrayContaining(['fehler:EVIDENCE_NO_ASSERTION:lager.ohne', 'warnung:EVIDENCE_STATUS_ONLY:lager.status', 'warnung:EVIDENCE_UNRELATED:lager.fremd']));
+    // Ohne Zusicherung trägt der Nachweis das Kriterium nicht
+    expect(analyze(catalog([ev('ruft nur auf')]), d).findings.map((f) => f.code)).toContain('ACCEPTANCE_UNCOVERED');
+    // Eine Begründung nach Review ersetzt die Warnung, nicht die Zusicherung
+    const reviewed = analyze(catalog([ev('prüft etwas anderes', { rationale: 'Prüft den Broker direkt.' })]), d).findings.map((f) => f.code);
+    expect(reviewed).not.toContain('EVIDENCE_UNRELATED');
+  });
+
+  it('verlangt den Fehlercode einer Regel als Zusicherung im Test', () => {
+    const rules = ['Doppelte Namen → 409 `DING_EXISTS`.', 'Zustände `OPEN` → `IN_PROGRESS` → `DONE`.'];
+    const at = 'features/lager.yaml: lager.anlegen';
+    expect(codes(catalog([feature({ rules })]))).toContain(`fehler:RULE_WITHOUT_ACCEPTANCE:${at}`);
+    const acceptance = [
+      { id: 'angelegt', kind: 'effekt', text: 'Das Ding steht bereit.' },
+      { id: 'eindeutig', kind: 'regel', text: 'Doppelte Namen werden abgelehnt.', code: 'DING_EXISTS' },
+    ];
+    const evidence = [{ kind: 'integration', file: DINGE, test: 'legt Dinge an', covers: ['angelegt', 'eindeutig'] }];
+    const missing = codes(catalog([feature({ rules, acceptance, evidence })]));
+    expect(missing).toContain(`fehler:RULE_CODE_NOT_ASSERTED:${at}`);
+    expect(missing.filter((c) => c.includes('RULE_WITHOUT_ACCEPTANCE'))).toEqual([]);
+    const text = `it('legt Dinge an', async () => { expect(await api.post('/v1/dinge', {})).toMatchObject({ status: 409, body: { code: 'DING_EXISTS' } }); })`;
+    const d = discovery({ testFiles: [{ path: DINGE, text }], callingFiles: [{ path: DINGE, text }] });
+    expect(codes(catalog([feature({ rules, acceptance, evidence })]), d).filter((c) => /RULE_|ACCEPTANCE_|EVIDENCE_/.test(c))).toEqual([]);
+    // Ein Teilwort zählt nicht: `DING_EXISTS` ist nicht in `OTHER_DING_EXISTS` zugesichert
+    const partial = text.replace("'DING_EXISTS'", "'OTHER_DING_EXISTS'");
+    expect(codes(catalog([feature({ rules, acceptance, evidence })]), discovery({ testFiles: [{ path: DINGE, text: partial }] }))).toContain(`fehler:RULE_CODE_NOT_ASSERTED:${at}`);
   });
 
   it('warnt, wenn kein Test einen Endpunkt eines Features erkennbar aufruft', () => {
@@ -191,8 +268,8 @@ describe('Hilfsfunktionen', () => {
       ...parseJunit('<testcase classname="test/scenarios.test.ts" name="Node-RED-Szenarien &gt; stock-flow – Bestand: …"/>'),
       ...parseJunit('<testcase name="Bestand zeigt Posten" classname="leitstand.spec.ts"><skipped/></testcase>'),
     ];
-    expect(resultOf({ kind: 'scenario', id: 'stock-flow' }, tests)).toBe('bestanden');
-    expect(resultOf({ kind: 'web-e2e', file: 'apps/web/e2e/leitstand.spec.ts', test: 'Bestand zeigt Posten' }, tests)).toBe('uebersprungen');
+    expect(resultOf({ kind: 'scenario', id: 'stock-flow', covers: [] }, tests)).toBe('bestanden');
+    expect(resultOf({ kind: 'web-e2e', file: 'apps/web/e2e/leitstand.spec.ts', test: 'Bestand zeigt Posten', covers: [] }, tests)).toBe('uebersprungen');
   });
 
   it('leitet Rollen aus der Rechtetabelle der API ab', () => {

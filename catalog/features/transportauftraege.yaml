@@ -23,6 +23,32 @@ features:
       - Höchstens ein gestarteter oder unterbrochener Auftrag je TU (`TRANSPORT_ORDER_ACTIVE`), per Teilindex abgesichert.
       - Kein Start auf gesperrte Ziele (`TARGET_LOCKED`) oder volle Plätze (`PLACEMENT_REJECTED`).
       - Lagerbewegung und Transportauftrag steuern eine TU nie gleichzeitig (`TU_CLAIMED`).
+    acceptance:
+      - id: gestartet
+        kind: effekt
+        text: Ein Auftrag wird angelegt, gestartet und reserviert das Ziel; wartende starten nach Priorität, dann Alter.
+      - id: umgeleitet
+        kind: effekt
+        text: Bei gesperrtem Ziel leitet der Start auf einen Ersatzplatz der Gruppe um, wenn erlaubt.
+      - id: genau-einer
+        kind: regel
+        text: Bei gleichzeitigen Aufträgen für eine TU startet genau einer.
+      - id: transport-order-active
+        kind: regel
+        text: Höchstens ein gestarteter oder unterbrochener Auftrag je TU (`TRANSPORT_ORDER_ACTIVE`), per Teilindex abgesichert.
+        code: TRANSPORT_ORDER_ACTIVE
+      - id: target-locked
+        kind: regel
+        text: Kein Start auf gesperrte Ziele (`TARGET_LOCKED`) oder volle Plätze (`PLACEMENT_REJECTED`).
+        code: TARGET_LOCKED
+      - id: placement-rejected
+        kind: regel
+        text: Kein Start auf gesperrte Ziele (`TARGET_LOCKED`) oder volle Plätze (`PLACEMENT_REJECTED`).
+        code: PLACEMENT_REJECTED
+      - id: tu-claimed
+        kind: regel
+        text: Lagerbewegung und Transportauftrag steuern eine TU nie gleichzeitig (`TU_CLAIMED`).
+        code: TU_CLAIMED
     settings:
       - name: Umleitung bei gesperrtem Ziel
         description: "`redirect: true` erlaubt einen Ersatzplatz in der Gruppe des Ziels (über die Einlagerstrategie)."
@@ -52,29 +78,43 @@ features:
       - kind: integration
         file: apps/api/test/integration/transport-order.integration.test.ts
         test: legt einen Auftrag an, startet ihn und reserviert das Ziel
+        covers: [gestartet]
       - kind: integration
         file: apps/api/test/integration/transport-order.integration.test.ts
         test: lässt einen zweiten Auftrag derselben TU warten (O-02)
+        covers: [transport-order-active]
       - kind: integration
         file: apps/api/test/integration/transport-order.integration.test.ts
         test: startet wartende Aufträge nach Priorität, dann Alter
+        covers: [gestartet]
       - kind: integration
         file: apps/api/test/integration/transport-order.integration.test.ts
         test: startet nicht auf einen gesperrten Zielplatz und nennt den Grund
+        covers: [target-locked]
       - kind: integration
         file: apps/api/test/integration/transport-order.integration.test.ts
         test: leitet bei gesperrtem Ziel auf einen Ersatzplatz der Gruppe um, wenn erlaubt
+        covers: [umgeleitet, target-locked]
       - kind: integration
         file: apps/api/test/integration/transport-order.integration.test.ts
         test: trennt Lagerbewegung und Transportauftrag derselben TU
+        covers: [tu-claimed]
       - kind: integration
         file: apps/api/test/integration/transport-order.integration.test.ts
         test: startet bei gleichzeitigen Aufträgen für eine TU genau einen
+        rationale: Legt die Aufträge über einen Helfer an (`POST /v1/transport-orders`), den die Heuristik nicht auflöst.
+        covers: [genau-einer]
       - kind: scenario
         id: transport-order-flow
+        covers: [gestartet, transport-order-active, target-locked]
       - kind: web-e2e
         file: apps/web/e2e/seiten.spec.ts
         test: "Transport: Lagerbewegung und Transportauftrag bedienen"
+        covers: [gestartet]
+      - kind: integration
+        file: apps/api/test/integration/transport-order.integration.test.ts
+        test: lehnt einen vollen Zielplatz ab (harte Platzregeln)
+        covers: [placement-rejected]
     comparisons:
       openwms:
         status: gleichwertig
@@ -100,6 +140,20 @@ features:
     rules:
       - Endzustände `FINISHED`, `CANCELED`, `ONFAILURE` erlauben keine Aktion mehr.
       - TUs und Zielplätze offener Aufträge sind vor dem Löschen geschützt.
+    acceptance:
+      - id: abgeschlossen
+        kind: effekt
+        text: Der Abschluss bucht die TU am Ziel und startet den nächsten Auftrag der TU; eine Abweichung wird gemeldet.
+      - id: unterbrochen
+        kind: effekt
+        text: Ein Auftrag lässt sich unterbrechen, fortsetzen und scheitern lassen.
+      - id: endzustand
+        kind: regel
+        text: Endzustände erlauben keine Aktion mehr.
+      - id: geschuetzt
+        kind: regel
+        text: TU und Zielplatz offener Aufträge sind vor dem Löschen geschützt.
+        code: TU_IN_USE
     dependsOn: [transportauftraege.anlegen-starten]
     technical:
       components:
@@ -120,23 +174,31 @@ features:
       - kind: integration
         file: apps/api/test/integration/transport-order.integration.test.ts
         test: bucht beim Abschluss und startet den nächsten Auftrag der TU (O-06)
+        covers: [abgeschlossen]
       - kind: integration
         file: apps/api/test/integration/transport-order.integration.test.ts
         test: meldet eine Abweichung beim Abschluss auf einem anderen Platz
+        covers: [abgeschlossen]
       - kind: integration
         file: apps/api/test/integration/transport-order.integration.test.ts
         test: unterbricht, setzt fort und lässt scheitern
+        covers: [unterbrochen]
       - kind: integration
         file: apps/api/test/integration/transport-order.integration.test.ts
         test: schützt TU und Zielplatz offener Aufträge vor dem Löschen
+        rationale: Prüft den Löschschutz über `DELETE` auf TU und Platz – die Regel gehört zum Auftrag, die Endpunkte zu TUs und Plätzen.
+        covers: [geschuetzt]
       - kind: unit
         file: apps/api/test/unit/transport-order/transport-order-state.test.ts
         test: Endzustände sind final und erlauben keine Aktion (O-03)
+        covers: [endzustand]
       - kind: scenario
         id: transport-order-flow
+        covers: [abgeschlossen]
       - kind: web-e2e
         file: apps/web/e2e/seiten.spec.ts
         test: "Transport: Lagerbewegung und Transportauftrag bedienen"
+        covers: [abgeschlossen]
     comparisons:
       openwms:
         status: erweitert

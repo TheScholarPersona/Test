@@ -20,6 +20,20 @@ features:
     rules:
       - Nummer eindeutig (`PARTNER_EXISTS`), mindestens eine Rolle, Land als zweistelliger ISO-Code.
       - Anlegen und Ändern sind Stammdaten und damit Sache der Rolle admin; lesen darf jeder Angemeldete.
+    acceptance:
+      - id: angelegt
+        kind: effekt
+        text: Ein Partner steht mit Rollen und Anschrift bereit, wird als Ereignis gemeldet und ist nach Rolle, Aktivität und Suchbegriff auffindbar.
+      - id: geaendert
+        kind: effekt
+        text: Änderungen melden die geänderten Felder; ein Partner wird deaktiviert statt gelöscht.
+      - id: gueltig
+        kind: regel
+        text: Ungültige Angaben werden abgelehnt.
+      - id: partner-exists
+        kind: regel
+        text: Nummer eindeutig (`PARTNER_EXISTS`), mindestens eine Rolle, Land als zweistelliger ISO-Code.
+        code: PARTNER_EXISTS
     technical:
       components:
         - apps/api/src/modules/partner/application/partner.service.ts
@@ -40,18 +54,23 @@ features:
       - kind: integration
         file: apps/api/test/integration/partner.integration.test.ts
         test: legt Partner mit Rollen und Anschrift an und meldet es
+        covers: [angelegt]
       - kind: integration
         file: apps/api/test/integration/partner.integration.test.ts
         test: lehnt doppelte Nummern und ungültige Angaben ab
+        covers: [gueltig, partner-exists]
       - kind: integration
         file: apps/api/test/integration/partner.integration.test.ts
         test: filtert nach Rolle, Aktivität und Suchbegriff
+        covers: [angelegt]
       - kind: integration
         file: apps/api/test/integration/partner.integration.test.ts
         test: ändert Stammdaten, meldet die geänderten Felder und deaktiviert
+        covers: [geaendert]
       - kind: web-e2e
         file: apps/web/e2e/seiten.spec.ts
         test: "Geschäftspartner: anlegen, im Auslagerauftrag verwenden, deaktivieren"
+        covers: [angelegt, geaendert]
     comparisons:
       openwms:
         status: nicht-einsehbar
@@ -76,6 +95,22 @@ features:
         text: "`POST /v1/outbound-orders` mit `customerCode` und optional `shipTo` (`name`, `street`, `postalCode`, `city`, `country`); der Auftrag liefert `customerCode` und `shipTo`."
     rules:
       - Partner unbekannt → 404 `PARTNER_NOT_FOUND`; deaktiviert → 409 `PARTNER_INACTIVE`; ohne Rolle Kunde → 409 `PARTNER_ROLE_MISSING`.
+    acceptance:
+      - id: lieferadresse
+        kind: effekt
+        text: Die Kundenanschrift wird als Lieferadresse in den Auslagerauftrag übernommen; einzelne Felder lassen sich überschreiben, Freitext-Kunden bleiben möglich.
+      - id: partner-not-found
+        kind: regel
+        text: Partner unbekannt → 404 `PARTNER_NOT_FOUND`.
+        code: PARTNER_NOT_FOUND
+      - id: partner-inactive
+        kind: regel
+        text: Deaktiviert → 409 `PARTNER_INACTIVE`.
+        code: PARTNER_INACTIVE
+      - id: partner-role-missing
+        kind: regel
+        text: Ohne Rolle Kunde → 409 `PARTNER_ROLE_MISSING`.
+        code: PARTNER_ROLE_MISSING
     dependsOn: [partner.stammdaten, auslagerung.auftrag]
     technical:
       components:
@@ -91,15 +126,19 @@ features:
       - kind: integration
         file: apps/api/test/integration/partner.integration.test.ts
         test: übernimmt die Kundenanschrift als Lieferadresse in den Auslagerauftrag
+        covers: [lieferadresse]
       - kind: integration
         file: apps/api/test/integration/partner.integration.test.ts
         test: lässt einzelne Felder der Lieferadresse überschreiben und Freitext-Kunden weiter zu
+        covers: [lieferadresse]
       - kind: integration
         file: apps/api/test/integration/partner.integration.test.ts
         test: verlangt die passende Rolle und einen aktiven Partner
+        covers: [partner-not-found, partner-inactive, partner-role-missing]
       - kind: web-e2e
         file: apps/web/e2e/seiten.spec.ts
         test: "Geschäftspartner: anlegen, im Auslagerauftrag verwenden, deaktivieren"
+        covers: [lieferadresse]
     comparisons:
       openwms:
         status: nicht-einsehbar
@@ -122,6 +161,22 @@ features:
         text: "`POST /v1/receiving-orders` mit `supplierCode`; das Avis liefert `supplierCode`."
     rules:
       - Gleiche Prüfungen wie beim Kunden (`PARTNER_NOT_FOUND`, `PARTNER_INACTIVE`, `PARTNER_ROLE_MISSING`).
+    acceptance:
+      - id: verknuepft
+        kind: effekt
+        text: Das Avis trägt den Lieferanten aus den Stammdaten.
+      - id: partner-not-found
+        kind: regel
+        text: Gleiche Prüfungen wie beim Kunden (`PARTNER_NOT_FOUND`, `PARTNER_INACTIVE`, `PARTNER_ROLE_MISSING`).
+        code: PARTNER_NOT_FOUND
+      - id: partner-inactive
+        kind: regel
+        text: Gleiche Prüfungen wie beim Kunden (`PARTNER_NOT_FOUND`, `PARTNER_INACTIVE`, `PARTNER_ROLE_MISSING`).
+        code: PARTNER_INACTIVE
+      - id: partner-role-missing
+        kind: regel
+        text: Gleiche Prüfungen wie beim Kunden (`PARTNER_NOT_FOUND`, `PARTNER_INACTIVE`, `PARTNER_ROLE_MISSING`).
+        code: PARTNER_ROLE_MISSING
     dependsOn: [partner.stammdaten, wareneingang.avis]
     technical:
       components:
@@ -136,9 +191,11 @@ features:
       - kind: integration
         file: apps/api/test/integration/partner.integration.test.ts
         test: verknüpft das Avis mit dem Lieferanten
+        covers: [verknuepft]
       - kind: integration
         file: apps/api/test/integration/partner.integration.test.ts
         test: verlangt die passende Rolle und einen aktiven Partner
+        covers: [partner-not-found, partner-inactive, partner-role-missing]
     comparisons:
       openwms:
         status: nicht-einsehbar

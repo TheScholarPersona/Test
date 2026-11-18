@@ -13,6 +13,10 @@ features:
     usage:
       - channel: api
         text: "`GET /v1/strategies`"
+    acceptance:
+      - id: beschrieben
+        kind: effekt
+        text: Die API beschreibt die Entscheidungspunkte mit ihren Feldern und Strategien samt Parametern, auch alle Auslagerstrategien.
     technical:
       components:
         - apps/api/src/modules/strategy/application/strategy-registry.ts
@@ -23,9 +27,11 @@ features:
       - kind: integration
         file: apps/api/test/integration/strategy.integration.test.ts
         test: beschreibt Entscheidungspunkte, Felder und Strategien
+        covers: [beschrieben]
       - kind: integration
         file: apps/api/test/integration/outbound.integration.test.ts
         test: listet den Entscheidungspunkt mit allen Auslagerstrategien
+        covers: [beschrieben]
     comparisons:
       openwms:
         status: neu
@@ -49,6 +55,18 @@ features:
       - Beim Speichern werden Felder, Operatoren, Werttypen, Strategien und Parameter vollständig geprüft (`RULE_SET_INVALID` mit Pfad).
       - Höchstens ein aktiver Regelsatz je Entscheidungspunkt, auch per Datenbank abgesichert.
       - Nur Entwürfe sind änderbar (`RULE_SET_NOT_DRAFT`).
+    acceptance:
+      - id: aktiviert
+        kind: effekt
+        text: Ein Entwurf wird gespeichert, einzeln mit allen Regeln gelesen und aktiviert; aktiv ist danach genau er.
+      - id: rule-set-invalid
+        kind: regel
+        text: Beim Speichern werden Felder, Operatoren, Werttypen, Strategien und Parameter vollständig geprüft (`RULE_SET_INVALID` mit Pfad).
+        code: RULE_SET_INVALID
+      - id: rule-set-not-draft
+        kind: regel
+        text: Nur Entwürfe sind änderbar (`RULE_SET_NOT_DRAFT`).
+        code: RULE_SET_NOT_DRAFT
     settings:
       - name: Regeln je Entscheidungspunkt
         description: Bedingung (`when`), Strategie und Parameter je Regel; Reihenfolge entscheidet.
@@ -72,14 +90,18 @@ features:
       - kind: integration
         file: apps/api/test/integration/strategy.integration.test.ts
         test: prüft Regelsätze vollständig beim Speichern
+        covers: [rule-set-invalid]
       - kind: integration
         file: apps/api/test/integration/strategy.integration.test.ts
         test: aktiviert den Entwurf; aktive Regelsätze sind unveränderlich
+        covers: [aktiviert, rule-set-not-draft]
       - kind: scenario
         id: putaway-strategy
+        covers: [aktiviert, rule-set-invalid]
       - kind: integration
         file: apps/api/test/integration/strategy.integration.test.ts
         test: liest einen Regelsatz einzeln mit allen Regeln
+        covers: [aktiviert]
     comparisons:
       openwms:
         status: neu
@@ -102,6 +124,16 @@ features:
     rules:
       - Operatoren `eq`, `neq`, `in`, `notIn`, `gt`, `gte`, `lt`, `lte`, `exists`; Verknüpfungen `all`, `any`, `not`, `always`.
       - Fehlende Fakten gelten als nicht erfüllt (außer bei `neq` und `notIn`).
+    acceptance:
+      - id: gewaehlt
+        kind: effekt
+        text: Die Regel wird nach Bedingungen gewählt – eine schwere TU landet auf dem Boden.
+      - id: exakt
+        kind: regel
+        text: Dezimalfelder werden exakt verglichen; `all` und `any` verknüpfen Bedingungen.
+      - id: schema
+        kind: regel
+        text: Unbekannte Schlüssel und Code-artige Inhalte werden schon im Schema abgelehnt.
     dependsOn: [strategien.regelsaetze]
     technical:
       components:
@@ -111,15 +143,23 @@ features:
       - kind: unit
         file: apps/api/test/unit/strategy/conditions.test.ts
         test: vergleicht Dezimalfelder exakt statt mit Gleitkomma
+        rationale: Eine Bedingung liefert einen Wahrheitswert; `toBe(true/false)` ist das fachliche Ergebnis.
+        covers: [exakt]
       - kind: unit
         file: apps/api/test/unit/strategy/conditions.test.ts
         test: kombiniert mit all und any
+        rationale: Eine Bedingung liefert einen Wahrheitswert; `toBe(true/false)` ist das fachliche Ergebnis.
+        covers: [exakt]
       - kind: unit
         file: apps/api/test/unit/strategy/conditions.test.ts
         test: lehnt unbekannte Schlüssel und Code-artige Inhalte schon im Schema ab
+        rationale: Die Ablehnung durch das Schema ist das fachliche Ergebnis.
+        covers: [schema]
       - kind: integration
         file: apps/api/test/integration/strategy.integration.test.ts
         test: wählt die Regel nach Bedingungen (schwere TU auf den Boden)
+        rationale: Prüft die Regelwahl über die Einlagerentscheidung; Bedingungen haben keinen eigenen Endpunkt.
+        covers: [gewaehlt]
     comparisons:
       openwms:
         status: neu
@@ -146,6 +186,30 @@ features:
       - Plätze mit Vergabesperre (`ALLOCATION_BLOCKED`) oder gemeldeter Anlagenstörung (`PLC_FAULT`) werden nicht vergeben.
       - Bei parallelen Entscheidungen wird jeder Platz nur einmal vergeben (`FOR UPDATE SKIP LOCKED`, bis zu 5 Versuche).
       - Wird kein Platz gefunden, erklärt die Begründung warum.
+    acceptance:
+      - id: entschieden
+        kind: effekt
+        text: Die Entscheidung wählt den besten freien Platz nach Vorrang, reserviert ihn auf Wunsch und speichert die Begründung.
+      - id: belegt
+        kind: effekt
+        text: Bereits zugewiesene TUs zählen als belegt.
+      - id: harte-regeln
+        kind: regel
+        text: Harte Regeln lassen sich nicht umgehen; findet sich kein Platz, erklärt die Begründung warum.
+      - id: parallel
+        kind: regel
+        text: Bei parallelen Entscheidungen wird jeder Platz nur einmal vergeben.
+      - id: aktiver-regelsatz
+        kind: regel
+        text: Ohne aktiven Regelsatz gibt es keine Entscheidung.
+      - id: allocation-blocked
+        kind: regel
+        text: Plätze mit Vergabesperre (`ALLOCATION_BLOCKED`) oder gemeldeter Anlagenstörung (`PLC_FAULT`) werden nicht vergeben.
+        code: ALLOCATION_BLOCKED
+      - id: plc-fault
+        kind: regel
+        text: Plätze mit Vergabesperre (`ALLOCATION_BLOCKED`) oder gemeldeter Anlagenstörung (`PLC_FAULT`) werden nicht vergeben.
+        code: PLC_FAULT
     settings:
       - name: Einlagerstrategie und Parameter
         description: "`first-free` oder `weighted` mit `group`, `includeSubgroups`, `weights` (sortOrder, emptiness, privilege je 0–10)."
@@ -166,23 +230,36 @@ features:
       - kind: integration
         file: apps/api/test/integration/strategy.integration.test.ts
         test: entscheidet, weist zu und speichert die Begründung
+        covers: [entschieden]
       - kind: integration
         file: apps/api/test/integration/strategy.integration.test.ts
         test: zählt bereits zugewiesene TUs als belegt
+        covers: [belegt]
       - kind: integration
         file: apps/api/test/integration/strategy.integration.test.ts
         test: kann harte Regeln nicht umgehen und erklärt, warum nichts gewählt wurde
+        covers: [harte-regeln]
       - kind: integration
         file: apps/api/test/integration/strategy.integration.test.ts
         test: vergibt bei parallelen Entscheidungen jeden Platz nur einmal
+        covers: [parallel]
       - kind: integration
         file: apps/api/test/integration/strategy.integration.test.ts
         test: verlangt einen aktiven Regelsatz
+        covers: [aktiver-regelsatz]
       - kind: unit
         file: apps/api/test/unit/strategy/putaway-ranking.test.ts
         test: "Vorrang: bevorzugt den Platztyp mit höherem privilegeLevel"
+        covers: [entschieden]
       - kind: scenario
         id: putaway-strategy
+        rationale: Das Szenario prüft den Entscheidungspunkt über die Simulation, die dieselbe Strategie ohne Zuweisung ausführt.
+        covers: [entschieden, allocation-blocked]
+      - kind: integration
+        file: apps/api/test/integration/strategy.integration.test.ts
+        test: vergibt keinen Platz, für den die Anlage eine Störung meldet
+        rationale: Prüft den Ausschluss gestörter Plätze über die Simulation, die dieselbe Strategie ohne Zuweisung ausführt.
+        covers: [plc-fault]
     comparisons:
       openwms:
         status: abweichend
@@ -201,6 +278,10 @@ features:
     usage:
       - channel: api
         text: "`POST /v1/putaway/simulations` mit `barcode`, optional `group` und `ruleSetId`."
+    acceptance:
+      - id: simuliert
+        kind: effekt
+        text: Die Simulation zeigt das Ergebnis eines Entwurfs an einer echten TU, ohne etwas zu speichern oder zuzuweisen.
     dependsOn: [strategien.einlagerplatz]
     technical:
       components:
@@ -211,11 +292,14 @@ features:
       - kind: integration
         file: apps/api/test/integration/strategy.integration.test.ts
         test: legt einen Entwurf an und simuliert ihn, ohne etwas zu speichern
+        covers: [simuliert]
       - kind: integration
         file: apps/api/test/integration/strategy.integration.test.ts
         test: prüft einen neuen Entwurf per Simulation, bevor er aktiv wird
+        covers: [simuliert]
       - kind: scenario
         id: putaway-strategy
+        covers: [simuliert]
     comparisons:
       openwms:
         status: neu
@@ -238,6 +322,33 @@ features:
     rules:
       - Harte Regeln `NOT_AVAILABLE`, `UNIT_NOT_AVAILABLE`, `SOURCE_OUTBOUND_BLOCKED`, `COUNT_IN_PROGRESS`, `REMAINING_SHELF_LIFE`.
       - Vor einer echten Entscheidung werden alle TUs des Produkts gesperrt; gleichzeitige Zuteilungen planen nie denselben Bestand.
+    acceptance:
+      - id: rangfolge
+        kind: effekt
+        text: FEFO nimmt das früheste MHD zuerst, „ganze TU“ möglichst ganze Posten; die Simulation begründet, ohne zu reservieren.
+      - id: fehlmenge
+        kind: effekt
+        text: Fehlmenge und Begründung werden gemeldet, ungeeignete Posten ignoriert.
+      - id: not-available
+        kind: regel
+        text: Harte Regeln `NOT_AVAILABLE`, `UNIT_NOT_AVAILABLE`, `SOURCE_OUTBOUND_BLOCKED`, `COUNT_IN_PROGRESS`, `REMAINING_SHELF_LIFE`.
+        code: NOT_AVAILABLE
+      - id: unit-not-available
+        kind: regel
+        text: Harte Regeln `NOT_AVAILABLE`, `UNIT_NOT_AVAILABLE`, `SOURCE_OUTBOUND_BLOCKED`, `COUNT_IN_PROGRESS`, `REMAINING_SHELF_LIFE`.
+        code: UNIT_NOT_AVAILABLE
+      - id: source-outbound-blocked
+        kind: regel
+        text: Harte Regeln `NOT_AVAILABLE`, `UNIT_NOT_AVAILABLE`, `SOURCE_OUTBOUND_BLOCKED`, `COUNT_IN_PROGRESS`, `REMAINING_SHELF_LIFE`.
+        code: SOURCE_OUTBOUND_BLOCKED
+      - id: count-in-progress
+        kind: regel
+        text: Harte Regeln `NOT_AVAILABLE`, `UNIT_NOT_AVAILABLE`, `SOURCE_OUTBOUND_BLOCKED`, `COUNT_IN_PROGRESS`, `REMAINING_SHELF_LIFE`.
+        code: COUNT_IN_PROGRESS
+      - id: remaining-shelf-life
+        kind: regel
+        text: Harte Regeln `NOT_AVAILABLE`, `UNIT_NOT_AVAILABLE`, `SOURCE_OUTBOUND_BLOCKED`, `COUNT_IN_PROGRESS`, `REMAINING_SHELF_LIFE`.
+        code: REMAINING_SHELF_LIFE
     settings:
       - name: Auslagerstrategie und Parameter
         description: "`fifo`, `fefo`, `lifo`, `partial-first`, `full-unit` mit `group`, `includeSubgroups`, `minRemainingDays`."
@@ -256,20 +367,30 @@ features:
       - kind: unit
         file: apps/api/test/unit/strategy/allocation-ranking.test.ts
         test: "FEFO: frühestes MHD zuerst, ohne MHD zuletzt"
+        covers: [rangfolge]
       - kind: unit
         file: apps/api/test/unit/strategy/allocation-ranking.test.ts
         test: "Ganze TU bevorzugen: möglichst ganze Posten, Rest vom kleinsten deckenden"
+        covers: [rangfolge]
       - kind: unit
         file: apps/api/test/unit/strategy/allocation-ranking.test.ts
         test: meldet Fehlmenge und Begründung, ignoriert ungeeignete Posten
+        covers: [fehlmenge, source-outbound-blocked]
       - kind: integration
         file: apps/api/test/integration/outbound.integration.test.ts
         test: simuliert mit Begründung, ohne zu reservieren
+        covers: [rangfolge, remaining-shelf-life]
       - kind: integration
         file: apps/api/test/integration/outbound.integration.test.ts
         test: teilt per FEFO mit Mindestrestlaufzeit zu und reserviert
+        covers: [rangfolge]
       - kind: scenario
         id: outbound-flow
+        covers: [rangfolge]
+      - kind: integration
+        file: apps/api/test/integration/outbound.integration.test.ts
+        test: nimmt keinen Bestand von gesperrten Plätzen, gesperrten TUs oder aus laufender Inventur
+        covers: [not-available, unit-not-available, source-outbound-blocked, count-in-progress]
     comparisons:
       openwms:
         status: erweitert
@@ -288,6 +409,10 @@ features:
     usage:
       - channel: api
         text: "`GET /v1/strategy-decisions?subject=<barcode>`, `GET /v1/strategy-decisions/{id}`"
+    acceptance:
+      - id: protokoll
+        kind: effekt
+        text: Gespeicherte Entscheidungen sind je TU mit Regel, Strategie, Fakten und Kandidaten abrufbar.
     dependsOn: [strategien.einlagerplatz]
     technical:
       components:
@@ -300,9 +425,11 @@ features:
       - kind: integration
         file: apps/api/test/integration/strategy.integration.test.ts
         test: listet gespeicherte Entscheidungen je TU
+        covers: [protokoll]
       - kind: integration
         file: apps/api/test/integration/strategy.integration.test.ts
         test: entscheidet, weist zu und speichert die Begründung
+        covers: [protokoll]
     comparisons:
       openwms:
         status: neu

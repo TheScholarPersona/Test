@@ -52,8 +52,12 @@ function main(): number {
   }
   const count = (level: Finding['level']) => analysis.findings.filter((f) => f.level === level).length;
   const proven = analysis.features.filter((f) => f.proof === 'nachgewiesen').length;
+  const partial = analysis.features.filter((f) => f.proof === 'teilweise').length;
+  const criteria = analysis.features.flatMap((f) => f.acceptance);
+  const belegt = criteria.filter((c) => c.status === 'nachgewiesen').length;
   console.log(
-    `\nKatalog: ${analysis.features.length} Features (${proven} im Testlauf nachgewiesen${reports ? '' : ' – ohne Testberichte nur statisch geprüft'}), ` +
+    `\nKatalog: ${analysis.features.length} Features (${proven} im Testlauf nachgewiesen${partial ? `, ${partial} teilweise` : ''}${reports ? '' : ' – ohne Testberichte nur statisch geprüft'}), ` +
+      `${criteria.length} Akzeptanzkriterien (${belegt} im Testlauf belegt), ` +
       `${analysis.review.length} im Prüfbestand. ${count('fehler')} Fehler, ${count('warnung')} Warnungen, ${count('hinweis')} Hinweise.`,
   );
   return count('fehler') > 0 ? 1 : 0;
