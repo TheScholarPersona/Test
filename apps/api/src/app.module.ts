@@ -14,6 +14,7 @@ import { ReceivingModule } from './modules/receiving/index.js';
 import { AuthModule } from './modules/auth/index.js';
 import { FlowModule } from './modules/flow/index.js';
 import { PartnerModule } from './modules/partner/index.js';
+import { ErpModule } from './modules/erp/index.js';
 import { DocumentsModule } from './modules/documents/index.js';
 import { ShippingModule } from './modules/shipping/index.js';
 import { OutboundModule } from './modules/outbound/index.js';
@@ -64,6 +65,7 @@ export class AppModule {
         OutboundModule,
         ShippingModule,
         DocumentsModule,
+        ErpModule,
         AuthModule,
         ...testModules,
       ],

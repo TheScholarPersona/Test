@@ -10,6 +10,7 @@ const STATE_QUERIES: { name: string; help: string; label: string; sql: string }[
   { name: 'wms_movements', help: 'Lagerbewegungen je Zustand (offen und in Arbeit)', label: 'state', sql: `select state as label, count(*) as n from movement where state in ('OPEN', 'IN_PROGRESS') group by state` },
   { name: 'wms_transport_orders', help: 'Transportaufträge je Zustand (nicht beendet)', label: 'state', sql: `select state as label, count(*) as n from transport_order where state not in ('FINISHED', 'CANCELED', 'CANCELLED') group by state` },
   { name: 'wms_shipments', help: 'Sendungen je Zustand', label: 'state', sql: `select state as label, count(*) as n from shipment group by state` },
+  { name: 'wms_erp_messages', help: 'ERP-Nachrichten je Richtung und Zustand', label: 'state', sql: `select direction || '/' || state as label, count(*) as n from erp_message group by direction, state` },
   { name: 'wms_transport_unit_errors_open', help: 'Offene Fehlermeldungen an TUs', label: 'state', sql: `select 'OPEN' as label, count(*) as n from transport_unit_error where resolved_at is null` },
 ];
 

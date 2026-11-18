@@ -8,6 +8,7 @@ import { receivingEntities } from './modules/receiving/index.js';
 import { authEntities } from './modules/auth/index.js';
 import { flowEntities } from './modules/flow/index.js';
 import { partnerEntities } from './modules/partner/index.js';
+import { erpEntities } from './modules/erp/index.js';
 import { shippingEntities } from './modules/shipping/index.js';
 import { outboundEntities } from './modules/outbound/index.js';
 import { transportOrderEntities } from './modules/transport-order/index.js';
@@ -15,7 +16,7 @@ import { strategyEntities } from './modules/strategy/index.js';
 import { transportEntities } from './modules/transport/index.js';
 
 /** Alle Entities der Anwendung; neue Fachmodule tragen ihre hier ein. */
-export const allEntities = [OutboxMessage, ...layoutEntities, ...transportEntities, ...strategyEntities, ...movementEntities, ...inventoryEntities, ...receivingEntities, ...transportOrderEntities, ...flowEntities, ...outboundEntities, ...authEntities, ...partnerEntities, ...shippingEntities];
+export const allEntities = [OutboxMessage, ...layoutEntities, ...transportEntities, ...strategyEntities, ...movementEntities, ...inventoryEntities, ...receivingEntities, ...transportOrderEntities, ...flowEntities, ...outboundEntities, ...authEntities, ...partnerEntities, ...shippingEntities, ...erpEntities];
 
 export function databaseOptions(config: Pick<AppConfig, 'databaseUrl'>) {
   return createOrmOptions(config, allEntities);

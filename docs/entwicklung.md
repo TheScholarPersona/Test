@@ -47,7 +47,7 @@ docker/                    Konfiguration für Hilfsdienste (Mosquitto)
 | `pnpm lint:deps` | Architekturregeln (dependency-cruiser, `.dependency-cruiser.cjs`) |
 | `pnpm test:integration` | Integrationstests; braucht Docker |
 | `pnpm env:init` | `.env` anlegen bzw. ergänzen; leere Passwörter und Tokens werden mit Zufallswerten gefüllt, vorhandene bleiben |
-| `pnpm stack:up` / `pnpm stack:down` | Umgebung mit API, PostgreSQL, Mosquitto, Node-RED (`stack:down` löscht die Daten) |
+| `pnpm stack:up` / `pnpm stack:down` | Umgebung mit API, PostgreSQL, Mosquitto, Node-RED (`stack:down` löscht die Daten; braucht keine vollständige `.env`) |
 | `pnpm demo:data` | Demo-Daten über die API anlegen (Lager, Bestand, Aufträge, Route; wiederholbar) |
 | `pnpm test:web` | Oberfläche im Browser testen (Playwright) gegen die laufende Umgebung |
 | `pnpm web:dev` | Entwicklungsserver der Oberfläche (Vite) gegen die laufende API |
@@ -504,6 +504,39 @@ Sendungen bündeln gepackte TUs eines Auslagerauftrags (`apps/api/src/modules/sh
 | stornieren | `POST …/{number}/cancel` `{ reason? }` | admin, leitstand | `OPEN`/`LOADED`; TUs und Bestand bleiben |
 
 Zustände `OPEN → LOADED → SHIPPED` (`CANCELLED`). Der Warenausgang läuft in einer Transaktion; die Löschprüfungen der TUs (laufende Bewegungen, Transportaufträge, Inventur, Bestand) sehen dabei die Buchungen derselben Transaktion. Events: `shipment.created`, `shipment.changed` (`change`: `unit-added`, `unit-removed`, `unit-loaded`, `loaded`, `cancelled`), `shipment.shipped` mit Inhalt (`packages/shared/src/shipping-events.ts`).
+
+## Modul ERP-Anbindung (`/v1/erp`)
+
+Das WMS spricht mit dem ERP nur im **kanonischen JSON-Format** (`packages/shared/src/erp.ts`). Node-RED übersetzt konkrete Formate (JSON-Webhook, CSV, SAP IDoc) in dieses Format und zurück. Alle Nachrichten stehen im Protokoll (`erp_message`, Seite **ERP**).
+
+**Eingang** `POST /v1/erp/inbound` (Service-Token mit Rolle admin):
+
+```json
+{ "messageId": "ORDERS-0000815", "type": "outbound-order", "action": "create",
+  "data": { "orderId": "K-4711", "customerCode": "K-1000", "target": "VS-01",
+            "lines": [ { "sku": "MILCH-1L", "quantity": { "amount": "2", "unit": "KAR" } } ] } }
+```
+
+| `type` | `action` | Wirkung |
+|---|---|---|
+| `product` | `upsert` | Artikel anlegen oder Beschreibung, Basiseinheit, Überlieferung und Einheiten aktualisieren |
+| `receiving-order` | `create` / `cancel` | Avis mit Mengenpositionen (Priorität, Attribute, Lieferant) anlegen bzw. stornieren |
+| `outbound-order` | `create` / `cancel` | Auslagerauftrag (Kunde, Packplatz als ERP-Code des Platzes, Lieferadresse) anlegen bzw. stornieren |
+
+Dieselbe `messageId` wird nur einmal verarbeitet (Antwort `duplicate: true` mit dem Ergebnis von damals). Formal ungültige Nachrichten → 400 ohne Protokoll; fachliche Fehler → `state: FAILED` mit `lastError` (z. B. `PRODUCT_NOT_FOUND: …`) und Event `erp-message.failed`.
+
+**Ausgang** (nur mit `ERP_EXPORT_ENABLED=true`): Rückmeldungen entstehen über einen Haken an der Outbox in derselben Transaktion wie die Buchung.
+
+| Nachricht | entsteht aus |
+|---|---|
+| `goods-receipt` | Erfassung im Wareneingang (mit Avis-Bezug oder `blind`) |
+| `goods-issue` | Sendung ausgeliefert (alle TUs mit Inhalt) oder Pick ohne Versand ausgebucht |
+| `stock-change` | Korrektur (auch Inventurdifferenz) oder sonstiger Abgang |
+| `stock-snapshot` | `POST /v1/erp/stock-snapshots` (Leitstand oder zeitgesteuert aus Node-RED) |
+
+Zustellung: `POST /v1/erp/outbound/claim?limit=50&type=…` holt fällige Nachrichten (älteste zuerst, `FOR UPDATE SKIP LOCKED`), dann je Nachricht `POST /v1/erp/messages/{id}/ack` `{ erpReference? }` oder `…/nack` `{ error }`. Wiederholung nach 30 s, 1 min, 2 min … höchstens 1 h; ohne Quittung gilt die Abholung nach 5 min als Fehlversuch. Nach `ERP_MAX_ATTEMPTS` (Standard 10) ist die Nachricht `FAILED` (Event `erp-message.failed`). `POST /v1/erp/messages/{id}/retry` (Leitstand) verarbeitet einen fehlgeschlagenen Eingang neu bzw. stellt einen Ausgang wieder bereit.
+
+Protokoll: `GET /v1/erp/messages?direction=IN|OUT&state=FAILED&type=…&reference=…`, `GET /v1/erp/counts`; Kennzahl `wms_erp_messages{state="OUT/PENDING"}`.
 
 ## Modul Dokumente (`/v1/documents`)
 

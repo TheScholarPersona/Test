@@ -19,6 +19,8 @@ export function summarize(type: string, p: Record<string, any>): string {
       return `${p.number}: ${p.change}${p.barcode ? ` ${p.barcode}` : ''}`;
     case 'shipment.shipped':
       return `${p.number} ausgeliefert (${(p.units ?? []).length} TUs)`;
+    case 'erp-message.failed':
+      return `${p.direction === 'IN' ? 'Eingang' : 'Ausgang'} ${p.type}${p.reference ? ` ${p.reference}` : ''}: ${p.error}`;
     case 'partner.created':
       return `${p.code} ${p.name}`;
     case 'partner.changed':

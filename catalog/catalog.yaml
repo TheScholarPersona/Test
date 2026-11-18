@@ -236,6 +236,25 @@ areas:
         title: Testautomatisierung
         summary: Abläufe automatisch gegen die laufende Umgebung prüfen.
 
+  - id: erp
+    title: ERP-Anbindung
+    summary: Artikel, Avise und Aufträge aus dem ERP übernehmen und Wareneingang, Warenausgang und Bestand zurückmelden – protokolliert und mit Wiederholung.
+    status: katalogisiert
+    owns:
+      endpoints: [/v1/erp]
+      events: [erp-message]
+      uiRoutes: [/erp]
+    groups:
+      - id: erp.eingang
+        title: Eingang (ERP → WMS)
+        summary: Stammdaten und Aufträge übernehmen.
+      - id: erp.ausgang
+        title: Ausgang (WMS → ERP)
+        summary: Rückmeldungen erzeugen und zustellen.
+      - id: erp.betrieb
+        title: Protokoll und Fehler
+        summary: Nachrichten nachvollziehen und erneut anstoßen.
+
   - id: oberflaeche
     title: Bedienoberfläche
     summary: Leitstand am Desktop und Scanner-Ansicht im Handyformat als gemeinsamer Rahmen der Fachfunktionen.

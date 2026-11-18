@@ -22,12 +22,12 @@ const KEEP = 200;
 export function affectedQueries(type: string): string[] {
   const area = type.split('.')[0] ?? '';
   const map: Record<string, string[]> = {
-    stock: ['stock', 'overview'],
+    stock: ['stock', 'overview', 'erp'],
     'stock-count': ['stock', 'counts'],
     product: ['products'],
     'receiving-order': ['receiving', 'overview'],
     'receiving-position': ['receiving'],
-    receiving: ['receiving', 'stock', 'units'],
+    receiving: ['receiving', 'stock', 'units', 'erp'],
     'outbound-order': ['outbound', 'overview'],
     'outbound-pick': ['outbound', 'picks', 'stock'],
     allocation: ['outbound'],
@@ -35,7 +35,8 @@ export function affectedQueries(type: string): string[] {
     movement: ['movements', 'movement-groups', 'overview', 'units'],
     'movement-group': ['movement-groups', 'movements'],
     partner: ['partners'],
-    shipment: ['shipments'],
+    shipment: ['shipments', 'erp'],
+    'erp-message': ['erp'],
     'transport-unit': ['units', 'stock', 'locations'],
     location: ['locations'],
     'location-group': ['locations'],

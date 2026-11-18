@@ -386,6 +386,14 @@ export class InventoryService implements OnModuleInit {
     return new Map(products.map((p) => [p.sku, p.description]));
   }
 
+  /** Gesamtbestand je Artikel und Charge in der Basiseinheit (z. B. für den Abgleich mit dem ERP). */
+  async stockTotals(em: EntityManager): Promise<{ sku: string; lot: string | null; quantity: QuantityDto }[]> {
+    const rows = await em.getConnection().execute<{ sku: string; lot: string | null; unit: string; amount: string }[]>(
+      `select p.sku, s.lot, s.unit_code as unit, sum(s.quantity)::text as amount from stock_item s join product p on p.id = s.product_id group by p.sku, s.lot, s.unit_code order by p.sku, s.lot nulls first`,
+    );
+    return rows.map((r) => ({ sku: r.sku, lot: r.lot, quantity: Quantity.of(normalizeDecimal(r.amount), r.unit).toDto() }));
+  }
+
   /** Liegt Bestand auf der TU? */
   async hasStockIn(em: EntityManager, unitId: string): Promise<boolean> {
     return (await em.count(StockItem, { unit: unitId })) > 0;
