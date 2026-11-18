@@ -31,11 +31,12 @@ jobs:
       - run: pnpm build
       - run: pnpm typecheck
       - run: pnpm lint:deps
-      - name: Unit-Tests (API und Node-RED-Nodes mit JUnit-Bericht für den Feature-Katalog)
+      - name: Unit-Tests (API, Node-RED-Nodes und Feature-Katalog mit JUnit-Bericht für den Feature-Katalog)
         run: |
           pnpm --filter @wms/api test --reporter=default --reporter=junit --outputFile.junit=../../reports/api-unit-junit.xml
           pnpm --filter @wms/node-red-nodes test --reporter=default --reporter=junit --outputFile.junit=../../reports/nodes-unit-junit.xml
-          pnpm -r --filter '!@wms/api' --filter '!@wms/node-red-nodes' test
+          pnpm --filter @wms/feature-catalog test --reporter=default --reporter=junit --outputFile.junit=../../reports/catalog-unit-junit.xml
+          pnpm -r --filter '!@wms/api' --filter '!@wms/node-red-nodes' --filter '!@wms/feature-catalog' test
       - name: Integrationstests (Testcontainers mit PostgreSQL und Mosquitto)
         run: pnpm test:integration --reporter=default --reporter=junit --outputFile.junit=../../reports/api-integration-junit.xml
       - name: Feature-Katalog statisch prüfen
@@ -49,6 +50,7 @@ jobs:
             reports/api-integration-junit.xml
             reports/api-unit-junit.xml
             reports/nodes-unit-junit.xml
+            reports/catalog-unit-junit.xml
           if-no-files-found: warn
 
   e2e:

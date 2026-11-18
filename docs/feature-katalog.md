@@ -53,7 +53,8 @@ Fachliche Module der API (`apps/api/src/modules/*`): layout, transport, strategy
 | Auslagerung | `/v1/outbound-…`, `/auslagerung` |
 | Integration und Automatisierung | `/v1/events`, `/test`, `system`-Ereignisse, übrige Node-RED-Nodes, `/ereignisse` |
 | Bedienoberfläche | `/`, `/scanner/*` |
-| Sicherheit und Betrieb | `/v1/auth`, `/v1/users`, `/health`, `/konto`, `/benutzer` |
+| Sicherheit und Betrieb | `/v1/auth`, `/v1/users`, `/health`, `/metrics`, `/konto`, `/benutzer` |
+| Feature-Katalog | der Katalog selbst (keine Bestandteile der Applikation; Bedienweg `entwicklung`) |
 
 **Zuschnitt eines Features:** eine Fähigkeit, die ein Anwender oder System als Ganzes nutzt („Bestand reservieren und freigeben“), nicht ein einzelner Endpunkt. Ein Feature bündelt die dafür nötigen Endpunkte, Ereignisse, Seiten und Nodes. Auch Qualitätsmerkmale mit fachlicher Wirkung sind Features („Sichere Buchungen bei gleichzeitigem Zugriff“). Mehrere Features dürfen denselben Bestandteil nennen.
 
@@ -66,7 +67,7 @@ Ein Eintrag (Katalog und Prüfbestand haben denselben Aufbau; Schema: `packages/
 | `id` | – | stabile Kennung `<bereich>.<name>`; wird nie wiederverwendet |
 | `title`, `summary` | fachlich | Name und Nutzen in einem Satz |
 | `description` | fachlich | was die Funktion leistet |
-| `usage[]` | fachlich | Bedienung je Bedienweg: `leitstand`, `scanner`, `api`, `node-red`, `mqtt` |
+| `usage[]` | fachlich | Bedienung je Bedienweg: `leitstand`, `scanner`, `api`, `node-red`, `mqtt`, `entwicklung` (Kommandozeile und CI) |
 | `rules[]` | fachlich | Regeln und Grenzen (mit Fehlercodes) |
 | `settings[]` | fachlich | was sich einstellen lässt und wo |
 | `dependsOn[]` | fachlich | vorausgesetzte Features (umgekehrt zeigt die Ansicht „Grundlage für“) |
@@ -103,7 +104,7 @@ Ein Eintrag (Katalog und Prüfbestand haben denselben Aufbau; Schema: `packages/
 
 Die Prüfung **legt nie Features an**. Sie meldet, was zugeordnet werden muss; ob daraus ein neues Feature, eine Erweiterung eines bestehenden, ein Prüfbestand-Eintrag oder eine begründete Ausnahme (`exclusions` in `catalog.yaml`) wird, entscheidet ein Mensch.
 
-**In der CI:** Der Job *verify* prüft statisch (der Katalogtest läuft mit den Unit-Tests, dazu `pnpm catalog:check`) und sichert die JUnit-Berichte der Unit-Tests (API, Node-RED-Nodes) und der Integrationstests. Der Job *Feature-Katalog* läuft nach *verify* und *e2e*, holt alle JUnit-Berichte (Unit-, Integrations-, Szenario- und Browser-Tests), prüft jedes Katalog-Feature gegen die Ergebnisse und legt die Ansicht als Artefakt `feature-katalog` ab.
+**In der CI:** Der Job *verify* prüft statisch (der Katalogtest läuft mit den Unit-Tests, dazu `pnpm catalog:check`) und sichert die JUnit-Berichte der Unit-Tests (API, Node-RED-Nodes, Feature-Katalog) und der Integrationstests. Der Katalog beschreibt sich selbst im Bereich „Feature-Katalog“; seine eigenen Tests sind die Nachweise. Der Job *Feature-Katalog* läuft nach *verify* und *e2e*, holt alle JUnit-Berichte (Unit-, Integrations-, Szenario- und Browser-Tests), prüft jedes Katalog-Feature gegen die Ergebnisse und legt die Ansicht als Artefakt `feature-katalog` ab.
 
 ## 5. Pflege
 
@@ -118,7 +119,7 @@ Die Prüfung **legt nie Features an**. Sie meldet, was zugeordnet werden muss; o
 
 ## 6. Stand der Bestandsaufnahme
 
-Alle 16 Bereiche sind katalogisiert (`status: katalogisiert`); jeder erkannte Bestandteil ist einem Feature zugeordnet. Mit den Testberichten aller Testarten (Unit, Integration, Node-RED-Szenarien, MQTT-Sicherheit, Browser) sind **alle 95 Features im Testlauf nachgewiesen; der Prüfbestand ist leer**.
+Alle 17 Bereiche sind katalogisiert (`status: katalogisiert`); jeder erkannte Bestandteil ist einem Feature zugeordnet. Mit den Testberichten aller Testarten (Unit, Integration, Node-RED-Szenarien, MQTT-Sicherheit, Browser) sind **alle 100 Features im Testlauf nachgewiesen; der Prüfbestand ist leer**.
 
 | Bereich | Features | Erkannte Bestandteile |
 |---|---|---|
@@ -135,10 +136,11 @@ Alle 16 Bereiche sind katalogisiert (`status: katalogisiert`); jeder erkannte Be
 | Dokumente und Druck | 3 | 5 |
 | Geschäftspartner | 3 | 7 |
 | ERP-Anbindung | 6 | 15 |
+| Feature-Katalog | 5 | – |
 | Integration und Automatisierung | 7 | 11 |
 | Bedienoberfläche | 5 | 2 |
 | Sicherheit und Betrieb | 11 | 12 |
-| **Summe** | **95** | **267** |
+| **Summe** | **100** | **267** |
 
 **Festlegungen** (Produktentscheidung nach dem Pilot):
 
@@ -159,7 +161,7 @@ Grundlage ist die Analyse der öffentlichen OpenWMS-Repositories (`docs/openwms-
 | gleichwertig | kann dasselbe | 12 |
 | erweitert | kann mehr (z. B. durchgesetzte Platzierungsregeln, die OpenWMS nur speichert) | 17 |
 | eingeschränkt | kann weniger | 2 |
-| neu | in OpenWMS nicht vorhanden (Regelwerk, Simulation, Node-RED, Szenario-Tests, Outbox-Aufbewahrung, ERP-Bausteine) | 15 |
+| neu | in OpenWMS nicht vorhanden (Regelwerk, Simulation, Node-RED, Szenario-Tests, Outbox-Aufbewahrung, ERP-Bausteine, Feature-Katalog) | 20 |
 | abweichend | gleicher Zweck, anderer Ansatz (Programme statt BPMN, MQTT-Outbox statt AMQP, OpenAPI statt HATEOAS) | 6 |
 | nicht einsehbar | Gegenstück nur in privaten Teilen (Inventory, Picking, Shipping, Printing, Partner, ERP-Adapter, Oberflächen, Identitätsdienst) | 43 |
 

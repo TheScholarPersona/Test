@@ -16,7 +16,8 @@ const Id = z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*(\.[a-z0-9]+(-[a-z0-9]+)*)*$
 const Text = z.string().trim().min(1);
 
 /** Bedienwege, über die eine Funktion erreichbar ist. */
-export const CHANNELS = ['leitstand', 'scanner', 'api', 'node-red', 'mqtt'] as const;
+/** Bedienwege; `entwicklung` = Kommandozeile und CI (z. B. der Katalog selbst). */
+export const CHANNELS = ['leitstand', 'scanner', 'api', 'node-red', 'mqtt', 'entwicklung'] as const;
 export const Channel = z.enum(CHANNELS);
 
 /** Endpunkt wie in OpenAPI: `METHODE /pfad/{parameter}`. */
