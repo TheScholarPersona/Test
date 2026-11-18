@@ -4,7 +4,7 @@
   const data = JSON.parse(document.getElementById('catalog-data').textContent);
   const $ = (id) => document.getElementById(id);
 
-  const CHANNELS = { leitstand: 'Leitstand', scanner: 'Scanner', api: 'API', 'node-red': 'Node-RED', mqtt: 'MQTT' };
+  const CHANNELS = { leitstand: 'Leitstand', scanner: 'Scanner', api: 'API', 'node-red': 'Node-RED', mqtt: 'MQTT', entwicklung: 'Entwicklung (CLI, CI)' };
   const ROLES = ['admin', 'leitstand', 'lager', 'anlage', 'lesen'];
   const PROOF = {
     nachgewiesen: ['ok', 'nachgewiesen', 'Alle Nachweise haben im letzten Testlauf bestanden'],

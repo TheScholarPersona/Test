@@ -1,0 +1,189 @@
+# Feature-Katalog – Bereich Feature-Katalog (der Katalog beschreibt sich selbst).
+area: katalog
+
+features:
+  - id: katalog.datenmodell
+    title: Funktionen als geprüfte Daten beschreiben
+    group: katalog.pflege
+    summary: Beschreibt jede Funktion des WMS als Eintrag in YAML – fachlich für das Produktteam, technisch für die Entwicklung – mit festem Schema und Prüfbestand für noch nicht Nachgewiesenes.
+    description: |
+      Die Single Source of Truth liegt im Repository: `catalog/catalog.yaml` (Bereiche, Gruppen, Zuständigkeit für
+      Endpunkte, Ereignisse, Seiten und Node-RED-Nodes, Vergleichssysteme, Ausnahmen), `catalog/features/<bereich>.yaml`
+      (ein Feature je nutzbarer Fähigkeit), `catalog/review.yaml` (Prüfbestand) und `catalog/comparisons/<system>.yaml`
+      (Lücken). Jedes Feature hat eine fachliche Ebene (Zusammenfassung, Beschreibung, Bedienwege, Regeln, Abhängigkeiten)
+      und eine technische (Komponenten, Endpunkte, Ereignisse, Seiten, Nodes, Hinweise) sowie Nachweise. Ein Zod-Schema
+      prüft Aufbau und Verweise (Gruppen, Abhängigkeiten, Dateien, Tests, Szenarien).
+    usage:
+      - channel: entwicklung
+        text: "YAML unter `catalog/` bearbeiten, dann `pnpm catalog:check`; Regeln und Ablauf in `docs/feature-katalog.md`."
+    rules:
+      - Nur nachgewiesene Funktionen stehen im Katalog; alles andere im Prüfbestand.
+      - Ein Feature braucht mindestens einen Nachweis (Unit-, Integrations-, Browser-Test oder Node-RED-Szenario).
+      - Die Anwendung ändert sich durch den Katalog nicht.
+    technical:
+      components:
+        - catalog/catalog.yaml
+        - catalog/features
+        - catalog/review.yaml
+        - packages/feature-catalog/src/schema.ts
+        - packages/feature-catalog/src/cli.ts
+      notes:
+        - Bedienweg `entwicklung` steht für Kommandozeile und CI.
+    evidence:
+      - kind: unit
+        file: packages/feature-catalog/test/catalog.test.ts
+        test: hat keine Fehler
+      - kind: unit
+        file: packages/feature-catalog/test/catalog.test.ts
+        test: verlangt für Katalog-Features mindestens einen Nachweis
+      - kind: unit
+        file: packages/feature-catalog/test/catalog.test.ts
+        test: "meldet Verweise auf Entferntes: Endpunkt, Ereignis, Test, Szenario, Quelle"
+    comparisons:
+      openwms:
+        status: neu
+        note: OpenWMS beschreibt seine Funktionen in Projektseiten und README-Dateien, nicht als geprüften Katalog.
+        refs:
+          - Analyse 1.1
+
+  - id: katalog.abgleich
+    title: Abgleich mit dem Code
+    group: katalog.pruefung
+    summary: Erkennt automatisch alle Endpunkte, Ereignisse, Seiten und Node-RED-Nodes und meldet, was keinem Feature zugeordnet ist – legt selbst aber nie Features an.
+    description: |
+      Die Prüfung liest die API-Beschreibung (OpenAPI), die Ereignisdefinitionen, die Routen der Oberfläche und die
+      Node-RED-Nodes und ordnet jeden Bestandteil über `owns` einem Bereich zu. In katalogisierten Bereichen ist ein
+      Bestandteil ohne Feature, Prüfbestand-Eintrag oder Ausnahme ein Fehler. Sie erkennt außerdem, ob ein Test einen
+      Endpunkt aufruft, und leitet die Rollen eines Features aus der Rechtetabelle der API ab.
+    usage:
+      - channel: entwicklung
+        text: "`pnpm catalog:check` – Fehler, Warnungen und Hinweise je Datei; in der CI als Schritt „Feature-Katalog statisch prüfen“."
+    rules:
+      - Meldet nur; neue Features legt immer ein Mensch an.
+      - Verweise auf Entferntes (Endpunkt, Ereignis, Test, Szenario, Quelldatei) sind Fehler.
+    dependsOn: [katalog.datenmodell]
+    technical:
+      components:
+        - packages/feature-catalog/src/discover.ts
+        - packages/feature-catalog/src/analyze.ts
+        - packages/feature-catalog/src/roles.ts
+    evidence:
+      - kind: unit
+        file: packages/feature-catalog/test/catalog.test.ts
+        test: ordnet jeden erkannten Bestandteil einem Bereich zu
+      - kind: unit
+        file: packages/feature-catalog/test/catalog.test.ts
+        test: meldet nicht zugeordnete Bestandteile nur in katalogisierten Bereichen als Fehler
+      - kind: unit
+        file: packages/feature-catalog/test/catalog.test.ts
+        test: legt nie selbst Features an, sondern meldet nur
+      - kind: unit
+        file: packages/feature-catalog/test/catalog.test.ts
+        test: warnt, wenn kein Test einen Endpunkt eines Features erkennbar aufruft
+      - kind: unit
+        file: packages/feature-catalog/test/catalog.test.ts
+        test: erkennt Aufrufe mit Methode und Parametern, nicht aber bloße Pfadlisten
+      - kind: unit
+        file: packages/feature-catalog/test/catalog.test.ts
+        test: leitet Rollen aus der Rechtetabelle der API ab
+    comparisons:
+      openwms:
+        status: neu
+        note: In OpenWMS gibt es keinen automatischen Abgleich zwischen Funktionsbeschreibung und Code.
+        refs:
+          - Analyse 1.1
+
+  - id: katalog.nachweise
+    title: Nachweise im Testlauf
+    group: katalog.pruefung
+    summary: Prüft in der CI jedes Feature gegen die Testberichte aller Testarten – ein Feature gilt erst als nachgewiesen, wenn seine Tests im Lauf bestanden haben.
+    description: |
+      Mit `--reports` liest die Prüfung die JUnit-Berichte der Unit-, Integrations- und Browser-Tests und der
+      Node-RED-Szenarien und ordnet sie den Nachweisen zu. Fehlgeschlagene, übersprungene oder fehlende Nachweise
+      werden je Feature gekennzeichnet und lassen den CI-Schritt „Feature-Katalog gegen die Testergebnisse prüfen“
+      scheitern.
+    usage:
+      - channel: entwicklung
+        text: "`pnpm catalog:check --reports reports` nach den Testläufen; in der CI im eigenen Job mit allen Testberichten."
+    rules:
+      - Übersprungen gilt nicht als nachgewiesen.
+    dependsOn: [katalog.datenmodell, integration.szenario-tests]
+    technical:
+      components:
+        - packages/feature-catalog/src/junit.ts
+        - packages/feature-catalog/src/analyze.ts
+        - .github/workflows/ci.yml
+    evidence:
+      - kind: unit
+        file: packages/feature-catalog/test/catalog.test.ts
+        test: kennzeichnet Features, deren Nachweis im Testlauf fehlschlägt oder fehlt
+      - kind: unit
+        file: packages/feature-catalog/test/catalog.test.ts
+        test: ordnet Szenarien und Browser-Tests ihren Berichten zu
+    comparisons:
+      openwms:
+        status: neu
+        note: OpenWMS verknüpft Funktionsbeschreibungen nicht mit Testergebnissen.
+        refs:
+          - Analyse 1.1
+
+  - id: katalog.ansicht
+    title: Interaktive Katalog-Ansicht
+    group: katalog.ansicht
+    summary: Erzeugt aus denselben Daten eine eigenständige HTML-Seite mit Suche, Filtern nach Bereich, Rolle, Bedienweg, Nachweis und Einstufung, Gruppen-Navigation und aufklappbaren technischen Details.
+    description: |
+      `pnpm catalog:build` schreibt `catalog/dist/index.html` (eine Datei ohne Server) und `catalog.json`. Die Ansicht
+      zeigt je Bereich die Gruppen und Features mit Nachweisstatus, fachlicher Beschreibung und – aufklappbar – den
+      technischen Teil. Die CI legt die Ansicht als Artefakt „feature-katalog“ zum jeweiligen Stand ab.
+    usage:
+      - channel: entwicklung
+        text: "`pnpm catalog:build --reports reports`, dann `catalog/dist/index.html` im Browser öffnen; oder das CI-Artefakt herunterladen."
+    dependsOn: [katalog.datenmodell, katalog.nachweise]
+    technical:
+      components:
+        - packages/feature-catalog/src/build.ts
+        - packages/feature-catalog/viewer/index.html
+        - packages/feature-catalog/viewer/app.js
+    evidence:
+      - kind: unit
+        file: packages/feature-catalog/test/catalog.test.ts
+        test: erzeugt eine eigenständige Ansicht aus denselben Daten
+    comparisons:
+      openwms:
+        status: neu
+        note: Für OpenWMS gibt es keine vergleichbare durchsuchbare Funktionsübersicht.
+        refs:
+          - Analyse 1.1
+
+  - id: katalog.vergleich
+    title: Vergleich mit anderen Systemen
+    group: katalog.ansicht
+    summary: Stuft jedes Feature gegenüber einem Vergleichssystem ein (gleichwertig, erweitert, eingeschränkt, neu, abweichend, nicht einsehbar) und führt die Lücken des Vergleichssystems.
+    description: |
+      Vergleichssysteme stehen unter `systems` in `catalog.yaml`; mit `complete: true` verlangt die Prüfung für jedes
+      Feature eine Einstufung. Fähigkeiten des Vergleichssystems, die fehlen, stehen mit Status (fehlt, teilweise,
+      bewusst weggelassen), Quelle und verwandten Features in `catalog/comparisons/<system>.yaml`. Die Ansicht zeigt
+      den Vergleich im Reiter „Vergleich“.
+    usage:
+      - channel: entwicklung
+        text: "Einstufung unter `comparisons.<system>` am Feature, Lücken in `catalog/comparisons/<system>.yaml`; Reiter **Vergleich** in der Ansicht."
+    rules:
+      - Neue Features ohne Einstufung lassen die Prüfung scheitern (`COMPARISON_MISSING`).
+    dependsOn: [katalog.datenmodell]
+    technical:
+      components:
+        - catalog/comparisons/openwms.yaml
+        - packages/feature-catalog/src/analyze.ts
+    evidence:
+      - kind: unit
+        file: packages/feature-catalog/test/catalog.test.ts
+        test: verlangt bei vollständigem Vergleich eine Einstufung für jedes Feature
+      - kind: unit
+        file: packages/feature-catalog/test/catalog.test.ts
+        test: meldet unbekannte Systeme und Lücken mit falschen Verweisen
+    comparisons:
+      openwms:
+        status: neu
+        note: Der Vergleich ist ein Werkzeug dieses Projekts.
+        refs:
+          - Analyse 1.1

@@ -297,6 +297,22 @@ areas:
         title: Betrieb
         summary: Betriebszustand und Datenbank.
 
+  - id: katalog
+    title: Feature-Katalog
+    summary: Dieser Katalog selbst – Funktionen als geprüfte Daten beschreiben, gegen Code und Tests abgleichen und durchsuchbar darstellen.
+    status: katalogisiert
+    owns: {}
+    groups:
+      - id: katalog.pflege
+        title: Datenmodell und Pflege
+        summary: Features, Prüfbestand und Ausnahmen als YAML mit festem Schema.
+      - id: katalog.pruefung
+        title: Abgleich mit Code und Tests
+        summary: Erkennt Bestandteile, findet Lücken und prüft Nachweise im Testlauf.
+      - id: katalog.ansicht
+        title: Ansicht und Vergleich
+        summary: Interaktive Übersicht und Vergleich mit anderen Systemen.
+
 # Vergleichssysteme. Jedes Feature trägt unter `comparisons.<id>` seine Einstufung; Fähigkeiten des
 # Vergleichssystems, die bei uns fehlen, stehen in catalog/comparisons/<id>.yaml.
 systems:
