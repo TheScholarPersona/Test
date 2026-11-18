@@ -28,6 +28,8 @@ export interface StartProblem {
   details?: Record<string, unknown>;
 }
 
+/** So viele Probleme behält die Historie eines Auftrags. */
+const PROBLEM_HISTORY = 50;
 type StartOutcome = { started: true } | { started: false; problem: StartProblem };
 
 const CLAIM = 'transport-order';
@@ -387,6 +389,7 @@ export class TransportOrderService implements OnModuleInit {
     order.problemCode = problem.code;
     order.problemMessage = problem.message.slice(0, 500);
     order.problemAt = new Date();
+    order.problems = [...(order.problems ?? []), { code: order.problemCode, message: order.problemMessage, at: order.problemAt.toISOString() }].slice(-PROBLEM_HISTORY);
   }
 
   private clearProblem(order: TransportOrder): void {

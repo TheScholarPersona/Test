@@ -3793,6 +3793,29 @@
               "at"
             ]
           },
+          "problems": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "at": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              },
+              "required": [
+                "code",
+                "message",
+                "at"
+              ]
+            }
+          },
           "startedAt": {
             "type": [
               "string",
@@ -3883,6 +3906,7 @@
           "decisionId",
           "initiator",
           "problem",
+          "problems",
           "startedAt",
           "finished",
           "ended",

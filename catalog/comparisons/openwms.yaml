@@ -35,16 +35,6 @@ gaps:
     refs: [Analyse 3.7 TimeTriggeredWorkflowExecutor]
     related: [materialfluss.node-red-programme, transportauftraege.anlegen-starten]
 
-  - id: openwms.problemhistorie
-    title: Problemhistorie von Transportaufträgen
-    area: transportauftraege
-    summary: Alle Probleme eines Auftrags über die Zeit nachvollziehen, nicht nur das aktuelle.
-    status: teilweise
-    source: oss
-    note: Der aktuelle Grund (problem) und die Ereignisse sind vorhanden; eine abfragbare Historie je Auftrag nicht.
-    refs: [Analyse 2.1 ProblemHistory]
-    related: [transportauftraege.ablauf]
-
   - id: openwms.metriken-tracing
     title: Metriken und verteiltes Tracing
     area: sicherheit

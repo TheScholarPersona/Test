@@ -22,6 +22,7 @@ export function toTransportOrderDto(o: TransportOrder): TransportOrderDto {
     decisionId: o.decisionId ?? null,
     initiator: o.initiator ?? null,
     problem: o.problemCode && o.problemAt ? { code: o.problemCode, message: o.problemMessage ?? '', at: o.problemAt.toISOString() } : null,
+    problems: o.problems ?? [],
     startedAt: o.startedAt?.toISOString() ?? null,
     finished: o.finishedAt && o.finishedCoordinate ? { at: o.finishedAt.toISOString(), locationId: o.finishedCoordinate, deviated: o.deviated } : null,
     ended: o.endedAt ? { at: o.endedAt.toISOString(), reason: o.endReason ?? null } : null,

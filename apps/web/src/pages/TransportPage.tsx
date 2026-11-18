@@ -85,7 +85,21 @@ export function TransportPage() {
                     <td>{o.priority}</td>
                     <td className="mono">{o.source.locationId}</td>
                     <td className="mono">{o.target?.locationId ?? `Gruppe ${o.targetGroup}`}</td>
-                    <td className="muted">{o.problem ? `${o.problem.code}: ${o.problem.message}` : '–'}</td>
+                    <td className="muted">
+                      {o.problem ? `${o.problem.code}: ${o.problem.message}` : '–'}
+                      {o.problems.length > 0 && (
+                        <details>
+                          <summary>Problemhistorie ({o.problems.length})</summary>
+                          <ul>
+                            {o.problems.map((h) => (
+                              <li key={h.at + h.code}>
+                                {new Date(h.at).toLocaleString('de-DE')} – {h.code}: {h.message}
+                              </li>
+                            ))}
+                          </ul>
+                        </details>
+                      )}
+                    </td>
                     <td className="row">
                       {(['start', 'resume', 'finish', 'cancel'] as const)
                         .filter((a) => o.allowedActions.includes(a) && can('leitstand', 'anlage'))

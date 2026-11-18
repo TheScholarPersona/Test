@@ -140,7 +140,7 @@ Die Prüfung **legt nie Features an**. Sie meldet, was zugeordnet werden muss; o
 
 ## 6. Stand der Bestandsaufnahme
 
-Alle 17 Bereiche sind katalogisiert (`status: katalogisiert`); jeder erkannte Bestandteil ist einem Feature zugeordnet. Mit den Testberichten aller Testarten (Unit, Integration, Node-RED-Szenarien, MQTT-Sicherheit, Browser) sind **alle 100 Features im Testlauf nachgewiesen; der Prüfbestand ist leer**. Die 100 Features haben **289 Akzeptanzkriterien** (Effekte und Regeln, darunter jeder Fehlercode aus den Regeln); jedes ist durch einen bestandenen Test mit Zusicherung belegt. 53 Nachweise prüfen ihr Feature nur indirekt (Querschnittsfunktionen ohne eigenen Endpunkt, Simulation statt Entscheidung, Node-RED-Flows) und tragen dafür eine Begründung nach Review.
+Alle 17 Bereiche sind katalogisiert (`status: katalogisiert`); jeder erkannte Bestandteil ist einem Feature zugeordnet. Mit den Testberichten aller Testarten (Unit, Integration, Node-RED-Szenarien, MQTT-Sicherheit, Browser) sind **alle 100 Features im Testlauf nachgewiesen; der Prüfbestand ist leer**. Die 100 Features haben **290 Akzeptanzkriterien** (Effekte und Regeln, darunter jeder Fehlercode aus den Regeln); jedes ist durch einen bestandenen Test mit Zusicherung belegt. 53 Nachweise prüfen ihr Feature nur indirekt (Querschnittsfunktionen ohne eigenen Endpunkt, Simulation statt Entscheidung, Node-RED-Flows) und tragen dafür eine Begründung nach Review.
 
 **Nachgeschärft beim Einführen der Nachweisregeln:** Für acht Fehlercodes gab es keinen Test, der sie auslöst und zusichert. Neue bzw. erweiterte Integrationstests decken sie jetzt ab: doppelt gescannte TU beim Verladen (`UNIT_ALREADY_LOADED`), Warenausgang bei reserviertem Bestand, aufgestapelten TUs oder offener Bewegung (`STOCK_RESERVED`, `TU_HAS_CHILDREN`, `TU_IN_USE`), Versandetikett für eine fremde TU (`UNIT_NOT_IN_SHIPMENT`), erledigte Bewegung in einer Gruppe (`MOVEMENT_CLOSED`), erneutes Schließen einer Position (`POSITION_NOT_IN_PROGRESS`) und vollständig reservierter Bestand in der Zuteilung (`NOT_AVAILABLE`).
 
@@ -188,15 +188,15 @@ Grundlage ist die Analyse der öffentlichen OpenWMS-Repositories (`docs/openwms-
 | abweichend | gleicher Zweck, anderer Ansatz (Programme statt BPMN, MQTT-Outbox statt AMQP, OpenAPI statt HATEOAS) | 6 |
 | nicht einsehbar | Gegenstück nur in privaten Teilen (Inventory, Picking, Shipping, Printing, Partner, ERP-Adapter, Oberflächen, Identitätsdienst) | 43 |
 
-**Lücken** (`catalog/comparisons/openwms.yaml`, 12 Einträge) – Fähigkeiten von OpenWMS, die bei uns fehlen:
+**Lücken** (`catalog/comparisons/openwms.yaml`, 11 Einträge) – Fähigkeiten von OpenWMS, die bei uns fehlen:
 
 | Status | Einträge |
 |---|---|
 | fehlt (1) | Betriebsart/Füllgrad je Bereich |
-| teilweise (7) | TU-Reservierung, zeitgesteuerte Abläufe, Problemhistorie der Transportaufträge, Metriken und Tracing (Prometheus vorhanden, OpenTelemetry fehlt); aus privaten Teilen: ERP-Adapter (SAP über IDoc vorhanden, Dynamics fehlt), Lageraufgaben, Druck (PDF vorhanden, direkter Druck auf Etikettendrucker fehlt) |
+| teilweise (6) | TU-Reservierung, zeitgesteuerte Abläufe, Metriken und Tracing (Prometheus vorhanden, OpenTelemetry fehlt); aus privaten Teilen: ERP-Adapter (SAP über IDoc vorhanden, Dynamics fehlt), Lageraufgaben, Druck (PDF vorhanden, direkter Druck auf Etikettendrucker fehlt) |
 | bewusst weggelassen (4) | Mandanten, BPMN-Workflows, Microservices mit Replikaten, HATEOAS |
 
-Geschlossen seit dem ersten Vergleich: Fehlermeldungen je TU (`transporteinheiten.fehlermeldungen`), Anlagenzustand je Platz (`lagerstruktur.anlagenzustand`), Systemstatus (`materialfluss.systemstatus`), Bewegungsgruppen (`lagerbewegungen.bewegungsgruppen`), Geschäftspartner (`partner.stammdaten`, `partner.lieferadresse`, `partner.lieferant`), Versand (`auslagerung.packen`, `versand.sendungen`, `versand.ladekontrolle`, `versand.warenausgang`) mit Versandpapieren (`dokumente.versandpapiere`); Priorität, Attribute und Sperre am Avis (`wareneingang.avis-steuerung`). Zum Teil: Druck (`dokumente.etiketten`, `dokumente.pickliste`), Metriken (`sicherheit.metriken`).
+Geschlossen seit dem ersten Vergleich: Problemhistorie der Transportaufträge (`transportauftraege.ablauf`), Fehlermeldungen je TU (`transporteinheiten.fehlermeldungen`), Anlagenzustand je Platz (`lagerstruktur.anlagenzustand`), Systemstatus (`materialfluss.systemstatus`), Bewegungsgruppen (`lagerbewegungen.bewegungsgruppen`), Geschäftspartner (`partner.stammdaten`, `partner.lieferadresse`, `partner.lieferant`), Versand (`auslagerung.packen`, `versand.sendungen`, `versand.ladekontrolle`, `versand.warenausgang`) mit Versandpapieren (`dokumente.versandpapiere`); Priorität, Attribute und Sperre am Avis (`wareneingang.avis-steuerung`). Zum Teil: Druck (`dokumente.etiketten`, `dokumente.pickliste`), Metriken (`sicherheit.metriken`).
 
 Jede Lücke nennt den Bereich, in den sie gehören würde, ob sie im öffentlichen Code belegt oder nur beschrieben ist (`source: oss | privat`), Belege und verwandte Features. Die Ansicht zeigt den Vergleich im Reiter **Vergleich** (Übersicht, Tabelle je Bereich, Lücken) und je Feature als Abzeichen und Abschnitt; im Katalog lässt sich nach Einstufung filtern.
 

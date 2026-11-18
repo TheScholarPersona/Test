@@ -205,6 +205,13 @@ describe('Transportaufträge', () => {
       expect(await api.post(`/v1/transport-orders/${n}/resume`)).toMatchObject({ body: { state: 'STARTED', problem: null } });
       const failed = await api.post(`/v1/transport-orders/${n}/fail`, { code: 'DEVICE_ERROR', reason: 'Lichtschranke' });
       expect(failed.body).toMatchObject({ state: 'ONFAILURE', problem: { code: 'DEVICE_ERROR' }, ended: { reason: 'Lichtschranke' } });
+      // Die Problemhistorie behält auch das bereits aufgehobene Problem der Unterbrechung.
+      const history = (await api.get(`/v1/transport-orders/${n}`)).body.problems as { code: string; message: string; at: string }[];
+      expect(history.map((h) => [h.code, h.message])).toEqual([
+        ['INTERRUPTED', 'Störung Förderer'],
+        ['DEVICE_ERROR', 'Lichtschranke'],
+      ]);
+      expect(Date.parse(history[0]!.at)).toBeLessThanOrEqual(Date.parse(history[1]!.at));
       // Der wartende Auftrag startet nach dem Scheitern.
       const next = (await api.get('/v1/transport-orders?barcode=K10&state=STARTED')).body.items;
       expect(next).toHaveLength(1);

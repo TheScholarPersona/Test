@@ -17,6 +17,7 @@ import { Migration20261117800000_partners } from './Migration20261117800000_part
 import { Migration20261117900000_shipping } from './Migration20261117900000_shipping.js';
 import { Migration20261118000000_receiving_priority_lock } from './Migration20261118000000_receiving_priority_lock.js';
 import { Migration20261118100000_erp_messages } from './Migration20261118100000_erp_messages.js';
+import { Migration20261118200000_transport_order_problems } from './Migration20261118200000_transport_order_problems.js';
 
 /**
  * Registrierte Migrationen in Ausführungsreihenfolge.
@@ -42,4 +43,5 @@ export const migrations: MigrationObject[] = [
   { name: Migration20261117900000_shipping.name, class: Migration20261117900000_shipping },
   { name: Migration20261118000000_receiving_priority_lock.name, class: Migration20261118000000_receiving_priority_lock },
   { name: Migration20261118100000_erp_messages.name, class: Migration20261118100000_erp_messages },
+  { name: Migration20261118200000_transport_order_problems.name, class: Migration20261118200000_transport_order_problems },
 ];
