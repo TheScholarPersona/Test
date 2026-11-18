@@ -323,3 +323,29 @@ test('Wareneingang: Avis mit Priorität und Attribut, Sperre verhindert die Erfa
   await detail.getByRole('button', { name: 'Erfassen' }).click();
   await expect(page.getByText(`2 PCS ${w.sku} erfasst`)).toBeVisible();
 });
+
+test('ERP: Protokoll mit Fehler, erneut anstoßen und Bestandsabgleich senden', async ({ page, fx }) => {
+  const w = await fx.warehouse();
+  const orderId = `PW-${fx.s}-ERP`;
+  fx.onCleanup(() => fx.api('POST', `/v1/receiving-orders/${orderId}/cancel`, {}).catch(() => undefined));
+  const sku = `PW-${fx.s}-NEU`;
+  // Avis mit unbekanntem Artikel: fachlicher Fehler, protokolliert
+  const failed = await fx.api('POST', '/v1/erp/inbound', { messageId: `PW-${fx.s}-M1`, type: 'receiving-order', data: { orderId, positions: [{ sku, quantity: { amount: '3', unit: 'PCS' } }] } });
+  expect(failed.message.state).toBe('FAILED');
+  await fx.api('POST', '/v1/products', { sku, baseUnit: 'PCS' });
+  void w;
+
+  await page.goto('./erp');
+  const table = page.getByRole('table', { name: 'ERP-Nachrichten' });
+  const row = table.getByRole('row', { name: new RegExp(orderId) });
+  await expect(row).toContainText('PRODUCT_NOT_FOUND');
+  await row.getByRole('button', { name: 'Erneut' }).click();
+  await expect(page.getByText(/erneut angestoßen: PROCESSED/)).toBeVisible();
+  await expect(row).toContainText('PROCESSED');
+  await row.click();
+  await expect(page.getByLabel('Inhalt')).toContainText(`"orderId": "${orderId}"`);
+
+  await page.getByRole('button', { name: 'Bestandsabgleich senden' }).click();
+  await expect(page.getByText('Bestandsabgleich zur Abholung bereitgestellt')).toBeVisible();
+  await expect(table.getByRole('row', { name: /Bestandsabgleich/ }).first()).toContainText(/PENDING|IN_DELIVERY|SENT/);
+});

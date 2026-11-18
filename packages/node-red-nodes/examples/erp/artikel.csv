@@ -1,0 +1,3 @@
+sku;description;baseUnit;units;overdeliveryAllowed
+MUSTER-100;Musterschraube M6;PCS;PAK=100|KAR=1200;nein
+MUSTER-200;Mustermehl Typ 405;KG;SACK=25;ja

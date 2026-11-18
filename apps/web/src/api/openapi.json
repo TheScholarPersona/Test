@@ -4963,7 +4963,7 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 100,
-            "description": "Freitext; mit supplierCode ohne Angabe die Partnernummer"
+            "description": "Freitext; mit supplierCode ohne Angabe der Name des Partners"
           },
           "supplierCode": {
             "type": "string",
@@ -7504,6 +7504,903 @@
           }
         },
         "additionalProperties": false
+      },
+      "ErpInboundResult": {
+        "type": "object",
+        "properties": {
+          "duplicate": {
+            "type": "boolean",
+            "description": "Nachricht mit dieser ID war schon da; Ergebnis von damals"
+          },
+          "message": {
+            "$ref": "#/components/schemas/ErpMessage"
+          }
+        },
+        "required": [
+          "duplicate",
+          "message"
+        ]
+      },
+      "ErpMessage": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "IN",
+              "OUT"
+            ]
+          },
+          "messageId": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "action": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "IN_DELIVERY",
+              "SENT",
+              "PROCESSED",
+              "FAILED"
+            ]
+          },
+          "reference": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "payload": {
+            "type": "object",
+            "additionalProperties": {}
+          },
+          "result": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": {}
+          },
+          "attempts": {
+            "type": "integer"
+          },
+          "nextAttemptAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "lastError": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "direction",
+          "messageId",
+          "type",
+          "action",
+          "state",
+          "reference",
+          "payload",
+          "result",
+          "attempts",
+          "nextAttemptAt",
+          "lastError",
+          "occurredAt",
+          "completedAt",
+          "createdAt"
+        ]
+      },
+      "ErpInboundMessage": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "messageId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "product"
+                ]
+              },
+              "action": {
+                "type": "string",
+                "enum": [
+                  "upsert"
+                ],
+                "default": "upsert"
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "sku": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._\\-/]{0,63}$"
+                  },
+                  "description": {
+                    "type": "string",
+                    "maxLength": 255
+                  },
+                  "baseUnit": {
+                    "type": "string",
+                    "pattern": "^[A-Z][A-Z0-9_]{0,9}$"
+                  },
+                  "overdeliveryAllowed": {
+                    "type": "boolean"
+                  },
+                  "units": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "unit": {
+                          "type": "string",
+                          "pattern": "^[A-Z][A-Z0-9_]{0,9}$"
+                        },
+                        "factor": {
+                          "type": "string",
+                          "pattern": "^\\d+(\\.\\d+)?$"
+                        }
+                      },
+                      "required": [
+                        "unit",
+                        "factor"
+                      ]
+                    },
+                    "maxItems": 20
+                  }
+                },
+                "required": [
+                  "sku",
+                  "baseUnit"
+                ]
+              }
+            },
+            "required": [
+              "messageId",
+              "type",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "messageId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "receiving-order"
+                ]
+              },
+              "action": {
+                "type": "string",
+                "enum": [
+                  "create",
+                  "cancel"
+                ],
+                "default": "create"
+              },
+              "data": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "orderId": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9_.\\-/]{1,40}$"
+                      },
+                      "supplierCode": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9_.\\-/]{1,40}$"
+                      },
+                      "supplier": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100
+                      },
+                      "expectedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "priority": {
+                        "type": "string",
+                        "enum": [
+                          "HIGHEST",
+                          "HIGH",
+                          "NORMAL",
+                          "LOW",
+                          "LOWEST"
+                        ]
+                      },
+                      "details": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "string"
+                        }
+                      },
+                      "positions": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "posNo": {
+                              "type": "integer",
+                              "minimum": 1
+                            },
+                            "sku": {
+                              "type": "string",
+                              "pattern": "^[A-Za-z0-9][A-Za-z0-9._\\-/]{0,63}$"
+                            },
+                            "quantity": {
+                              "type": "object",
+                              "properties": {
+                                "amount": {
+                                  "type": "string",
+                                  "pattern": "^-?\\d+(\\.\\d+)?$"
+                                },
+                                "unit": {
+                                  "type": "string",
+                                  "pattern": "^[A-Z][A-Z0-9_]{0,9}$"
+                                }
+                              },
+                              "required": [
+                                "amount",
+                                "unit"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "sku",
+                            "quantity"
+                          ]
+                        },
+                        "minItems": 1,
+                        "maxItems": 500
+                      }
+                    },
+                    "required": [
+                      "orderId",
+                      "positions"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "orderId": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9_.\\-/]{1,40}$"
+                      }
+                    },
+                    "required": [
+                      "orderId"
+                    ]
+                  }
+                ]
+              }
+            },
+            "required": [
+              "messageId",
+              "type",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "messageId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "outbound-order"
+                ]
+              },
+              "action": {
+                "type": "string",
+                "enum": [
+                  "create",
+                  "cancel"
+                ],
+                "default": "create"
+              },
+              "data": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "orderId": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9_.\\-/]{1,40}$"
+                      },
+                      "customerCode": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9_.\\-/]{1,40}$"
+                      },
+                      "customer": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100
+                      },
+                      "priority": {
+                        "type": "string",
+                        "enum": [
+                          "HIGHEST",
+                          "HIGH",
+                          "NORMAL",
+                          "LOW",
+                          "LOWEST"
+                        ]
+                      },
+                      "target": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      "shipTo": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 100
+                          },
+                          "street": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 100
+                          },
+                          "postalCode": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 20
+                          },
+                          "city": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 100
+                          },
+                          "country": {
+                            "type": "string",
+                            "pattern": "^[A-Za-z]{2}$"
+                          }
+                        }
+                      },
+                      "lines": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "sku": {
+                              "type": "string",
+                              "pattern": "^[A-Za-z0-9][A-Za-z0-9._\\-/]{0,63}$"
+                            },
+                            "quantity": {
+                              "type": "object",
+                              "properties": {
+                                "amount": {
+                                  "type": "string",
+                                  "pattern": "^-?\\d+(\\.\\d+)?$"
+                                },
+                                "unit": {
+                                  "type": "string",
+                                  "pattern": "^[A-Z][A-Z0-9_]{0,9}$"
+                                }
+                              },
+                              "required": [
+                                "amount",
+                                "unit"
+                              ]
+                            },
+                            "lot": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 64
+                            }
+                          },
+                          "required": [
+                            "sku",
+                            "quantity"
+                          ]
+                        },
+                        "minItems": 1,
+                        "maxItems": 500
+                      }
+                    },
+                    "required": [
+                      "orderId",
+                      "lines"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "orderId": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9_.\\-/]{1,40}$"
+                      }
+                    },
+                    "required": [
+                      "orderId"
+                    ]
+                  }
+                ]
+              }
+            },
+            "required": [
+              "messageId",
+              "type",
+              "data"
+            ]
+          }
+        ],
+        "description": "Kanonische Nachricht vom ERP (Artikel, Avis, Auslagerauftrag)"
+      },
+      "ErpClaimed": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "attempts": {
+                  "type": "integer"
+                },
+                "message": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "messageId": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "goods-receipt"
+                          ]
+                        },
+                        "occurredAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "orderId": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "posNo": {
+                              "type": [
+                                "integer",
+                                "null"
+                              ]
+                            },
+                            "sku": {
+                              "type": "string"
+                            },
+                            "quantity": {
+                              "type": "object",
+                              "properties": {
+                                "amount": {
+                                  "type": "string",
+                                  "pattern": "^-?\\d+(\\.\\d+)?$"
+                                },
+                                "unit": {
+                                  "type": "string",
+                                  "pattern": "^[A-Z][A-Z0-9_]{0,9}$"
+                                }
+                              },
+                              "required": [
+                                "amount",
+                                "unit"
+                              ]
+                            },
+                            "barcode": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 64,
+                              "pattern": "^[A-Za-z0-9._\\-/]+$"
+                            },
+                            "blind": {
+                              "type": "boolean"
+                            },
+                            "captureId": {
+                              "type": "string",
+                              "format": "uuid"
+                            }
+                          },
+                          "required": [
+                            "orderId",
+                            "posNo",
+                            "sku",
+                            "quantity",
+                            "barcode",
+                            "blind",
+                            "captureId"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "messageId",
+                        "type",
+                        "occurredAt",
+                        "data"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "messageId": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "goods-issue"
+                          ]
+                        },
+                        "occurredAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "orderId": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "shipment": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "carrierCode": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "lines": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "sku": {
+                                    "type": "string"
+                                  },
+                                  "quantity": {
+                                    "type": "object",
+                                    "properties": {
+                                      "amount": {
+                                        "type": "string",
+                                        "pattern": "^-?\\d+(\\.\\d+)?$"
+                                      },
+                                      "unit": {
+                                        "type": "string",
+                                        "pattern": "^[A-Z][A-Z0-9_]{0,9}$"
+                                      }
+                                    },
+                                    "required": [
+                                      "amount",
+                                      "unit"
+                                    ]
+                                  },
+                                  "lot": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "bestBefore": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "barcode": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "sku",
+                                  "quantity",
+                                  "lot",
+                                  "bestBefore",
+                                  "barcode"
+                                ]
+                              }
+                            }
+                          },
+                          "required": [
+                            "orderId",
+                            "shipment",
+                            "carrierCode",
+                            "lines"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "messageId",
+                        "type",
+                        "occurredAt",
+                        "data"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "messageId": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "stock-change"
+                          ]
+                        },
+                        "occurredAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "sku": {
+                              "type": "string"
+                            },
+                            "barcode": {
+                              "type": "string"
+                            },
+                            "delta": {
+                              "type": "object",
+                              "properties": {
+                                "amount": {
+                                  "type": "string",
+                                  "pattern": "^-?\\d+(\\.\\d+)?$"
+                                },
+                                "unit": {
+                                  "type": "string",
+                                  "pattern": "^[A-Z][A-Z0-9_]{0,9}$"
+                                }
+                              },
+                              "required": [
+                                "amount",
+                                "unit"
+                              ]
+                            },
+                            "reason": {
+                              "type": "string"
+                            },
+                            "reference": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "sku",
+                            "barcode",
+                            "delta",
+                            "reason",
+                            "reference"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "messageId",
+                        "type",
+                        "occurredAt",
+                        "data"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "messageId": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "stock-snapshot"
+                          ]
+                        },
+                        "occurredAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "takenAt": {
+                              "type": "string",
+                              "format": "date-time"
+                            },
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "sku": {
+                                    "type": "string"
+                                  },
+                                  "lot": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "quantity": {
+                                    "type": "object",
+                                    "properties": {
+                                      "amount": {
+                                        "type": "string",
+                                        "pattern": "^-?\\d+(\\.\\d+)?$"
+                                      },
+                                      "unit": {
+                                        "type": "string",
+                                        "pattern": "^[A-Z][A-Z0-9_]{0,9}$"
+                                      }
+                                    },
+                                    "required": [
+                                      "amount",
+                                      "unit"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "sku",
+                                  "lot",
+                                  "quantity"
+                                ]
+                              }
+                            }
+                          },
+                          "required": [
+                            "takenAt",
+                            "items"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "messageId",
+                        "type",
+                        "occurredAt",
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "attempts",
+                "message"
+              ]
+            }
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "description": "Abgeholte Ausgangsnachrichten; jede mit ack oder nack quittieren"
+      },
+      "ErpAck": {
+        "type": "object",
+        "properties": {
+          "erpReference": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "Beleg im ERP, z. B. Materialbelegnummer"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ErpNack": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "additionalProperties": false
+      },
+      "ErpCounts": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "direction": {
+                  "type": "string"
+                },
+                "state": {
+                  "type": "string"
+                },
+                "count": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "direction",
+                "state",
+                "count"
+              ]
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
       }
     },
     "parameters": {}
@@ -20700,6 +21597,735 @@
           },
           "409": {
             "description": "Konflikt oder verletzte Geschäftsregel",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/erp/inbound": {
+      "post": {
+        "summary": "Nachricht vom ERP verarbeiten (Artikel, Avis, Auslagerauftrag); idempotent je messageId",
+        "tags": [
+          "ERP"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ErpInboundMessage"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Protokolleintrag; state FAILED mit lastError bei fachlichem Fehler",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErpInboundResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ungültige Anfrage (Feldprüfung)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/erp/outbound/claim": {
+      "post": {
+        "summary": "Fällige Rückmeldungen ans ERP abholen (älteste zuerst)",
+        "tags": [
+          "ERP"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 50
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "Kommagetrennt, z. B. goods-receipt,goods-issue"
+            },
+            "required": false,
+            "description": "Kommagetrennt, z. B. goods-receipt,goods-issue",
+            "name": "type",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Abgeholte Nachrichten",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErpClaimed"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ungültige Anfrage (Feldprüfung)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/erp/messages/{id}/ack": {
+      "post": {
+        "summary": "Zustellung ans ERP bestätigen",
+        "tags": [
+          "ERP"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ErpAck"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "ERP-Nachricht",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErpMessage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ungültige Anfrage (Feldprüfung)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nicht gefunden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Konflikt oder verletzte Geschäftsregel",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/erp/messages/{id}/nack": {
+      "post": {
+        "summary": "Zustellung fehlgeschlagen: später erneut versuchen",
+        "tags": [
+          "ERP"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ErpNack"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "ERP-Nachricht",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErpMessage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ungültige Anfrage (Feldprüfung)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nicht gefunden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Konflikt oder verletzte Geschäftsregel",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/erp/messages/{id}/retry": {
+      "post": {
+        "summary": "Fehlgeschlagene Nachricht erneut verarbeiten bzw. bereitstellen",
+        "tags": [
+          "ERP"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "ERP-Nachricht",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErpMessage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nicht gefunden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Konflikt oder verletzte Geschäftsregel",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/erp/stock-snapshots": {
+      "post": {
+        "summary": "Bestandsabgleich ans ERP bereitstellen (Gesamtbestand je Artikel und Charge)",
+        "tags": [
+          "ERP"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "ERP-Nachricht",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErpMessage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/erp/messages": {
+      "get": {
+        "summary": "Nachrichtenprotokoll, neueste zuerst",
+        "tags": [
+          "ERP"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "IN",
+                "OUT"
+              ]
+            },
+            "required": false,
+            "name": "direction",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "Kommagetrennt, z. B. FAILED"
+            },
+            "required": false,
+            "description": "Kommagetrennt, z. B. FAILED",
+            "name": "state",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 40
+            },
+            "required": false,
+            "name": "type",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "required": false,
+            "name": "reference",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 100
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0,
+              "default": 0
+            },
+            "required": false,
+            "name": "offset",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Liste",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ErpMessage"
+                      }
+                    },
+                    "total": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "total"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ungültige Anfrage (Feldprüfung)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/erp/messages/{id}": {
+      "get": {
+        "summary": "Eine ERP-Nachricht",
+        "tags": [
+          "ERP"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "ERP-Nachricht",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErpMessage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nicht gefunden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/erp/counts": {
+      "get": {
+        "summary": "Anzahl je Richtung und Zustand",
+        "tags": [
+          "ERP"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Zahlen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErpCounts"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
             "content": {
               "application/json": {
                 "schema": {

@@ -118,7 +118,7 @@ Die Prüfung **legt nie Features an**. Sie meldet, was zugeordnet werden muss; o
 
 ## 6. Stand der Bestandsaufnahme
 
-Alle 15 Bereiche sind katalogisiert (`status: katalogisiert`); jeder erkannte Bestandteil ist einem Feature zugeordnet. Mit den Testberichten aller Testarten (Unit, Integration, Node-RED-Szenarien, MQTT-Sicherheit, Browser) sind **alle 89 Features im Testlauf nachgewiesen; der Prüfbestand ist leer**.
+Alle 16 Bereiche sind katalogisiert (`status: katalogisiert`); jeder erkannte Bestandteil ist einem Feature zugeordnet. Mit den Testberichten aller Testarten (Unit, Integration, Node-RED-Szenarien, MQTT-Sicherheit, Browser) sind **alle 95 Features im Testlauf nachgewiesen; der Prüfbestand ist leer**.
 
 | Bereich | Features | Erkannte Bestandteile |
 |---|---|---|
@@ -134,10 +134,11 @@ Alle 15 Bereiche sind katalogisiert (`status: katalogisiert`); jeder erkannte Be
 | Versand | 3 | 12 |
 | Dokumente und Druck | 3 | 5 |
 | Geschäftspartner | 3 | 7 |
+| ERP-Anbindung | 6 | 15 |
 | Integration und Automatisierung | 7 | 11 |
 | Bedienoberfläche | 5 | 2 |
 | Sicherheit und Betrieb | 11 | 12 |
-| **Summe** | **89** | **252** |
+| **Summe** | **95** | **267** |
 
 **Festlegungen** (Produktentscheidung nach dem Pilot):
 
@@ -158,16 +159,16 @@ Grundlage ist die Analyse der öffentlichen OpenWMS-Repositories (`docs/openwms-
 | gleichwertig | kann dasselbe | 12 |
 | erweitert | kann mehr (z. B. durchgesetzte Platzierungsregeln, die OpenWMS nur speichert) | 17 |
 | eingeschränkt | kann weniger | 2 |
-| neu | in OpenWMS nicht vorhanden (Regelwerk, Simulation, Node-RED, Szenario-Tests, Outbox-Aufbewahrung) | 14 |
+| neu | in OpenWMS nicht vorhanden (Regelwerk, Simulation, Node-RED, Szenario-Tests, Outbox-Aufbewahrung, ERP-Bausteine) | 15 |
 | abweichend | gleicher Zweck, anderer Ansatz (Programme statt BPMN, MQTT-Outbox statt AMQP, OpenAPI statt HATEOAS) | 6 |
-| nicht einsehbar | Gegenstück nur in privaten Teilen (Inventory, Picking, Shipping, Printing, Partner, Oberflächen, Identitätsdienst) | 38 |
+| nicht einsehbar | Gegenstück nur in privaten Teilen (Inventory, Picking, Shipping, Printing, Partner, ERP-Adapter, Oberflächen, Identitätsdienst) | 43 |
 
 **Lücken** (`catalog/comparisons/openwms.yaml`, 12 Einträge) – Fähigkeiten von OpenWMS, die bei uns fehlen:
 
 | Status | Einträge |
 |---|---|
 | fehlt (1) | Betriebsart/Füllgrad je Bereich |
-| teilweise (7) | TU-Reservierung, zeitgesteuerte Abläufe, Problemhistorie der Transportaufträge, Metriken und Tracing (Prometheus vorhanden, OpenTelemetry fehlt); aus privaten Teilen: ERP-Adapter, Lageraufgaben, Druck (PDF vorhanden, direkter Druck auf Etikettendrucker fehlt) |
+| teilweise (7) | TU-Reservierung, zeitgesteuerte Abläufe, Problemhistorie der Transportaufträge, Metriken und Tracing (Prometheus vorhanden, OpenTelemetry fehlt); aus privaten Teilen: ERP-Adapter (SAP über IDoc vorhanden, Dynamics fehlt), Lageraufgaben, Druck (PDF vorhanden, direkter Druck auf Etikettendrucker fehlt) |
 | bewusst weggelassen (4) | Mandanten, BPMN-Workflows, Microservices mit Replikaten, HATEOAS |
 
 Geschlossen seit dem ersten Vergleich: Fehlermeldungen je TU (`transporteinheiten.fehlermeldungen`), Anlagenzustand je Platz (`lagerstruktur.anlagenzustand`), Systemstatus (`materialfluss.systemstatus`), Bewegungsgruppen (`lagerbewegungen.bewegungsgruppen`), Geschäftspartner (`partner.stammdaten`, `partner.lieferadresse`, `partner.lieferant`), Versand (`auslagerung.packen`, `versand.sendungen`, `versand.ladekontrolle`, `versand.warenausgang`) mit Versandpapieren (`dokumente.versandpapiere`); Priorität, Attribute und Sperre am Avis (`wareneingang.avis-steuerung`). Zum Teil: Druck (`dokumente.etiketten`, `dokumente.pickliste`), Metriken (`sicherheit.metriken`).

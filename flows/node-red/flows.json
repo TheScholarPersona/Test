@@ -499,15 +499,15 @@
   {
     "id": "f501000000000000",
     "type": "tab",
-    "label": "Szenario: layout-locks",
+    "label": "Szenario: erp-flow",
     "disabled": false,
-    "info": "Schrittliste aus flows/scenarios/layout-locks.js; ausgeführt vom Tab „Schritt-Engine“."
+    "info": "Schrittliste aus flows/scenarios/erp-flow.js; ausgeführt vom Tab „Schritt-Engine“."
   },
   {
     "id": "f501000000000001",
     "type": "comment",
     "z": "f501000000000000",
-    "name": "Definition: flows/scenarios/layout-locks.js (im Repository bearbeiten, dann Flows neu erzeugen)",
+    "name": "Definition: flows/scenarios/erp-flow.js (im Repository bearbeiten, dann Flows neu erzeugen)",
     "info": "",
     "x": 380,
     "y": 40,
@@ -517,6 +517,39 @@
     "id": "f501000000000002",
     "type": "function",
     "z": "f501000000000000",
+    "name": "Szenario erp-flow anmelden",
+    "func": "return msg;\n",
+    "outputs": 0,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "const registerScenario = (definition) => {\n  const all = global.get('stepScenarios') || {};\n  all[definition.id] = definition;\n  global.set('stepScenarios', all);\n};\n/**\n * Szenario: ERP-Anbindung über den Beispiel-Flow „ERP-Anbindung“.\n *\n * Artikel kommen als JSON (zweimal – das zweite Mal als Duplikat erkannt), ein Auslagerauftrag als CSV und\n * eine Bestellung als SAP-IDoc (ORDERS) → Avis. Die Erfassung gegen das Avis erzeugt eine Rückmeldung, die\n * der Flow abholt, an den ERP-Simulator schickt und quittiert. Alle Daten sind erfunden.\n * Schrittformat: siehe flows/scenarios/layout-locks.js; `service: 'node-red'` ruft Endpunkte dieses Node-RED.\n */\nregisterScenario({\n  id: 'erp-flow',\n  description: 'ERP-Anbindung: Artikel (JSON, idempotent), Auslagerauftrag (CSV), Bestellung (SAP IDoc) → Avis; Wareneingang als Rückmeldung zugestellt und quittiert.',\n  init: (runId) => {\n    const s = runId.replace(/[^a-z0-9]/gi, '').slice(-8).toUpperCase();\n    const docnum = String(Date.now()).slice(-12);\n    return {\n      s,\n      docnum,\n      locationType: `SE-${s}`,\n      group: `SE-${s}-G`,\n      unitType: `SE-${s}`,\n      sku: `SE-${s}-ART`,\n      po: `SE${s}PO`,\n      order: `SE-${s}-LS`,\n      tu: `SE-${s}-T1`,\n      erp: { we: `SE-${s}-WE`, vs: `SE-${s}-VS` },\n      coords: { we: `E${s}/0001/0001/0001/0000`, vs: `E${s}/0002/0001/0001/0000` },\n      loc: {},\n    };\n  },\n  steps: [\n    { name: 'Platztyp anlegen', request: (v) => ({ method: 'POST', path: '/v1/location-types', body: { code: v.locationType } }), expectStatus: 201 },\n    { name: 'Gruppe anlegen', request: (v) => ({ method: 'POST', path: '/v1/location-groups', body: { name: v.group } }), expectStatus: 201 },\n    ...['we', 'vs'].map((key) => ({\n      name: `Platz ${key} anlegen`,\n      request: (v) => ({ method: 'POST', path: '/v1/locations', body: { locationId: v.coords[key], erpCode: v.erp[key], typeCode: v.locationType, groupName: v.group, maxTransportUnits: 10 } }),\n      expectStatus: 201,\n      save: (body, v) => {\n        v.loc[key] = body.id;\n      },\n    })),\n    { name: 'TU-Typ anlegen', request: (v) => ({ method: 'POST', path: '/v1/transport-unit-types', body: { code: v.unitType } }), expectStatus: 201 },\n    ...[1, 2].map((n) => ({\n      name: n === 1 ? 'Artikel als JSON vom ERP' : 'Dieselbe Nachricht noch einmal: Duplikat, nichts doppelt',\n      request: (v) => ({\n        service: 'node-red',\n        method: 'POST',\n        path: '/examples/erp/json',\n        body: { messageId: `SE-${v.s}-MAT`, type: 'product', data: { sku: v.sku, description: 'Musterartikel ERP', baseUnit: 'PCS', units: [{ unit: 'KAR', factor: '6' }] } },\n      }),\n      expectStatus: 200,\n      check: (body) => (body.processed === 1 && body.duplicates === (n === 1 ? 0 : 1) ? null : `Unerwartet: ${JSON.stringify(body)}`),\n    })),\n    {\n      name: 'Auslagerauftrag als CSV vom ERP',\n      request: (v) => ({\n        service: 'node-red',\n        method: 'POST',\n        path: '/examples/erp/csv/outbound-order',\n        headers: { 'content-type': 'text/csv', 'x-filename': `auftraege-${v.s}.csv` },\n        body: ['orderId;customer;target;shipToName;shipToCity;sku;amount;unit', `${v.order};Musterkunde;${v.erp.vs};Musterkunde GmbH;Musterstadt;${v.sku};2;KAR`].join('\\n'),\n      }),\n      expectStatus: 200,\n      check: (body) => (body.processed === 1 && body.results[0].messageId.endsWith(`:${body.results[0].reference}`) ? null : `Unerwartet: ${JSON.stringify(body)}`),\n    },\n    {\n      name: 'Auslagerauftrag im WMS: Packplatz, Lieferadresse, 12 PCS',\n      request: (v) => ({ method: 'GET', path: `/v1/outbound-orders/${v.order}` }),\n      expectStatus: 200,\n      check: (body, v) =>\n        body.target && body.target.locationId === v.coords.vs && body.shipTo && body.shipTo.name === 'Musterkunde GmbH' && body.lines[0].quantity.amount === '12' ? null : `Unerwartet: ${JSON.stringify(body)}`,\n    },\n    {\n      name: 'Bestellung als SAP-IDoc (ORDERS05) vom ERP',\n      request: (v) => ({\n        service: 'node-red',\n        method: 'POST',\n        path: '/examples/erp/idoc',\n        headers: { 'content-type': 'application/xml' },\n        body: `<?xml version=\"1.0\"?><ORDERS05><IDOC BEGIN=\"1\"><EDI_DC40 SEGMENT=\"1\"><DOCNUM>${v.docnum}</DOCNUM><IDOCTYP>ORDERS05</IDOCTYP></EDI_DC40><E1EDK01 SEGMENT=\"1\"><BELNR>${v.po}</BELNR></E1EDK01><E1EDP01 SEGMENT=\"1\"><POSEX>00010</POSEX><MENGE>6.000</MENGE><MENEE>ST</MENEE><E1EDP19 SEGMENT=\"1\"><QUALF>002</QUALF><IDTNR>${v.sku}</IDTNR></E1EDP19></E1EDP01></IDOC></ORDERS05>`,\n      }),\n      expectStatus: 200,\n      check: (body) => (body.processed === 1 ? null : `Unerwartet: ${JSON.stringify(body)}`),\n    },\n    {\n      name: 'Avis im WMS mit Position 10',\n      request: (v) => ({ method: 'GET', path: `/v1/receiving-orders/${v.po}` }),\n      expectStatus: 200,\n      check: (body, v) => (body.positions[0].posNo === 10 && body.positions[0].sku === v.sku ? null : `Unerwartet: ${JSON.stringify(body.positions)}`),\n    },\n    {\n      name: 'Ware gegen das Avis erfassen',\n      request: (v) => ({ method: 'POST', path: `/v1/receiving-orders/${v.po}/captures`, body: { kind: 'quantity', sku: v.sku, quantity: { amount: '6', unit: 'PCS' }, unit: { barcode: v.tu, typeCode: v.unitType }, location: { erpCode: v.erp.we } } }),\n      expectStatus: 201,\n    },\n    {\n      name: 'Rückmeldungen abholen, an den ERP-Simulator senden und quittieren',\n      request: () => ({ service: 'node-red', method: 'POST', path: '/examples/erp/export', body: {} }),\n      expectStatus: 200,\n      check: (body) => (typeof body.claimed === 'number' ? null : `Unerwartet: ${JSON.stringify(body)}`),\n    },\n    { name: 'Event erp-message.sent für den Wareneingang', event: (e, v) => e.type === 'erp-message.sent' && e.payload.reference === v.po && e.payload.type === 'goods-receipt' },\n    {\n      name: 'ERP-Simulator hat den Wareneingang mit Bestellbezug erhalten',\n      request: () => ({ service: 'node-red', method: 'GET', path: '/examples/erp/simulator?type=goods-receipt' }),\n      expectStatus: 200,\n      check: (body, v) => {\n        const hit = body.items.find((r) => r.message.data.orderId === v.po);\n        return hit && hit.message.data.posNo === 10 && hit.message.data.quantity.amount === '6' ? null : `Nicht angekommen: ${JSON.stringify(body.items.slice(-3))}`;\n      },\n    },\n    {\n      name: 'Im WMS-Protokoll zugestellt, mit Beleg des ERP',\n      request: (v) => ({ method: 'GET', path: `/v1/erp/messages?direction=OUT&reference=${v.po}` }),\n      expectStatus: 200,\n      check: (body) => {\n        const m = body.items[0];\n        return m && m.type === 'goods-receipt' && m.state === 'SENT' && m.result && /^50\\d{8}$/.test(m.result.erpReference) ? null : `Unerwartet: ${JSON.stringify(body.items)}`;\n      },\n    },\n    { name: 'Aufräumen: Auslagerauftrag stornieren', cleanup: true, request: (v) => ({ method: 'POST', path: `/v1/outbound-orders/${v.order}/cancel`, body: {} }) },\n    {\n      name: 'Aufräumen: Bestand der TU lesen',\n      cleanup: true,\n      request: (v) => ({ method: 'GET', path: `/v1/stock?barcode=${v.tu}` }),\n      save: (body, v) => {\n        v.stockItem = body.items && body.items[0] ? body.items[0].id : null;\n      },\n    },\n    {\n      name: 'Aufräumen: Bestand ausbuchen',\n      cleanup: true,\n      request: (v) => (v.stockItem ? { method: 'POST', path: `/v1/stock/${v.stockItem}/corrections`, body: { delta: { amount: '-6', unit: 'PCS' }, reason: 'Aufräumen' } } : null),\n    },\n    { name: 'Aufräumen: Avis abschließen', cleanup: true, request: (v) => ({ method: 'POST', path: `/v1/receiving-orders/${v.po}/complete`, body: {} }) },\n    { name: 'Aufräumen: TU löschen', cleanup: true, request: (v) => ({ method: 'DELETE', path: `/v1/transport-units/${v.tu}` }) },\n    ...['we', 'vs'].map((key) => ({ name: `Aufräumen: Platz ${key} löschen`, cleanup: true, request: (v) => (v.loc[key] ? { method: 'DELETE', path: `/v1/locations/${v.loc[key]}` } : null), expectStatus: 204 })),\n    { name: 'Aufräumen: Gruppe löschen', cleanup: true, request: (v) => ({ method: 'DELETE', path: `/v1/location-groups/${v.group}` }), expectStatus: 204 },\n    { name: 'Aufräumen: TU-Typ löschen', cleanup: true, request: (v) => ({ method: 'DELETE', path: `/v1/transport-unit-types/${v.unitType}` }), expectStatus: 204 },\n    { name: 'Aufräumen: Platztyp löschen', cleanup: true, request: (v) => ({ method: 'DELETE', path: `/v1/location-types/${v.locationType}` }), expectStatus: 204 },\n  ],\n});\n",
+    "finalize": "",
+    "libs": [],
+    "x": 200,
+    "y": 100,
+    "wires": []
+  },
+  {
+    "id": "f502000000000000",
+    "type": "tab",
+    "label": "Szenario: layout-locks",
+    "disabled": false,
+    "info": "Schrittliste aus flows/scenarios/layout-locks.js; ausgeführt vom Tab „Schritt-Engine“."
+  },
+  {
+    "id": "f502000000000001",
+    "type": "comment",
+    "z": "f502000000000000",
+    "name": "Definition: flows/scenarios/layout-locks.js (im Repository bearbeiten, dann Flows neu erzeugen)",
+    "info": "",
+    "x": 380,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "f502000000000002",
+    "type": "function",
+    "z": "f502000000000000",
     "name": "Szenario layout-locks anmelden",
     "func": "return msg;\n",
     "outputs": 0,
@@ -530,16 +563,16 @@
     "wires": []
   },
   {
-    "id": "f502000000000000",
+    "id": "f503000000000000",
     "type": "tab",
     "label": "Szenario: material-flow",
     "disabled": false,
     "info": "Schrittliste aus flows/scenarios/material-flow.js; ausgeführt vom Tab „Schritt-Engine“."
   },
   {
-    "id": "f502000000000001",
+    "id": "f503000000000001",
     "type": "comment",
-    "z": "f502000000000000",
+    "z": "f503000000000000",
     "name": "Definition: flows/scenarios/material-flow.js (im Repository bearbeiten, dann Flows neu erzeugen)",
     "info": "",
     "x": 380,
@@ -547,9 +580,9 @@
     "wires": []
   },
   {
-    "id": "f502000000000002",
+    "id": "f503000000000002",
     "type": "function",
-    "z": "f502000000000000",
+    "z": "f503000000000000",
     "name": "Szenario material-flow anmelden",
     "func": "return msg;\n",
     "outputs": 0,
@@ -563,16 +596,16 @@
     "wires": []
   },
   {
-    "id": "f503000000000000",
+    "id": "f504000000000000",
     "type": "tab",
     "label": "Szenario: movement-flow",
     "disabled": false,
     "info": "Schrittliste aus flows/scenarios/movement-flow.js; ausgeführt vom Tab „Schritt-Engine“."
   },
   {
-    "id": "f503000000000001",
+    "id": "f504000000000001",
     "type": "comment",
-    "z": "f503000000000000",
+    "z": "f504000000000000",
     "name": "Definition: flows/scenarios/movement-flow.js (im Repository bearbeiten, dann Flows neu erzeugen)",
     "info": "",
     "x": 380,
@@ -580,9 +613,9 @@
     "wires": []
   },
   {
-    "id": "f503000000000002",
+    "id": "f504000000000002",
     "type": "function",
-    "z": "f503000000000000",
+    "z": "f504000000000000",
     "name": "Szenario movement-flow anmelden",
     "func": "return msg;\n",
     "outputs": 0,
@@ -596,16 +629,16 @@
     "wires": []
   },
   {
-    "id": "f504000000000000",
+    "id": "f505000000000000",
     "type": "tab",
     "label": "Szenario: node-red-examples",
     "disabled": false,
     "info": "Schrittliste aus flows/scenarios/node-red-examples.js; ausgeführt vom Tab „Schritt-Engine“."
   },
   {
-    "id": "f504000000000001",
+    "id": "f505000000000001",
     "type": "comment",
-    "z": "f504000000000000",
+    "z": "f505000000000000",
     "name": "Definition: flows/scenarios/node-red-examples.js (im Repository bearbeiten, dann Flows neu erzeugen)",
     "info": "",
     "x": 380,
@@ -613,9 +646,9 @@
     "wires": []
   },
   {
-    "id": "f504000000000002",
+    "id": "f505000000000002",
     "type": "function",
-    "z": "f504000000000000",
+    "z": "f505000000000000",
     "name": "Szenario node-red-examples anmelden",
     "func": "return msg;\n",
     "outputs": 0,
@@ -629,16 +662,16 @@
     "wires": []
   },
   {
-    "id": "f505000000000000",
+    "id": "f506000000000000",
     "type": "tab",
     "label": "Szenario: outbound-flow",
     "disabled": false,
     "info": "Schrittliste aus flows/scenarios/outbound-flow.js; ausgeführt vom Tab „Schritt-Engine“."
   },
   {
-    "id": "f505000000000001",
+    "id": "f506000000000001",
     "type": "comment",
-    "z": "f505000000000000",
+    "z": "f506000000000000",
     "name": "Definition: flows/scenarios/outbound-flow.js (im Repository bearbeiten, dann Flows neu erzeugen)",
     "info": "",
     "x": 380,
@@ -646,9 +679,9 @@
     "wires": []
   },
   {
-    "id": "f505000000000002",
+    "id": "f506000000000002",
     "type": "function",
-    "z": "f505000000000000",
+    "z": "f506000000000000",
     "name": "Szenario outbound-flow anmelden",
     "func": "return msg;\n",
     "outputs": 0,
@@ -662,16 +695,16 @@
     "wires": []
   },
   {
-    "id": "f506000000000000",
+    "id": "f507000000000000",
     "type": "tab",
     "label": "Szenario: putaway-strategy",
     "disabled": false,
     "info": "Schrittliste aus flows/scenarios/putaway-strategy.js; ausgeführt vom Tab „Schritt-Engine“."
   },
   {
-    "id": "f506000000000001",
+    "id": "f507000000000001",
     "type": "comment",
-    "z": "f506000000000000",
+    "z": "f507000000000000",
     "name": "Definition: flows/scenarios/putaway-strategy.js (im Repository bearbeiten, dann Flows neu erzeugen)",
     "info": "",
     "x": 380,
@@ -679,9 +712,9 @@
     "wires": []
   },
   {
-    "id": "f506000000000002",
+    "id": "f507000000000002",
     "type": "function",
-    "z": "f506000000000000",
+    "z": "f507000000000000",
     "name": "Szenario putaway-strategy anmelden",
     "func": "return msg;\n",
     "outputs": 0,
@@ -695,16 +728,16 @@
     "wires": []
   },
   {
-    "id": "f507000000000000",
+    "id": "f508000000000000",
     "type": "tab",
     "label": "Szenario: receiving-flow",
     "disabled": false,
     "info": "Schrittliste aus flows/scenarios/receiving-flow.js; ausgeführt vom Tab „Schritt-Engine“."
   },
   {
-    "id": "f507000000000001",
+    "id": "f508000000000001",
     "type": "comment",
-    "z": "f507000000000000",
+    "z": "f508000000000000",
     "name": "Definition: flows/scenarios/receiving-flow.js (im Repository bearbeiten, dann Flows neu erzeugen)",
     "info": "",
     "x": 380,
@@ -712,9 +745,9 @@
     "wires": []
   },
   {
-    "id": "f507000000000002",
+    "id": "f508000000000002",
     "type": "function",
-    "z": "f507000000000000",
+    "z": "f508000000000000",
     "name": "Szenario receiving-flow anmelden",
     "func": "return msg;\n",
     "outputs": 0,
@@ -728,16 +761,16 @@
     "wires": []
   },
   {
-    "id": "f508000000000000",
+    "id": "f509000000000000",
     "type": "tab",
     "label": "Szenario: stock-flow",
     "disabled": false,
     "info": "Schrittliste aus flows/scenarios/stock-flow.js; ausgeführt vom Tab „Schritt-Engine“."
   },
   {
-    "id": "f508000000000001",
+    "id": "f509000000000001",
     "type": "comment",
-    "z": "f508000000000000",
+    "z": "f509000000000000",
     "name": "Definition: flows/scenarios/stock-flow.js (im Repository bearbeiten, dann Flows neu erzeugen)",
     "info": "",
     "x": 380,
@@ -745,9 +778,9 @@
     "wires": []
   },
   {
-    "id": "f508000000000002",
+    "id": "f509000000000002",
     "type": "function",
-    "z": "f508000000000000",
+    "z": "f509000000000000",
     "name": "Szenario stock-flow anmelden",
     "func": "return msg;\n",
     "outputs": 0,
@@ -761,16 +794,16 @@
     "wires": []
   },
   {
-    "id": "f509000000000000",
+    "id": "f510000000000000",
     "type": "tab",
     "label": "Szenario: transport-order-flow",
     "disabled": false,
     "info": "Schrittliste aus flows/scenarios/transport-order-flow.js; ausgeführt vom Tab „Schritt-Engine“."
   },
   {
-    "id": "f509000000000001",
+    "id": "f510000000000001",
     "type": "comment",
-    "z": "f509000000000000",
+    "z": "f510000000000000",
     "name": "Definition: flows/scenarios/transport-order-flow.js (im Repository bearbeiten, dann Flows neu erzeugen)",
     "info": "",
     "x": 380,
@@ -778,9 +811,9 @@
     "wires": []
   },
   {
-    "id": "f509000000000002",
+    "id": "f510000000000002",
     "type": "function",
-    "z": "f509000000000000",
+    "z": "f510000000000000",
     "name": "Szenario transport-order-flow anmelden",
     "func": "return msg;\n",
     "outputs": 0,
@@ -794,16 +827,16 @@
     "wires": []
   },
   {
-    "id": "f510000000000000",
+    "id": "f511000000000000",
     "type": "tab",
     "label": "Szenario: tu-placement",
     "disabled": false,
     "info": "Schrittliste aus flows/scenarios/tu-placement.js; ausgeführt vom Tab „Schritt-Engine“."
   },
   {
-    "id": "f510000000000001",
+    "id": "f511000000000001",
     "type": "comment",
-    "z": "f510000000000000",
+    "z": "f511000000000000",
     "name": "Definition: flows/scenarios/tu-placement.js (im Repository bearbeiten, dann Flows neu erzeugen)",
     "info": "",
     "x": 380,
@@ -811,9 +844,9 @@
     "wires": []
   },
   {
-    "id": "f510000000000002",
+    "id": "f511000000000002",
     "type": "function",
-    "z": "f510000000000000",
+    "z": "f511000000000000",
     "name": "Szenario tu-placement anmelden",
     "func": "return msg;\n",
     "outputs": 0,
@@ -1431,6 +1464,458 @@
     "x": 680,
     "y": 80,
     "wires": []
+  },
+  {
+    "id": "f000000000000011",
+    "type": "tab",
+    "label": "Beispiel: ERP-Anbindung",
+    "disabled": false,
+    "info": "ERP-Anbindung mit den Nodes „ERP einlesen“, „ERP ausgeben“ und „ERP quittieren“.\n\n**Eingang** (Antwort: Anzahl verarbeitet/fehlerhaft/doppelt):\n- `POST /examples/erp/json` – kanonisches JSON (einzeln, Liste oder `{ messages }`)\n- `POST /examples/erp/csv/:kind` – CSV (`product`, `receiving-order`, `outbound-order`), Kopf `x-filename` für die Nachrichten-ID\n- `POST /examples/erp/idoc?target=VS-01` – SAP-IDoc-XML (MATMAS, ORDERS, DELVRY), `target` = Packplatz für Auslieferungen\n\n**Ausgang**: alle 30 s (und per `POST /examples/erp/export`) Rückmeldungen abholen, an das ERP senden und quittieren. Hier geht es an einen **ERP-Simulator** (`GET /examples/erp/simulator` zeigt, was angekommen ist). Für ein echtes ERP den Simulator durch einen HTTP-Request- bzw. Datei-Node ersetzen und das Format in „ERP ausgeben“ wählen (JSON, CSV, SAP IDoc WMMBXY); Fehler über einen Catch-Node ebenfalls an „ERP quittieren“ leiten.\n\n**Bestandsabgleich**: nächtlich um 02:00 (`POST /v1/erp/stock-snapshots`).\n\nRückmeldungen entstehen nur mit `ERP_EXPORT_ENABLED=true` an der API (in docker compose Standard)."
+  },
+  {
+    "id": "f711000000000001",
+    "type": "http in",
+    "z": "f000000000000011",
+    "name": "POST /examples/erp/json",
+    "url": "/examples/erp/json",
+    "method": "post",
+    "upload": false,
+    "swaggerDoc": "",
+    "x": 170,
+    "y": 60,
+    "wires": [
+      [
+        "f711000000000004"
+      ]
+    ]
+  },
+  {
+    "id": "f711000000000002",
+    "type": "http in",
+    "z": "f000000000000011",
+    "name": "POST /examples/erp/csv/:kind",
+    "url": "/examples/erp/csv/:kind",
+    "method": "post",
+    "upload": false,
+    "swaggerDoc": "",
+    "x": 180,
+    "y": 120,
+    "wires": [
+      [
+        "f711000000000003"
+      ]
+    ]
+  },
+  {
+    "id": "f711000000000003",
+    "type": "function",
+    "z": "f000000000000011",
+    "name": "Art und Dateiname",
+    "func": "    msg.erpKind = msg.req.params.kind;\n    msg.filename = msg.req.headers['x-filename'] || `upload-${Date.now()}.csv`;\n    return msg;\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 410,
+    "y": 120,
+    "wires": [
+      [
+        "f711000000000005"
+      ]
+    ]
+  },
+  {
+    "id": "f711000000000004",
+    "type": "wms-erp-in",
+    "z": "f000000000000011",
+    "name": "JSON einlesen",
+    "server": "b0000000000000c1",
+    "format": "json",
+    "kind": "outbound-order",
+    "target": "",
+    "messageIdPrefix": "",
+    "options": "",
+    "errorOutput": true,
+    "outputs": 2,
+    "x": 620,
+    "y": 60,
+    "wires": [
+      [
+        "f711000000000008"
+      ],
+      [
+        "f711000000000008"
+      ]
+    ]
+  },
+  {
+    "id": "f711000000000005",
+    "type": "wms-erp-in",
+    "z": "f000000000000011",
+    "name": "CSV einlesen",
+    "server": "b0000000000000c1",
+    "format": "csv",
+    "kind": "outbound-order",
+    "target": "",
+    "messageIdPrefix": "msg.filename",
+    "options": "",
+    "errorOutput": true,
+    "outputs": 2,
+    "x": 620,
+    "y": 120,
+    "wires": [
+      [
+        "f711000000000008"
+      ],
+      [
+        "f711000000000008"
+      ]
+    ]
+  },
+  {
+    "id": "f711000000000006",
+    "type": "http in",
+    "z": "f000000000000011",
+    "name": "POST /examples/erp/idoc",
+    "url": "/examples/erp/idoc",
+    "method": "post",
+    "upload": false,
+    "swaggerDoc": "",
+    "x": 170,
+    "y": 180,
+    "wires": [
+      [
+        "f711000000000007"
+      ]
+    ]
+  },
+  {
+    "id": "f711000000000007",
+    "type": "wms-erp-in",
+    "z": "f000000000000011",
+    "name": "SAP IDoc einlesen",
+    "server": "b0000000000000c1",
+    "format": "idoc",
+    "kind": "outbound-order",
+    "target": "msg.req.query.target",
+    "messageIdPrefix": "",
+    "options": "{\"units\":{\"ST\":\"PCS\"}}",
+    "errorOutput": true,
+    "outputs": 2,
+    "x": 630,
+    "y": 180,
+    "wires": [
+      [
+        "f711000000000008"
+      ],
+      [
+        "f711000000000008"
+      ]
+    ]
+  },
+  {
+    "id": "f711000000000008",
+    "type": "function",
+    "z": "f000000000000011",
+    "name": "Antwort",
+    "func": "    if (msg.wmsError) {\n      msg.statusCode = msg.wmsError.code === 'ERP_FORMAT' ? 400 : 502;\n      msg.payload = { ok: false, code: msg.wmsError.code, message: msg.wmsError.message };\n    } else {\n      msg.statusCode = 200;\n      msg.payload = { ok: msg.payload.failed === 0, ...msg.payload };\n    }\n    return msg;\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 870,
+    "y": 120,
+    "wires": [
+      [
+        "f711000000000009"
+      ]
+    ]
+  },
+  {
+    "id": "f711000000000009",
+    "type": "http response",
+    "z": "f000000000000011",
+    "name": "Antwort",
+    "statusCode": "",
+    "headers": {},
+    "x": 1040,
+    "y": 120,
+    "wires": []
+  },
+  {
+    "id": "f711000000000010",
+    "type": "inject",
+    "z": "f000000000000011",
+    "name": "alle 30 s",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "30",
+    "crontab": "",
+    "once": true,
+    "onceDelay": "20",
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 150,
+    "y": 280,
+    "wires": [
+      [
+        "f711000000000012"
+      ]
+    ]
+  },
+  {
+    "id": "f711000000000011",
+    "type": "http in",
+    "z": "f000000000000011",
+    "name": "POST /examples/erp/export",
+    "url": "/examples/erp/export",
+    "method": "post",
+    "upload": false,
+    "swaggerDoc": "",
+    "x": 180,
+    "y": 320,
+    "wires": [
+      [
+        "f711000000000013"
+      ]
+    ]
+  },
+  {
+    "id": "f711000000000012",
+    "type": "wms-erp-out",
+    "z": "f000000000000011",
+    "name": "Rückmeldungen abholen (zyklisch)",
+    "server": "b0000000000000c1",
+    "format": "json",
+    "types": "",
+    "limit": "50",
+    "directory": "",
+    "options": "",
+    "summary": false,
+    "errorOutput": false,
+    "outputs": 1,
+    "x": 460,
+    "y": 280,
+    "wires": [
+      [
+        "f711000000000015"
+      ]
+    ]
+  },
+  {
+    "id": "f711000000000013",
+    "type": "wms-erp-out",
+    "z": "f000000000000011",
+    "name": "Rückmeldungen abholen (auf Anfrage)",
+    "server": "b0000000000000c1",
+    "format": "json",
+    "types": "",
+    "limit": "50",
+    "directory": "",
+    "options": "",
+    "summary": true,
+    "errorOutput": false,
+    "outputs": 1,
+    "x": 470,
+    "y": 320,
+    "wires": [
+      [
+        "f711000000000014"
+      ]
+    ]
+  },
+  {
+    "id": "f711000000000014",
+    "type": "switch",
+    "z": "f000000000000011",
+    "name": "Rückmeldung oder Zusammenfassung?",
+    "property": "erp",
+    "propertyType": "msg",
+    "rules": [
+      {
+        "t": "nnull"
+      },
+      {
+        "t": "else"
+      }
+    ],
+    "checkall": "false",
+    "repair": false,
+    "outputs": 2,
+    "x": 760,
+    "y": 320,
+    "wires": [
+      [
+        "f711000000000015"
+      ],
+      [
+        "f711000000000018"
+      ]
+    ]
+  },
+  {
+    "id": "f711000000000015",
+    "type": "function",
+    "z": "f000000000000011",
+    "name": "ERP-Simulator (statt HTTP-Request)",
+    "func": "    // Ein echtes ERP empfängt hier msg.payload (Format aus „ERP ausgeben“), z. B. per HTTP-Request-Node.\n    const received = flow.get('erpSimulator') || [];\n    const documentNumber = `50${String(Date.now()).slice(-8)}`;\n    received.push({ receivedAt: new Date().toISOString(), documentNumber, fileName: msg.filename, contentType: msg.headers['content-type'], message: msg.erpMessage });\n    flow.set('erpSimulator', received.slice(-200));\n    msg.statusCode = 201;\n    msg.payload = { documentNumber };\n    return msg;\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 1060,
+    "y": 280,
+    "wires": [
+      [
+        "f711000000000016"
+      ]
+    ]
+  },
+  {
+    "id": "f711000000000016",
+    "type": "wms-erp-ack",
+    "z": "f000000000000011",
+    "name": "ERP quittieren",
+    "server": "b0000000000000c1",
+    "erpReference": "msg.payload.documentNumber",
+    "errorOutput": false,
+    "outputs": 1,
+    "x": 1290,
+    "y": 280,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "f711000000000018",
+    "type": "function",
+    "z": "f000000000000011",
+    "name": "Zusammenfassung",
+    "func": "    msg.statusCode = 200;\n    msg.payload = msg.erpSummary;\n    return msg;\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 1040,
+    "y": 360,
+    "wires": [
+      [
+        "f711000000000019"
+      ]
+    ]
+  },
+  {
+    "id": "f711000000000019",
+    "type": "http response",
+    "z": "f000000000000011",
+    "name": "Antwort",
+    "statusCode": "",
+    "headers": {},
+    "x": 1230,
+    "y": 360,
+    "wires": []
+  },
+  {
+    "id": "f711000000000020",
+    "type": "http in",
+    "z": "f000000000000011",
+    "name": "GET /examples/erp/simulator",
+    "url": "/examples/erp/simulator",
+    "method": "get",
+    "upload": false,
+    "swaggerDoc": "",
+    "x": 180,
+    "y": 420,
+    "wires": [
+      [
+        "f711000000000021"
+      ]
+    ]
+  },
+  {
+    "id": "f711000000000021",
+    "type": "function",
+    "z": "f000000000000011",
+    "name": "Empfangenes zeigen",
+    "func": "    const type = msg.req.query.type;\n    const received = flow.get('erpSimulator') || [];\n    msg.statusCode = 200;\n    msg.payload = { items: type ? received.filter((r) => r.message && r.message.type === type) : received };\n    return msg;\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 450,
+    "y": 420,
+    "wires": [
+      [
+        "f711000000000022"
+      ]
+    ]
+  },
+  {
+    "id": "f711000000000022",
+    "type": "http response",
+    "z": "f000000000000011",
+    "name": "Antwort",
+    "statusCode": "",
+    "headers": {},
+    "x": 640,
+    "y": 420,
+    "wires": []
+  },
+  {
+    "id": "f711000000000030",
+    "type": "inject",
+    "z": "f000000000000011",
+    "name": "täglich 02:00",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "00 02 * * *",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 160,
+    "y": 500,
+    "wires": [
+      [
+        "f711000000000031"
+      ]
+    ]
+  },
+  {
+    "id": "f711000000000031",
+    "type": "wms-api",
+    "z": "f000000000000011",
+    "name": "Bestandsabgleich bereitstellen",
+    "server": "b0000000000000c1",
+    "method": "POST",
+    "path": "/v1/erp/stock-snapshots",
+    "body": "",
+    "errorOutput": false,
+    "outputs": 1,
+    "x": 420,
+    "y": 500,
+    "wires": [
+      []
+    ]
   },
   {
     "id": "f000000000000010",

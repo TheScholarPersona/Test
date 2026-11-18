@@ -1,0 +1,57 @@
+<!-- Generiert von scripts/build-html.mjs – dort ändern. -->
+<script type="text/javascript">
+  RED.nodes.registerType('wms-erp-ack', {
+    category: 'WMS',
+    color: '#7FB7DF',
+    defaults: {
+      "name": {
+            "value": ""
+      },
+      "server": {
+            "value": "",
+            "type": "wms-config",
+            "required": true
+      },
+      "errorOutput": {
+            "value": false
+      },
+      "outputs": {
+            "value": 1
+      },
+      "erpReference": {
+            "value": ""
+      }
+    },
+    inputs: 1,
+    outputs: 1,
+    outputLabels: ["Erfolg","Fehler"],
+    icon: 'status.svg',
+    paletteLabel: 'ERP quittieren',
+    label: function () {
+      return this.name || 'ERP quittieren';
+    },
+    oneditprepare: function () {
+    },
+    oneditsave: function () {
+      this.outputs = $('#node-input-errorOutput').is(':checked') ? 2 : 1;
+    },
+  });
+</script>
+
+<script type="text/html" data-template-name="wms-erp-ack">
+    <div class="form-row"><label for="node-input-server">Verbindung</label><input type="text" id="node-input-server"></div>
+    <div class="form-row"><label for="node-input-erpReference">ERP-Beleg</label><input type="text" id="node-input-erpReference" placeholder="z. B. msg.payload.documentNumber (optional)"></div>
+    <div class="form-row"><label for="node-input-errorOutput">Fehlerausgang</label><input type="checkbox" id="node-input-errorOutput" style="width:auto"></div>
+    <div class="form-row"><label for="node-input-name">Name</label><input type="text" id="node-input-name"></div>
+</script>
+
+<script type="text/html" data-help-name="wms-erp-ack">
+<p>Bestätigt eine Rückmeldung aus <b>ERP ausgeben</b> (<code>msg.erp.id</code>). Ist <code>msg.error</code> gesetzt (z. B. über einen
+Catch-Node) oder <code>msg.statusCode</code> ≥ 300 (HTTP-Request), wird ein Fehlversuch gemeldet – das WMS versucht es mit wachsender
+Wartezeit erneut und meldet nach zu vielen Versuchen <code>erp-message.failed</code>. Sonst gilt die Rückmeldung als zugestellt;
+optional mit Belegnummer des ERP.</p>
+<h3>Fehler</h3>
+<p>Antwortet das WMS mit einem Fehler (z. B. <code>409 PLACEMENT_REJECTED</code>), steht er in <code>msg.wmsError</code>
+(<code>code</code>, <code>message</code>, <code>statusCode</code>, <code>details</code>). Ohne <i>Fehlerausgang</i> ist er ein
+Node-RED-Fehler, den ein <b>Catch</b>-Node abfängt; mit <i>Fehlerausgang</i> geht die Nachricht an Ausgang 2.</p>
+</script>

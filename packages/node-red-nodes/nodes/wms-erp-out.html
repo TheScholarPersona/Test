@@ -1,0 +1,82 @@
+<!-- Generiert von scripts/build-html.mjs – dort ändern. -->
+<script type="text/javascript">
+  RED.nodes.registerType('wms-erp-out', {
+    category: 'WMS',
+    color: '#7FB7DF',
+    defaults: {
+      "name": {
+            "value": ""
+      },
+      "server": {
+            "value": "",
+            "type": "wms-config",
+            "required": true
+      },
+      "errorOutput": {
+            "value": false
+      },
+      "outputs": {
+            "value": 1
+      },
+      "format": {
+            "value": "json"
+      },
+      "types": {
+            "value": ""
+      },
+      "limit": {
+            "value": "20"
+      },
+      "directory": {
+            "value": ""
+      },
+      "options": {
+            "value": ""
+      },
+      "summary": {
+            "value": false
+      }
+    },
+    inputs: 1,
+    outputs: 1,
+    outputLabels: ["Erfolg","Fehler"],
+    icon: 'file-out.svg',
+    paletteLabel: 'ERP ausgeben',
+    label: function () {
+      return this.name || 'ERP ausgeben (' + (this.format || 'json') + ')';
+    },
+    oneditprepare: function () {
+    },
+    oneditsave: function () {
+      this.outputs = $('#node-input-errorOutput').is(':checked') ? 2 : 1;
+    },
+  });
+</script>
+
+<script type="text/html" data-template-name="wms-erp-out">
+    <div class="form-row"><label for="node-input-server">Verbindung</label><input type="text" id="node-input-server"></div>
+    <div class="form-row"><label for="node-input-format">Format</label><select id="node-input-format"><option value="json">JSON (kanonisch)</option><option value="csv">CSV</option><option value="idoc">SAP IDoc WMMBXY (XML)</option></select></div>
+    <div class="form-row"><label for="node-input-summary">Zusammenfassung</label><input type="checkbox" id="node-input-summary" style="width:auto"></div>
+    <div class="form-row"><label for="node-input-types">Nur Arten</label><input type="text" id="node-input-types" placeholder="leer = alle, z. B. goods-receipt,goods-issue"></div>
+    <div class="form-row"><label for="node-input-limit">Höchstens</label><input type="text" id="node-input-limit" placeholder="20"></div>
+    <div class="form-row"><label for="node-input-directory">Verzeichnis</label><input type="text" id="node-input-directory" placeholder="für msg.filename, z. B. /data/erp/out"></div>
+    <div class="form-row"><label for="node-input-options">Optionen (JSON)</label><input type="text" id="node-input-options" placeholder="{"plant":"1000","storageLocation":"0001","decimalComma":true}"></div>
+    <div class="form-row"><label for="node-input-errorOutput">Fehlerausgang</label><input type="checkbox" id="node-input-errorOutput" style="width:auto"></div>
+    <div class="form-row"><label for="node-input-name">Name</label><input type="text" id="node-input-name"></div>
+</script>
+
+<script type="text/html" data-help-name="wms-erp-out">
+<p>Holt fällige Rückmeldungen ans ERP ab (Wareneingang, Warenausgang, Bestandsänderung, Bestandsabgleich) und gibt
+je Rückmeldung eine Nachricht aus: <code>msg.payload</code> (Inhalt im Zielformat), <code>msg.filename</code>, <code>msg.headers</code>
+und <code>msg.erp</code>. Mit einem Inject-Node zyklisch auslösen (z. B. alle 30 s).</p>
+<p>Danach senden (HTTP-Request, Datei schreiben …) und mit <b>ERP quittieren</b> bestätigen. Ohne Quittung liefert das WMS die Rückmeldung
+nach 5 Minuten erneut aus. Nicht übersetzbare Rückmeldungen (z. B. Bestandsabgleich als IDoc) werden sofort als Fehlversuch gemeldet.</p>
+<p>IDoc-Optionen: <code>plant</code>, <code>storageLocation</code>, <code>client</code>, <code>senderPartner</code>, <code>receiverPartner</code>,
+<code>movementTypes</code> (z. B. <code>{"loss":"551"}</code>), <code>units</code>. CSV: <code>delimiter</code>, <code>decimalComma</code>.</p>
+<p><i>Zusammenfassung</i>: Am Ende zusätzlich eine Nachricht ohne <code>msg.erp</code> mit <code>msg.erpSummary = { claimed, sent }</code>
+(z. B. für die Antwort eines HTTP-Endpunkts; mit einem Switch-Node von den Rückmeldungen trennen).</p>
+<h3>Fehler</h3>
+<p>Antwortet das WMS mit einem Fehler (z. B. <code>409 PLACEMENT_REJECTED</code>), steht er in <code>msg.wmsError</code>
+(<code>code</code>, <code>message</code>, <code>statusCode</code>, <code>details</code>). Ohne <i>Fehlerausgang</i> ist er ein
+Node-RED-Fehler, den ein <b>Catch</b>-Node abfängt; mit <i>Fehlerausgang</i> geht die Nachricht an Ausgang 2.</p>
+</script>

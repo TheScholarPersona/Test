@@ -5,7 +5,9 @@
   "description": "Node-RED-Nodes für das WMS: Verbindung, fachliche Nodes, Ereignisse und Test-Nodes",
   "license": "UNLICENSED",
   "type": "commonjs",
-  "keywords": ["node-red"],
+  "keywords": [
+    "node-red"
+  ],
   "engines": {
     "node": ">=22.9"
   },
@@ -21,17 +23,25 @@
       "wms-wait-event": "nodes/wms-wait-event.js",
       "wms-test-start": "nodes/wms-test-start.js",
       "wms-assert": "nodes/wms-assert.js",
-      "wms-test-result": "nodes/wms-test-result.js"
+      "wms-test-result": "nodes/wms-test-result.js",
+      "wms-erp-in": "nodes/wms-erp-in.js",
+      "wms-erp-out": "nodes/wms-erp-out.js",
+      "wms-erp-ack": "nodes/wms-erp-ack.js"
     }
   },
-  "files": ["lib", "nodes"],
+  "files": [
+    "lib",
+    "nodes",
+    "examples"
+  ],
   "scripts": {
-    "typecheck": "node --check lib/*.js && for f in nodes/*.js; do node --check \"$f\" || exit 1; done",
+    "typecheck": "node --check lib/*.js && for f in lib/erp/*.js nodes/*.js; do node --check \"$f\" || exit 1; done",
     "test": "vitest run"
   },
   "devDependencies": {
     "node-red": "5.0.9",
     "node-red-node-test-helper": "0.3.6",
-    "vitest": "5.1.0"
+    "vitest": "5.1.0",
+    "@wms/shared": "workspace:*"
   }
 }

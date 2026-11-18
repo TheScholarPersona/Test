@@ -6,6 +6,7 @@ import { Product, ProductUnit, StockBooking, StockCount, StockCountLine, StockIt
 
 export { InventoryModule } from './inventory.module.js';
 export { availableOf, InventoryService, type ReceiveInput, type ShippedContent } from './application/inventory.service.js';
+export { CreateProductSchema, UpdateProductSchema } from './http/schemas.js';
 export { Product, StockItem, StockReservation };
 
 export const inventoryEntities = [Product, ProductUnit, StockItem, StockBooking, StockReservation, StockCount, StockCountLine];

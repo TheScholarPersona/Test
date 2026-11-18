@@ -1,0 +1,267 @@
+# Feature-Katalog – Bereich ERP-Anbindung.
+area: erp
+
+features:
+  - id: erp.import
+    title: Artikel, Avise und Auslageraufträge aus dem ERP übernehmen
+    group: erp.eingang
+    summary: Verarbeitet Nachrichten des ERP im neutralen JSON-Format – Artikel anlegen oder ändern, Avise und Auslageraufträge anlegen oder stornieren; jede Nachrichten-ID nur einmal.
+    description: |
+      Das ERP (über Node-RED) schickt kanonische Nachrichten mit `messageId`, `type` und `data`: Artikel (`product`,
+      anlegen oder aktualisieren inkl. Einheiten), Avise (`receiving-order`) und Auslageraufträge (`outbound-order`),
+      jeweils anlegen oder stornieren. Dieselbe `messageId` noch einmal liefert das gespeicherte Ergebnis, ohne erneut zu
+      buchen. Formal ungültige Nachrichten werden mit 400 abgelehnt; fachliche Fehler (z. B. unbekannter Artikel) werden
+      als FAILED protokolliert und gemeldet.
+    usage:
+      - channel: api
+        text: "`POST /v1/erp/inbound` mit `{ messageId, type, action?, data }` – Antwort mit Protokolleintrag und `duplicate`."
+      - channel: node-red
+        text: Ein Flow übersetzt das konkrete ERP-Format (JSON-Webhook, CSV, SAP IDoc) und ruft den Endpunkt mit dem Service-Token auf.
+    rules:
+      - Idempotent je `messageId` (eindeutig je Richtung).
+      - Nur mit Admin-Recht (Service-Token von Node-RED).
+    dependsOn: [bestand.produktstamm, wareneingang.avis, auslagerung.auftrag]
+    technical:
+      components:
+        - apps/api/src/modules/erp/application/erp.service.ts
+        - apps/api/src/modules/erp/http/erp.controller.ts
+        - packages/shared/src/erp.ts
+      endpoints:
+        - POST /v1/erp/inbound
+      events:
+        emits: [erp-message.failed]
+      notes:
+        - Kanonisches Format in `packages/shared/src/erp.ts` (Zod), Tabelle `erp_message`.
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/erp.integration.test.ts
+        test: legt Artikel an und aktualisiert sie; dieselbe Nachrichten-ID wird nur einmal verarbeitet
+      - kind: integration
+        file: apps/api/test/integration/erp.integration.test.ts
+        test: lehnt formal ungültige Nachrichten ab, ohne sie zu protokollieren
+      - kind: integration
+        file: apps/api/test/integration/erp.integration.test.ts
+        test: legt Auslageraufträge mit Packplatz an und storniert Aufträge auf Anweisung
+    comparisons:
+      openwms:
+        status: nicht-einsehbar
+        note: Die ERP-Adapter von OpenWMS sind privat.
+        refs:
+          - Analyse 1.1
+
+  - id: erp.rueckmeldungen
+    title: Rückmeldungen ans ERP
+    group: erp.ausgang
+    summary: Erzeugt Wareneingang, Warenausgang und Bestandsänderungen in derselben Transaktion wie die Buchung und stellt sie zur Abholung bereit – mit Quittung und automatischer Wiederholung.
+    description: |
+      Aus fachlichen Ereignissen entstehen Ausgangsnachrichten: Erfassung → Wareneingang, Sendung ausgeliefert oder
+      Pick direkt ausgebucht → Warenausgang, Korrektur oder sonstiger Abgang → Bestandsänderung. Sie werden in derselben
+      Transaktion wie die Buchung gespeichert, gehen also nie verloren. Node-RED holt fällige Nachrichten ab (älteste
+      zuerst) und quittiert jede mit `ack` (optional Belegnummer des ERP) oder `nack`. Fehlschläge werden mit wachsender
+      Wartezeit (30 s … 1 h) wiederholt; ohne Quittung gilt die Abholung nach 5 Minuten als Fehlversuch. Nach
+      `ERP_MAX_ATTEMPTS` Versuchen ist die Nachricht FAILED und wird gemeldet.
+    usage:
+      - channel: api
+        text: "`POST /v1/erp/outbound/claim?limit=…&type=…`, dann je Nachricht `POST /v1/erp/messages/{id}/ack` (`erpReference?`) oder `…/nack` (`error`)."
+      - channel: node-red
+        text: Ein Flow holt zyklisch ab, übersetzt ins ERP-Format und quittiert.
+    rules:
+      - Nur mit `ERP_EXPORT_ENABLED=true` werden Rückmeldungen erzeugt.
+      - Warenausgang einer Sendung kommt gesammelt mit allen TUs; die Einzelabgänge der Sendung werden nicht zusätzlich gemeldet.
+    dependsOn: [erp.import, wareneingang.erfassung, versand.warenausgang, bestand.korrektur]
+    technical:
+      components:
+        - apps/api/src/modules/erp/domain/erp-mapping.ts
+        - apps/api/src/modules/erp/application/erp.service.ts
+        - apps/api/src/infrastructure/outbox/outbox.service.ts
+      endpoints:
+        - POST /v1/erp/outbound/claim
+        - POST /v1/erp/messages/{id}/ack
+        - POST /v1/erp/messages/{id}/nack
+      events:
+        emits: [erp-message.sent, erp-message.failed]
+    evidence:
+      - kind: unit
+        file: apps/api/test/unit/erp/erp-mapping.test.ts
+        test: "unterscheidet Abgänge nach Bezug: Pick, Versand oder sonstiger Abgang"
+      - kind: integration
+        file: apps/api/test/integration/erp.integration.test.ts
+        test: meldet den Wareneingang, liefert ihn einmal aus und bestätigt die Zustellung
+      - kind: integration
+        file: apps/api/test/integration/erp.integration.test.ts
+        test: meldet Warenausgang am Pick und Bestandskorrekturen
+      - kind: integration
+        file: apps/api/test/integration/erp.integration.test.ts
+        test: wiederholt nach Fehlschlag mit Wartezeit, gibt nach zu vielen Versuchen auf und lässt sich erneut anstoßen
+      - kind: integration
+        file: apps/api/test/integration/erp.integration.test.ts
+        test: liefert abgeholte, aber nicht quittierte Nachrichten nach Ablauf der Frist erneut aus
+    comparisons:
+      openwms:
+        status: nicht-einsehbar
+        note: Die ERP-Adapter von OpenWMS sind privat.
+        refs:
+          - Analyse 1.1
+
+  - id: erp.bestandsabgleich
+    title: Bestandsabgleich mit dem ERP
+    group: erp.ausgang
+    summary: Stellt den Gesamtbestand je Artikel und Charge als Nachricht ans ERP bereit – auf Knopfdruck oder zeitgesteuert aus Node-RED.
+    description: Der Abgleich summiert den Bestand aller TUs je Artikel und Charge in der Basiseinheit und legt ihn als Ausgangsnachricht `stock-snapshot` ab; zugestellt wird er wie jede Rückmeldung. Den Zeitplan (z. B. nächtlich) legt ein Node-RED-Flow fest.
+    usage:
+      - channel: leitstand
+        text: Seite **ERP** – „Bestandsabgleich senden“.
+      - channel: api
+        text: "`POST /v1/erp/stock-snapshots`; Abholung wie alle Rückmeldungen."
+    rules:
+      - Auslösen darf der Leitstand.
+    dependsOn: [erp.rueckmeldungen, bestand.summen]
+    technical:
+      components:
+        - apps/api/src/modules/erp/application/erp.service.ts
+      endpoints:
+        - POST /v1/erp/stock-snapshots
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/erp.integration.test.ts
+        test: stellt einen Bestandsabgleich je Artikel und Charge bereit
+    comparisons:
+      openwms:
+        status: nicht-einsehbar
+        note: Die ERP-Adapter von OpenWMS sind privat.
+        refs:
+          - Analyse 1.1
+
+  - id: erp.protokoll
+    title: Nachrichtenprotokoll und Wiederholung
+    group: erp.betrieb
+    summary: Zeigt alle Nachrichten zwischen ERP und WMS mit Zustand, Versuchen und Fehlertext – fehlgeschlagene lassen sich mit einem Klick erneut anstoßen.
+    description: Jede Nachricht wird mit Richtung, Art, Bezug (Auftrag, Sendung, Artikel), Inhalt, Ergebnis, Versuchen und letztem Fehler gespeichert. Endgültig fehlgeschlagene Nachrichten werden als Ereignis `erp-message.failed` gemeldet (z. B. für eine Benachrichtigung über Node-RED) und lassen sich im Leitstand erneut anstoßen.
+    usage:
+      - channel: leitstand
+        text: Seite **ERP** – Zahlen je Richtung und Zustand, Filter nach Richtung und Fehlern, Inhalt je Nachricht, „Erneut“.
+      - channel: api
+        text: "`GET /v1/erp/messages?direction=…&state=…&type=…&reference=…`, `GET /v1/erp/messages/{id}`, `GET /v1/erp/counts`, `POST /v1/erp/messages/{id}/retry`."
+    rules:
+      - Erneut anstoßen nur bei FAILED; Eingang wird neu verarbeitet, Ausgang wieder zur Abholung bereitgestellt.
+      - Kennzahl `wms_erp_messages` je Richtung und Zustand unter `/metrics`.
+    dependsOn: [erp.import, erp.rueckmeldungen]
+    technical:
+      components:
+        - apps/api/src/modules/erp/http/erp.controller.ts
+        - apps/web/src/pages/ErpPage.tsx
+      endpoints:
+        - GET /v1/erp/messages
+        - GET /v1/erp/messages/{id}
+        - GET /v1/erp/counts
+        - POST /v1/erp/messages/{id}/retry
+      events:
+        emits: [erp-message.failed]
+      uiRoutes: [/erp]
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/erp.integration.test.ts
+        test: protokolliert fachliche Fehler, meldet sie und verarbeitet nach Korrektur erneut
+      - kind: integration
+        file: apps/api/test/integration/erp.integration.test.ts
+        test: zählt Nachrichten je Richtung und Zustand
+      - kind: web-e2e
+        file: apps/web/e2e/seiten.spec.ts
+        test: "ERP: Protokoll mit Fehler, erneut anstoßen und Bestandsabgleich senden"
+    comparisons:
+      openwms:
+        status: nicht-einsehbar
+        note: Die ERP-Adapter von OpenWMS sind privat.
+        refs:
+          - Analyse 1.1
+
+  - id: erp.formate
+    title: ERP-Formate JSON, CSV und SAP IDoc
+    group: erp.formate
+    summary: Übersetzt JSON-Webhooks, CSV-Dateien und SAP-IDocs ins neutrale WMS-Format und Rückmeldungen zurück – ohne Programmierung.
+    description: |
+      Eingang: JSON (kanonisch, einzeln oder als Liste), CSV für Artikel, Avise und Auslageraufträge (eine Zeile je Position,
+      Trennzeichen erkannt, Dezimalkomma erlaubt) sowie SAP-IDoc-XML: MATMAS (Materialstamm), ORDERS (Bestellung → Avis),
+      DELVRY (Auslieferung → Auslagerauftrag mit Lieferadresse). Ausgang: JSON, CSV (eine Datei je Rückmeldung) und IDoc
+      WMMBXY (Warenbewegung) mit einstellbaren Bewegungsarten (101/501 Wareneingang, 601 Warenausgang, 701/702
+      Bestandsänderung), Werk, Lagerort und Einheiten-Zuordnung (z. B. ST ↔ PCS). Der Bestandsabgleich wird nicht als IDoc
+      geliefert. Nachrichten-IDs: Dateiname + Auftrag bzw. Artikel (CSV), IDoc-Nummer (IDoc).
+    usage:
+      - channel: node-red
+        text: Nodes „ERP einlesen“ und „ERP ausgeben“ mit Format JSON, CSV oder SAP IDoc; Optionen als JSON (Einheiten, Werk, Lagerort, Bewegungsarten, Dezimalkomma).
+    rules:
+      - Fehlerhafte Dateien werden mit Zeilennummer bzw. Segment gemeldet (`ERP_FORMAT`); XML ohne externe Entitäten.
+      - Die Zuordnung der SAP-Felder und Bewegungsarten ist mit dem jeweiligen SAP-Customizing abzustimmen.
+    dependsOn: [erp.import, erp.rueckmeldungen]
+    technical:
+      components:
+        - packages/node-red-nodes/lib/erp/index.js
+        - packages/node-red-nodes/lib/erp/csv-erp.js
+        - packages/node-red-nodes/lib/erp/idoc.js
+        - packages/node-red-nodes/lib/erp/xml.js
+        - packages/node-red-nodes/examples/erp
+      notes:
+        - Ohne Laufzeitabhängigkeiten (läuft direkt in Node-RED); Tests prüfen jede Ausgabe gegen die kanonischen Schemas.
+    evidence:
+      - kind: unit
+        file: packages/node-red-nodes/test/erp-formats.test.mjs
+        test: macht aus Artikel-, Avis- und Auftragsdateien kanonische Nachrichten
+      - kind: unit
+        file: packages/node-red-nodes/test/erp-formats.test.mjs
+        test: macht aus einer Bestellung (ORDERS) ein Avis und aus einer Auslieferung (DELVRY) einen Auslagerauftrag
+      - kind: unit
+        file: packages/node-red-nodes/test/erp-formats.test.mjs
+        test: schreibt Wareneingang, Warenausgang und Bestandsänderung als WMMBXY mit passender Bewegungsart
+      - kind: unit
+        file: packages/node-red-nodes/test/erp-formats.test.mjs
+        test: schreibt Rückmeldungen als CSV, auf Wunsch mit Dezimalkomma
+      - kind: scenario
+        id: erp-flow
+    comparisons:
+      openwms:
+        status: nicht-einsehbar
+        note: Die ERP-Adapter von OpenWMS sind privat.
+        refs:
+          - Analyse 1.1
+
+  - id: erp.node-red
+    title: ERP-Bausteine und Beispiel-Flow in Node-RED
+    group: erp.formate
+    summary: Drei Nodes – einlesen, ausgeben, quittieren – und ein fertiger Beispiel-Flow mit Webhook-, CSV- und IDoc-Eingang, zyklischer Abholung, ERP-Simulator und nächtlichem Bestandsabgleich.
+    description: |
+      „ERP einlesen“ übergibt Dateien oder Webhook-Bodies dem WMS und meldet verarbeitet, fehlerhaft und doppelt.
+      „ERP ausgeben“ holt fällige Rückmeldungen ab und gibt je Rückmeldung eine Nachricht im Zielformat aus (mit Dateiname
+      und Content-Type); „ERP quittieren“ bestätigt sie nach dem Senden oder meldet einen Fehlversuch (`msg.error` oder
+      HTTP-Status ab 300). Der Beispiel-Tab „ERP-Anbindung“ zeigt den ganzen Ablauf mit einem ERP-Simulator; für ein echtes
+      ERP wird der Simulator durch einen HTTP-Request- oder Datei-Node ersetzt.
+    usage:
+      - channel: node-red
+        text: "Tab **Beispiel: ERP-Anbindung** – `POST /examples/erp/json`, `…/csv/:kind`, `…/idoc?target=…`, `POST /examples/erp/export`, `GET /examples/erp/simulator`."
+    dependsOn: [erp.formate, integration.node-red-nodes]
+    technical:
+      components:
+        - packages/node-red-nodes/nodes/wms-erp-in.js
+        - packages/node-red-nodes/nodes/wms-erp-out.js
+        - packages/node-red-nodes/nodes/wms-erp-ack.js
+        - flows/scripts/build-flows.mjs
+        - flows/scenarios/erp-flow.js
+      nodeRedNodes: [wms-erp-in, wms-erp-out, wms-erp-ack]
+    evidence:
+      - kind: unit
+        file: packages/node-red-nodes/test/erp-nodes.test.mjs
+        test: wms-erp-in übersetzt eine CSV-Datei und übergibt jede Nachricht einzeln
+      - kind: unit
+        file: packages/node-red-nodes/test/erp-nodes.test.mjs
+        test: wms-erp-out gibt Rückmeldungen im Zielformat aus und meldet nicht übersetzbare sofort als Fehlversuch
+      - kind: unit
+        file: packages/node-red-nodes/test/erp-nodes.test.mjs
+        test: wms-erp-ack bestätigt Erfolg mit Beleg und meldet HTTP-Fehler als Fehlversuch
+      - kind: scenario
+        id: erp-flow
+    comparisons:
+      openwms:
+        status: neu
+        note: OpenWMS bindet ERPs über eigene (private) Adapter-Dienste an; Bausteine zum Zusammenstecken ohne Programmierung gibt es dort nicht.
+        refs:
+          - Analyse 1.1
+

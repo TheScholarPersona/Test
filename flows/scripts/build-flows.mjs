@@ -1324,6 +1324,95 @@ add(
 );
 add({ id: 'f900000000000003', type: 'debug', z: TAB_NOTICE, name: 'Meldung', active: true, tosidebar: true, console: false, tostatus: true, complete: 'payload.text', targetType: 'msg', statusVal: 'payload.text', statusType: 'msg', x: 680, y: 80, wires: [] });
 
+// --- Beispiel: ERP-Anbindung ------------------------------------------------------
+const TAB_ERP = 'f000000000000011';
+add({
+  id: TAB_ERP,
+  type: 'tab',
+  label: 'Beispiel: ERP-Anbindung',
+  disabled: false,
+  info:
+    'ERP-Anbindung mit den Nodes „ERP einlesen“, „ERP ausgeben“ und „ERP quittieren“.\n\n' +
+    '**Eingang** (Antwort: Anzahl verarbeitet/fehlerhaft/doppelt):\n' +
+    '- `POST /examples/erp/json` – kanonisches JSON (einzeln, Liste oder `{ messages }`)\n' +
+    '- `POST /examples/erp/csv/:kind` – CSV (`product`, `receiving-order`, `outbound-order`), Kopf `x-filename` für die Nachrichten-ID\n' +
+    '- `POST /examples/erp/idoc?target=VS-01` – SAP-IDoc-XML (MATMAS, ORDERS, DELVRY), `target` = Packplatz für Auslieferungen\n\n' +
+    '**Ausgang**: alle 30 s (und per `POST /examples/erp/export`) Rückmeldungen abholen, an das ERP senden und quittieren. ' +
+    'Hier geht es an einen **ERP-Simulator** (`GET /examples/erp/simulator` zeigt, was angekommen ist). Für ein echtes ERP den Simulator ' +
+    'durch einen HTTP-Request- bzw. Datei-Node ersetzen und das Format in „ERP ausgeben“ wählen (JSON, CSV, SAP IDoc WMMBXY); ' +
+    'Fehler über einen Catch-Node ebenfalls an „ERP quittieren“ leiten.\n\n' +
+    '**Bestandsabgleich**: nächtlich um 02:00 (`POST /v1/erp/stock-snapshots`).\n\n' +
+    'Rückmeldungen entstehen nur mit `ERP_EXPORT_ENABLED=true` an der API (in docker compose Standard).',
+});
+// Eingang
+add({ id: 'f711000000000001', type: 'http in', z: TAB_ERP, name: 'POST /examples/erp/json', url: '/examples/erp/json', method: 'post', upload: false, swaggerDoc: '', x: 170, y: 60, wires: [['f711000000000004']] });
+add({ id: 'f711000000000002', type: 'http in', z: TAB_ERP, name: 'POST /examples/erp/csv/:kind', url: '/examples/erp/csv/:kind', method: 'post', upload: false, swaggerDoc: '', x: 180, y: 120, wires: [['f711000000000003']] });
+add(
+  fn('f711000000000003', TAB_ERP, 'Art und Dateiname', function () {
+    msg.erpKind = msg.req.params.kind;
+    msg.filename = msg.req.headers['x-filename'] || `upload-${Date.now()}.csv`;
+    return msg;
+  }, [['f711000000000005']], 410, 120),
+);
+add({ id: 'f711000000000004', type: 'wms-erp-in', z: TAB_ERP, name: 'JSON einlesen', server: WMS, format: 'json', kind: 'outbound-order', target: '', messageIdPrefix: '', options: '', errorOutput: true, outputs: 2, x: 620, y: 60, wires: [['f711000000000008'], ['f711000000000008']] });
+add({ id: 'f711000000000005', type: 'wms-erp-in', z: TAB_ERP, name: 'CSV einlesen', server: WMS, format: 'csv', kind: 'outbound-order', target: '', messageIdPrefix: 'msg.filename', options: '', errorOutput: true, outputs: 2, x: 620, y: 120, wires: [['f711000000000008'], ['f711000000000008']] });
+add({ id: 'f711000000000006', type: 'http in', z: TAB_ERP, name: 'POST /examples/erp/idoc', url: '/examples/erp/idoc', method: 'post', upload: false, swaggerDoc: '', x: 170, y: 180, wires: [['f711000000000007']] });
+add({ id: 'f711000000000007', type: 'wms-erp-in', z: TAB_ERP, name: 'SAP IDoc einlesen', server: WMS, format: 'idoc', kind: 'outbound-order', target: 'msg.req.query.target', messageIdPrefix: '', options: '{"units":{"ST":"PCS"}}', errorOutput: true, outputs: 2, x: 630, y: 180, wires: [['f711000000000008'], ['f711000000000008']] });
+add(
+  fn('f711000000000008', TAB_ERP, 'Antwort', function () {
+    if (msg.wmsError) {
+      msg.statusCode = msg.wmsError.code === 'ERP_FORMAT' ? 400 : 502;
+      msg.payload = { ok: false, code: msg.wmsError.code, message: msg.wmsError.message };
+    } else {
+      msg.statusCode = 200;
+      msg.payload = { ok: msg.payload.failed === 0, ...msg.payload };
+    }
+    return msg;
+  }, [['f711000000000009']], 870, 120),
+);
+add(response('f711000000000009', TAB_ERP, 1040, 120));
+// Ausgang
+add({ id: 'f711000000000010', type: 'inject', z: TAB_ERP, name: 'alle 30 s', props: [{ p: 'payload' }], repeat: '30', crontab: '', once: true, onceDelay: '20', topic: '', payload: '', payloadType: 'date', x: 150, y: 280, wires: [['f711000000000012']] });
+add({ id: 'f711000000000011', type: 'http in', z: TAB_ERP, name: 'POST /examples/erp/export', url: '/examples/erp/export', method: 'post', upload: false, swaggerDoc: '', x: 180, y: 320, wires: [['f711000000000013']] });
+add({ id: 'f711000000000012', type: 'wms-erp-out', z: TAB_ERP, name: 'Rückmeldungen abholen (zyklisch)', server: WMS, format: 'json', types: '', limit: '50', directory: '', options: '', summary: false, errorOutput: false, outputs: 1, x: 460, y: 280, wires: [['f711000000000015']] });
+add({ id: 'f711000000000013', type: 'wms-erp-out', z: TAB_ERP, name: 'Rückmeldungen abholen (auf Anfrage)', server: WMS, format: 'json', types: '', limit: '50', directory: '', options: '', summary: true, errorOutput: false, outputs: 1, x: 470, y: 320, wires: [['f711000000000014']] });
+add({ id: 'f711000000000014', type: 'switch', z: TAB_ERP, name: 'Rückmeldung oder Zusammenfassung?', property: 'erp', propertyType: 'msg', rules: [{ t: 'nnull' }, { t: 'else' }], checkall: 'false', repair: false, outputs: 2, x: 760, y: 320, wires: [['f711000000000015'], ['f711000000000018']] });
+add(
+  fn('f711000000000015', TAB_ERP, 'ERP-Simulator (statt HTTP-Request)', function () {
+    // Ein echtes ERP empfängt hier msg.payload (Format aus „ERP ausgeben“), z. B. per HTTP-Request-Node.
+    const received = flow.get('erpSimulator') || [];
+    const documentNumber = `50${String(Date.now()).slice(-8)}`;
+    received.push({ receivedAt: new Date().toISOString(), documentNumber, fileName: msg.filename, contentType: msg.headers['content-type'], message: msg.erpMessage });
+    flow.set('erpSimulator', received.slice(-200));
+    msg.statusCode = 201;
+    msg.payload = { documentNumber };
+    return msg;
+  }, [['f711000000000016']], 1060, 280),
+);
+add({ id: 'f711000000000016', type: 'wms-erp-ack', z: TAB_ERP, name: 'ERP quittieren', server: WMS, erpReference: 'msg.payload.documentNumber', errorOutput: false, outputs: 1, x: 1290, y: 280, wires: [[]] });
+add(
+  fn('f711000000000018', TAB_ERP, 'Zusammenfassung', function () {
+    msg.statusCode = 200;
+    msg.payload = msg.erpSummary;
+    return msg;
+  }, [['f711000000000019']], 1040, 360),
+);
+add(response('f711000000000019', TAB_ERP, 1230, 360));
+add({ id: 'f711000000000020', type: 'http in', z: TAB_ERP, name: 'GET /examples/erp/simulator', url: '/examples/erp/simulator', method: 'get', upload: false, swaggerDoc: '', x: 180, y: 420, wires: [['f711000000000021']] });
+add(
+  fn('f711000000000021', TAB_ERP, 'Empfangenes zeigen', function () {
+    const type = msg.req.query.type;
+    const received = flow.get('erpSimulator') || [];
+    msg.statusCode = 200;
+    msg.payload = { items: type ? received.filter((r) => r.message && r.message.type === type) : received };
+    return msg;
+  }, [['f711000000000022']], 450, 420),
+);
+add(response('f711000000000022', TAB_ERP, 640, 420));
+// Bestandsabgleich
+add({ id: 'f711000000000030', type: 'inject', z: TAB_ERP, name: 'täglich 02:00', props: [{ p: 'payload' }], repeat: '', crontab: '00 02 * * *', once: false, onceDelay: 0.1, topic: '', payload: '', payloadType: 'date', x: 160, y: 500, wires: [['f711000000000031']] });
+add({ id: 'f711000000000031', type: 'wms-api', z: TAB_ERP, name: 'Bestandsabgleich bereitstellen', server: WMS, method: 'POST', path: '/v1/erp/stock-snapshots', body: '', errorOutput: false, outputs: 1, x: 420, y: 500, wires: [[]] });
+
 // --- Szenario mit Test-Nodes: nodes-selftest -------------------------------------
 const TAB_SELF = 'f000000000000010';
 add({

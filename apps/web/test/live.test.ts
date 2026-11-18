@@ -4,7 +4,7 @@ import { affectedQueries } from '../src/live/events';
 
 describe('Live-Ereignisse', () => {
   it('ordnet Ereignistypen den Ansichten zu, die neu laden müssen', () => {
-    expect(affectedQueries('stock.issued')).toEqual(['stock', 'overview']);
+    expect(affectedQueries('stock.issued')).toEqual(['stock', 'overview', 'erp']);
     expect(affectedQueries('outbound-pick.confirmed')).toEqual(['outbound', 'picks', 'stock']);
     expect(affectedQueries('transport-unit.moved')).toContain('units');
     expect(affectedQueries('unbekannt.typ')).toEqual([]);

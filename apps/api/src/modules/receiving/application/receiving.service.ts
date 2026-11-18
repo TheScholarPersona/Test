@@ -101,7 +101,7 @@ export class ReceivingService {
       const order = tx.create(ReceivingOrder, {
         id: randomUUID(),
         orderId: input.orderId,
-        supplier: input.supplier ?? partner?.code ?? null,
+        supplier: input.supplier ?? partner?.name ?? null,
         supplierCode: partner?.code ?? null,
         priority: input.priority,
         priorityRank: priorityRankOf(input.priority),

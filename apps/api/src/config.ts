@@ -40,6 +40,10 @@ const EnvSchema = z.object({
   /** Veröffentlichte Outbox-Einträge so lange aufbewahren (Stunden), danach löschen. 0 = nie löschen. */
   OUTBOX_RETENTION_HOURS: z.coerce.number().min(0).max(24 * 3650).default(168),
   OUTBOX_CLEANUP_INTERVAL_MS: z.coerce.number().int().min(1000).max(86_400_000).default(3_600_000),
+  /** Rückmeldungen ans ERP erzeugen (Wareneingang, Warenausgang, Bestandsänderungen). Aus: es entstehen keine Ausgangsnachrichten. */
+  ERP_EXPORT_ENABLED: booleanString(false),
+  /** Zustellversuche je Ausgangsnachricht, danach FAILED (im Leitstand erneut anstoßbar). */
+  ERP_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(100).default(10),
 });
 
 export type AppProfile = z.infer<typeof EnvSchema>['APP_PROFILE'];
@@ -70,6 +74,7 @@ export interface AppConfig {
     retentionHours: number;
     cleanupIntervalMs: number;
   };
+  erp: { exportEnabled: boolean; maxAttempts: number };
 }
 
 export interface ServiceTokenConfig {
@@ -139,6 +144,7 @@ export function loadConfig(env: Record<string, string | undefined>): AppConfig {
       retentionHours: e.OUTBOX_RETENTION_HOURS,
       cleanupIntervalMs: e.OUTBOX_CLEANUP_INTERVAL_MS,
     },
+    erp: { exportEnabled: e.ERP_EXPORT_ENABLED, maxAttempts: e.ERP_MAX_ATTEMPTS },
   };
 }
 

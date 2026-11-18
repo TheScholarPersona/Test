@@ -113,7 +113,7 @@ features:
     summary: Verknüpft ein Avis mit einem Lieferanten aus den Stammdaten.
     description: |
       Beim Anlegen eines Avis kann eine Lieferantennummer angegeben werden; der Partner muss aktiv sein und die Rolle
-      Lieferant haben. Ohne Freitext wird die Nummer auch als Lieferant angezeigt. Avise mit Freitext-Lieferant
+      Lieferant haben. Ohne Freitext wird der Name des Partners als Lieferant angezeigt. Avise mit Freitext-Lieferant
       bleiben möglich.
     usage:
       - channel: leitstand

@@ -78,6 +78,9 @@ export const RULES: readonly Rule[] = [
   // Auslagerung
   { methods: ['POST'], path: new RegExp(`^/v1/outbound-orders/${ID}/picks/${ID}/confirm$`), access: FLOOR, note: 'Pick quittieren' },
   { methods: WRITE, path: /^\/v1\/outbound-orders(\/.*)?$/, access: OPERATIONS, note: 'Auslageraufträge' },
+  // ERP: Wiederholen und Bestandsabgleich darf der Leitstand; Ein- und Ausgang der Nachrichten nur admin (Node-RED-Token)
+  { methods: ['POST'], path: new RegExp(`^/v1/erp/messages/${ID}/retry$`), access: OPERATIONS, note: 'ERP-Nachricht erneut anstoßen' },
+  { methods: ['POST'], path: /^\/v1\/erp\/stock-snapshots$/, access: OPERATIONS, note: 'Bestandsabgleich ans ERP' },
   // Versand
   { methods: ['POST'], path: new RegExp(`^/v1/shipments/${ID}/load$`), access: FLOOR, note: 'Ladekontrolle (TU verladen)' },
   { methods: WRITE, path: /^\/v1\/shipments(\/.*)?$/, access: OPERATIONS, note: 'Sendungen bilden, Warenausgang, Storno' },

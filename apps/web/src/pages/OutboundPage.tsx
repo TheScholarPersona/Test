@@ -103,7 +103,7 @@ export function OutboundPage() {
                 {orders.data.items.map((o) => (
                   <tr key={o.orderId} className="clickable" onClick={() => setSelected(o.orderId)}>
                     <td className="mono">{o.orderId}</td>
-                    <td>{o.customer ?? '–'}</td>
+                    <td>{o.shipTo?.name ? `${o.shipTo.name}${o.customerCode ? ` (${o.customerCode})` : ''}` : (o.customer ?? '–')}</td>
                     <td><StateBadge state={o.state} /></td>
                     <td className="num">{o.lines.length}</td>
                     <td className="num">{o.picks.filter((p) => p.state === 'OPEN').length}</td>

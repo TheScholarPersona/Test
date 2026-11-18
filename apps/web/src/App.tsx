@@ -9,6 +9,7 @@ import { LocationsPage } from './pages/LocationsPage';
 import { OutboundPage } from './pages/OutboundPage';
 import { OverviewPage } from './pages/OverviewPage';
 import { PartnersPage } from './pages/PartnersPage';
+import { ErpPage } from './pages/ErpPage';
 import { ShippingPage } from './pages/ShippingPage';
 import { ReceivingPage } from './pages/ReceivingPage';
 import { ScannerPage } from './pages/ScannerPage';
@@ -25,6 +26,7 @@ const NAV = [
   ['/transport', 'Transport'],
   ['/materialfluss', 'Materialfluss'],
   ['/partner', 'Partner'],
+  ['/erp', 'ERP'],
   ['/ereignisse', 'Ereignisse'],
   ['/scanner', 'Scanner'],
 ] as const;
@@ -64,6 +66,7 @@ export function App() {
           <Route path="/transport" element={<TransportPage />} />
           <Route path="/materialfluss" element={<FlowPage />} />
           <Route path="/versand" element={<ShippingPage />} />
+          <Route path="/erp" element={<ErpPage />} />
           <Route path="/partner" element={<PartnersPage />} />
           <Route path="/ereignisse" element={<EventsPage />} />
           <Route path="/scanner/*" element={<ScannerPage />} />

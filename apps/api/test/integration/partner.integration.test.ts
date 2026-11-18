@@ -108,7 +108,7 @@ describe('Geschäftspartner', () => {
     });
 
     it('verknüpft das Avis mit dem Lieferanten', async () => {
-      expect(await receiving('W-1', { supplierCode: 'L-2000' })).toMatchObject({ status: 201, body: { supplier: 'L-2000', supplierCode: 'L-2000' } });
+      expect(await receiving('W-1', { supplierCode: 'L-2000' })).toMatchObject({ status: 201, body: { supplier: 'Musterlieferant AG', supplierCode: 'L-2000' } });
       expect((await receiving('W-2', { supplier: 'Lieferant GmbH' })).body).toMatchObject({ supplier: 'Lieferant GmbH', supplierCode: null });
     });
   });

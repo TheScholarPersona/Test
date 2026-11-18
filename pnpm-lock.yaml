@@ -154,6 +154,9 @@ importers:
 
   packages/node-red-nodes:
     devDependencies:
+      '@wms/shared':
+        specifier: workspace:*
+        version: link:../shared
       node-red:
         specifier: 5.0.9
         version: 5.0.9(typescript@6.0.3)
