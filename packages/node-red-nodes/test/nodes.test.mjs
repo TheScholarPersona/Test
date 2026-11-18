@@ -219,7 +219,7 @@ describe('WMS-Nodes für Node-RED', () => {
     const { createRequire } = await import('node:module');
     const pkg = createRequire(import.meta.url)('../package.json');
     expect(Object.keys(pkg['node-red'].nodes).sort()).toEqual(
-      ['wms-api', 'wms-assert', 'wms-config', 'wms-device-event', 'wms-event', 'wms-move-tu', 'wms-receive', 'wms-test-result', 'wms-test-start', 'wms-wait-event'],
+      ['wms-api', 'wms-assert', 'wms-config', 'wms-device-event', 'wms-erp-ack', 'wms-erp-in', 'wms-erp-out', 'wms-event', 'wms-move-tu', 'wms-receive', 'wms-test-result', 'wms-test-start', 'wms-wait-event'],
     );
   });
 });

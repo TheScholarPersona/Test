@@ -71,9 +71,9 @@ gaps:
     summary: Fertige Anbindung an SAP und Microsoft Dynamics.
     status: teilweise
     source: privat
-    note: Anbindung ist über REST, MQTT und Node-RED möglich (Beispiel-Flow ERP-CSV → Wareneingang), fertige Adapter gibt es nicht.
+    note: ERP-Anbindung mit Protokoll, Wiederholung und Formaten JSON, CSV und SAP IDoc (MATMAS, ORDERS, DELVRY, WMMBXY) über Node-RED; ein fertiger Adapter für Microsoft Dynamics fehlt, die SAP-Zuordnung ist je Customizing abzustimmen.
     refs: [Analyse 1.1 private Repositories]
-    related: [integration.beispiel-flows, integration.ereignisse]
+    related: [erp.import, erp.rueckmeldungen, erp.formate, erp.node-red]
 
   - id: openwms.aufgaben
     title: Lageraufgaben (WMS Tasks)

@@ -244,6 +244,7 @@ areas:
       endpoints: [/v1/erp]
       events: [erp-message]
       uiRoutes: [/erp]
+      nodeRedNodes: [wms-erp-in, wms-erp-out, wms-erp-ack]
     groups:
       - id: erp.eingang
         title: Eingang (ERP → WMS)
@@ -254,6 +255,9 @@ areas:
       - id: erp.betrieb
         title: Protokoll und Fehler
         summary: Nachrichten nachvollziehen und erneut anstoßen.
+      - id: erp.formate
+        title: Formate und Node-RED
+        summary: JSON, CSV und SAP IDoc übersetzen; Bausteine und Beispiel-Flows.
 
   - id: oberflaeche
     title: Bedienoberfläche

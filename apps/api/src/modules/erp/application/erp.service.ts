@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { EntityManager, type FilterQuery, UniqueConstraintViolationException } from '@mikro-orm/postgresql';
 import { Inject, Injectable, type OnModuleInit } from '@nestjs/common';
-import { type ErpInboundMessage, ErpMessageFailedEvent, type ErpOutboundMessage, type ErpOutboundType, type EventEnvelope } from '@wms/shared';
+import { type ErpInboundMessage, ErpMessageFailedEvent, ErpMessageSentEvent, type ErpOutboundMessage, type ErpOutboundType, type EventEnvelope } from '@wms/shared';
 import { ZodError } from 'zod';
 import { DomainError, NotFoundError, RuleViolationError } from '../../../common/domain-error.js';
 import { APP_CONFIG, type AppConfig } from '../../../config.js';
@@ -193,6 +193,7 @@ export class ErpService implements OnModuleInit {
       message.leaseUntil = null;
       message.lastError = null;
       message.result = erpReference ? { erpReference } : null;
+      this.outbox.record(tx, ErpMessageSentEvent, { id: message.id, messageId: message.messageId, type: message.type, reference: message.reference ?? null, erpReference: erpReference ?? null });
       return message;
     });
   }

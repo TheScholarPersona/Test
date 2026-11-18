@@ -347,5 +347,5 @@ test('ERP: Protokoll mit Fehler, erneut anstoßen und Bestandsabgleich senden', 
 
   await page.getByRole('button', { name: 'Bestandsabgleich senden' }).click();
   await expect(page.getByText('Bestandsabgleich zur Abholung bereitgestellt')).toBeVisible();
-  await expect(table.getByRole('row', { name: /Bestandsabgleich/ }).first()).toContainText('PENDING');
+  await expect(table.getByRole('row', { name: /Bestandsabgleich/ }).first()).toContainText(/PENDING|IN_DELIVERY|SENT/);
 });

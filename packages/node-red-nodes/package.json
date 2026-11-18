@@ -23,7 +23,10 @@
       "wms-wait-event": "nodes/wms-wait-event.js",
       "wms-test-start": "nodes/wms-test-start.js",
       "wms-assert": "nodes/wms-assert.js",
-      "wms-test-result": "nodes/wms-test-result.js"
+      "wms-test-result": "nodes/wms-test-result.js",
+      "wms-erp-in": "nodes/wms-erp-in.js",
+      "wms-erp-out": "nodes/wms-erp-out.js",
+      "wms-erp-ack": "nodes/wms-erp-ack.js"
     }
   },
   "files": [

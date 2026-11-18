@@ -107,6 +107,8 @@ describe('ERP-Anbindung', () => {
       expect(receipt!.message.messageId).toBe(receipt!.id);
       expect(await claim()).toEqual([]);
       expect((await api.post(`/v1/erp/messages/${receipt!.id}/ack`, { erpReference: '5000000001' })).body).toMatchObject({ state: 'SENT', result: { erpReference: '5000000001' } });
+      const sent = await collector.waitFor((m) => m.topic === 'wms/erp-message/sent' && (m.body['payload'] as { id: string }).id === receipt!.id);
+      expect(sent.body['payload']).toMatchObject({ type: 'goods-receipt', reference: 'ERP-WE-1', erpReference: '5000000001' });
       expect((await api.post(`/v1/erp/messages/${receipt!.id}/ack`, {})).body.state).toBe('SENT');
     });
 

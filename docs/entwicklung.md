@@ -536,7 +536,17 @@ Dieselbe `messageId` wird nur einmal verarbeitet (Antwort `duplicate: true` mit 
 
 Zustellung: `POST /v1/erp/outbound/claim?limit=50&type=…` holt fällige Nachrichten (älteste zuerst, `FOR UPDATE SKIP LOCKED`), dann je Nachricht `POST /v1/erp/messages/{id}/ack` `{ erpReference? }` oder `…/nack` `{ error }`. Wiederholung nach 30 s, 1 min, 2 min … höchstens 1 h; ohne Quittung gilt die Abholung nach 5 min als Fehlversuch. Nach `ERP_MAX_ATTEMPTS` (Standard 10) ist die Nachricht `FAILED` (Event `erp-message.failed`). `POST /v1/erp/messages/{id}/retry` (Leitstand) verarbeitet einen fehlgeschlagenen Eingang neu bzw. stellt einen Ausgang wieder bereit.
 
-Protokoll: `GET /v1/erp/messages?direction=IN|OUT&state=FAILED&type=…&reference=…`, `GET /v1/erp/counts`; Kennzahl `wms_erp_messages{state="OUT/PENDING"}`.
+Protokoll: `GET /v1/erp/messages?direction=IN|OUT&state=FAILED&type=…&reference=…`, `GET /v1/erp/counts`; Kennzahl `wms_erp_messages{state="OUT/PENDING"}`. Zugestellte Rückmeldungen melden `erp-message.sent`, endgültig fehlgeschlagene `erp-message.failed`.
+
+**Formate und Node-RED** (`packages/node-red-nodes/lib/erp`, ohne Abhängigkeiten, Beispiele in `packages/node-red-nodes/examples/erp`):
+
+| Format | Eingang | Ausgang |
+|---|---|---|
+| JSON | kanonische Nachricht, Liste oder `{ messages }` | kanonische Rückmeldung |
+| CSV | Artikel (`sku;description;baseUnit;units;overdeliveryAllowed`), Avise (`orderId;supplierCode;expectedAt;priority;posNo;sku;amount;unit`), Auslageraufträge (`orderId;customerCode;target;shipTo…;sku;amount;unit;lot`); eine Zeile je Position, `;` oder `,`, Dezimalkomma erlaubt | eine Datei je Rückmeldung, optional Dezimalkomma |
+| SAP IDoc (XML) | MATMAS → Artikel, ORDERS → Avis, DELVRY → Auslagerauftrag (Lieferadresse aus Partner WE) | WMMBXY: 101 Wareneingang mit Bestellbezug, 501 ohne Avis, 601 Warenausgang, 701/702 Bestandsänderung (einstellbar, ebenso Werk, Lagerort, Einheiten `ST`↔`PCS`); kein Bestandsabgleich |
+
+Nodes: **ERP einlesen** (`wms-erp-in`), **ERP ausgeben** (`wms-erp-out`, eine Nachricht je Rückmeldung mit `msg.filename`, `msg.headers`, `msg.erp`), **ERP quittieren** (`wms-erp-ack`; Fehler über `msg.error` oder HTTP-Status ≥ 300 → `nack`). Der Tab **Beispiel: ERP-Anbindung** enthält Webhook-, CSV- und IDoc-Eingang, Abholung alle 30 s mit ERP-Simulator, `POST /examples/erp/export` und nächtlichen Bestandsabgleich; das Szenario `erp-flow` prüft den Ablauf. In docker compose ist `ERP_EXPORT_ENABLED` eingeschaltet (`WMS_ERP_EXPORT_ENABLED=false` in der `.env` schaltet es ab). Die SAP-Zuordnung ist mit dem jeweiligen Customizing abzustimmen.
 
 ## Modul Dokumente (`/v1/documents`)
 

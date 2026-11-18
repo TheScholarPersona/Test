@@ -113,6 +113,13 @@ export type ErpOutboundMessage = z.infer<typeof ErpOutboundMessageSchema>;
 
 // --- Events --------------------------------------------------------------------------------
 
+/** Eine Rückmeldung wurde dem ERP zugestellt (Quittung `ack`). */
+export const ErpMessageSentEvent = defineEvent(
+  'erp-message.sent',
+  1,
+  z.object({ id: z.uuid(), messageId: z.string(), type: z.string(), reference: z.string().nullable(), erpReference: z.string().nullable() }),
+);
+
 /** Eine ERP-Nachricht ist endgültig fehlgeschlagen (Eingang: Verarbeitung; Ausgang: Zustellversuche aufgebraucht). */
 export const ErpMessageFailedEvent = defineEvent(
   'erp-message.failed',

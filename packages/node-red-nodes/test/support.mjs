@@ -6,7 +6,7 @@ const require = createRequire(import.meta.url);
 export const helper = require('node-red-node-test-helper');
 helper.init(require.resolve('node-red'));
 
-const nodeFiles = ['wms-config', 'wms-api', 'wms-move-tu', 'wms-receive', 'wms-device-event', 'wms-event', 'wms-wait-event', 'wms-test-start', 'wms-assert', 'wms-test-result'];
+const nodeFiles = ['wms-config', 'wms-api', 'wms-move-tu', 'wms-receive', 'wms-device-event', 'wms-event', 'wms-wait-event', 'wms-test-start', 'wms-assert', 'wms-test-result', 'wms-erp-in', 'wms-erp-out', 'wms-erp-ack'];
 
 /**
  * Gleiche Schnittstelle wie der MQTT-Broker-Node von Node-RED (register,

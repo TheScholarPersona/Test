@@ -77,6 +77,8 @@ services:
       MQTT_PASSWORD: ${WMS_MQTT_API_PASSWORD}
       MQTT_CA_FILE: /certs/ca.crt
       DB_MIGRATE_ON_START: "true"
+      # Rückmeldungen ans ERP erzeugen (abgeholt vom Beispiel-Flow „ERP-Anbindung“ in Node-RED)
+      ERP_EXPORT_ENABLED: ${WMS_ERP_EXPORT_ENABLED:-true}
       AUTH_ADMIN_PASSWORD: ${WMS_ADMIN_PASSWORD:?WMS_ADMIN_PASSWORD fehlt in der .env – pnpm env:init ausführen}
       # Node-RED führt Szenarien aus, die Stammdaten anlegen – deshalb admin. Im Betrieb eine engere Rolle (anlage) wählen.
       AUTH_SERVICE_TOKENS: node-red:admin:${WMS_NODE_RED_API_TOKEN:?WMS_NODE_RED_API_TOKEN fehlt in der .env – pnpm env:init ausführen}

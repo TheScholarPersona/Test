@@ -369,6 +369,103 @@ Verglichen wird als Text (Dezimalwerte), <code>gt</code>/<code>lt</code> numeris
 WMS-Nodes (<code>msg.wmsError</code>) zählt als fehlgeschlagener Schritt.</p>
 <p>Im Testframework werden Schritte und Ergebnis in <code>msg.scenario</code> übertragen; danach mit einem <code>link out</code> („return“) antworten.</p>`,
   },
+  {
+    type: 'wms-erp-in',
+    palette: 'ERP einlesen',
+    icon: 'file-in.svg',
+    label: "'ERP einlesen (' + (this.format || 'json') + ')'",
+    inputs: 1,
+    ...OUT,
+    errorOutput: true,
+    defaults: {
+      name: { value: '' },
+      ...action,
+      format: { value: 'json' },
+      kind: { value: 'outbound-order' },
+      target: { value: '' },
+      messageIdPrefix: { value: 'msg.filename' },
+      options: { value: '' },
+    },
+    fields: [
+      server,
+      { name: 'format', label: 'Format', type: 'select', options: [['json', 'JSON (kanonisch)'], ['csv', 'CSV'], ['idoc', 'SAP IDoc (XML)']] },
+      { name: 'kind', label: 'CSV-Inhalt', type: 'select', options: [['product', 'Artikel'], ['receiving-order', 'Avise'], ['outbound-order', 'Auslageraufträge']] },
+      { name: 'target', label: 'Packplatz (ERP-Code)', placeholder: 'z. B. VS-01 – für Auslageraufträge ohne Ziel' },
+      { name: 'messageIdPrefix', label: 'Nachrichten-ID', placeholder: 'msg.filename' },
+      { name: 'options', label: 'Optionen (JSON)', placeholder: '{"units":{"ST":"PCS"},"delimiter":";"}' },
+      errorOutput,
+    ],
+    help: `<p>Übersetzt Daten aus dem ERP ins kanonische Format und übergibt sie dem WMS (<code>POST /v1/erp/inbound</code>).
+<code>msg.payload</code>: Text oder Buffer (CSV, IDoc-XML) bzw. Objekt (JSON).</p>
+<ul><li><b>JSON</b>: kanonische Nachricht, Liste oder <code>{ messages: [...] }</code></li>
+<li><b>CSV</b>: Artikel, Avise oder Auslageraufträge (eine Zeile je Position); Nachrichten-ID = Dateiname + Auftrag bzw. Artikel</li>
+<li><b>SAP IDoc</b>: MATMAS (Artikel), ORDERS (Avis), DELVRY (Auslagerauftrag); Nachrichten-ID = IDoc-Nummer</li></ul>
+<p>Die Art einer CSV-Datei lässt sich je Nachricht mit <code>msg.erpKind</code> setzen (product, receiving-order, outbound-order).</p>
+<p>Dieselbe Nachrichten-ID verarbeitet das WMS nur einmal. Ergebnis in <code>msg.payload</code>: <code>total</code>, <code>processed</code>,
+<code>failed</code>, <code>duplicates</code>, <code>results</code>. Fachliche Fehler stehen im ERP-Protokoll (Seite <b>ERP</b>).
+Optionen: <code>units</code> (SAP-Einheit → WMS-Einheit), <code>delimiter</code>, <code>language</code>, <code>keepLeadingZeros</code>.</p>${ERRORS_HELP}`,
+  },
+  {
+    type: 'wms-erp-out',
+    palette: 'ERP ausgeben',
+    icon: 'file-out.svg',
+    label: "'ERP ausgeben (' + (this.format || 'json') + ')'",
+    inputs: 1,
+    ...OUT,
+    errorOutput: true,
+    defaults: {
+      name: { value: '' },
+      ...action,
+      format: { value: 'json' },
+      types: { value: '' },
+      limit: { value: '20' },
+      directory: { value: '' },
+      options: { value: '' },
+      summary: { value: false },
+    },
+    fields: [
+      server,
+      { name: 'format', label: 'Format', type: 'select', options: [['json', 'JSON (kanonisch)'], ['csv', 'CSV'], ['idoc', 'SAP IDoc WMMBXY (XML)']] },
+      { name: 'summary', label: 'Zusammenfassung', type: 'checkbox' },
+      { name: 'types', label: 'Nur Arten', placeholder: 'leer = alle, z. B. goods-receipt,goods-issue' },
+      { name: 'limit', label: 'Höchstens', placeholder: '20' },
+      { name: 'directory', label: 'Verzeichnis', placeholder: 'für msg.filename, z. B. /data/erp/out' },
+      { name: 'options', label: 'Optionen (JSON)', placeholder: '{"plant":"1000","storageLocation":"0001","decimalComma":true}' },
+      errorOutput,
+    ],
+    help: `<p>Holt fällige Rückmeldungen ans ERP ab (Wareneingang, Warenausgang, Bestandsänderung, Bestandsabgleich) und gibt
+je Rückmeldung eine Nachricht aus: <code>msg.payload</code> (Inhalt im Zielformat), <code>msg.filename</code>, <code>msg.headers</code>
+und <code>msg.erp</code>. Mit einem Inject-Node zyklisch auslösen (z. B. alle 30 s).</p>
+<p>Danach senden (HTTP-Request, Datei schreiben …) und mit <b>ERP quittieren</b> bestätigen. Ohne Quittung liefert das WMS die Rückmeldung
+nach 5 Minuten erneut aus. Nicht übersetzbare Rückmeldungen (z. B. Bestandsabgleich als IDoc) werden sofort als Fehlversuch gemeldet.</p>
+<p>IDoc-Optionen: <code>plant</code>, <code>storageLocation</code>, <code>client</code>, <code>senderPartner</code>, <code>receiverPartner</code>,
+<code>movementTypes</code> (z. B. <code>{"loss":"551"}</code>), <code>units</code>. CSV: <code>delimiter</code>, <code>decimalComma</code>.</p>
+<p><i>Zusammenfassung</i>: Am Ende zusätzlich eine Nachricht ohne <code>msg.erp</code> mit <code>msg.erpSummary = { claimed, sent }</code>
+(z. B. für die Antwort eines HTTP-Endpunkts; mit einem Switch-Node von den Rückmeldungen trennen).</p>${ERRORS_HELP}`,
+  },
+  {
+    type: 'wms-erp-ack',
+    palette: 'ERP quittieren',
+    icon: 'status.svg',
+    label: "'ERP quittieren'",
+    inputs: 1,
+    ...OUT,
+    errorOutput: true,
+    defaults: {
+      name: { value: '' },
+      ...action,
+      erpReference: { value: '' },
+    },
+    fields: [
+      server,
+      { name: 'erpReference', label: 'ERP-Beleg', placeholder: 'z. B. msg.payload.documentNumber (optional)' },
+      errorOutput,
+    ],
+    help: `<p>Bestätigt eine Rückmeldung aus <b>ERP ausgeben</b> (<code>msg.erp.id</code>). Ist <code>msg.error</code> gesetzt (z. B. über einen
+Catch-Node) oder <code>msg.statusCode</code> ≥ 300 (HTTP-Request), wird ein Fehlversuch gemeldet – das WMS versucht es mit wachsender
+Wartezeit erneut und meldet nach zu vielen Versuchen <code>erp-message.failed</code>. Sonst gilt die Rückmeldung als zugestellt;
+optional mit Belegnummer des ERP.</p>${ERRORS_HELP}`,
+  },
 ];
 
 // Mit --check nur vergleichen (Test/CI): Abweichung = Fehler.
