@@ -130,15 +130,18 @@ features:
       Ein gestarteter Auftrag kann unterbrochen und fortgesetzt werden; ein unterbrochener belegt die TU weiter. Der
       Abschluss bucht die TU (standardmäßig als gemeldete Ist-Position) und vermerkt Abweichungen vom Ziel. Storno und
       Scheitern beenden den Auftrag; danach startet der nächste wartende Auftrag der TU. Endzustände sind final.
+      Jedes Problem (Unterbrechung, Scheitern, blockierter Start) bleibt in der Problemhistorie des Auftrags erhalten,
+      auch wenn es aufgehoben ist.
     usage:
       - channel: api
         text: "`POST /v1/transport-orders/{number}/interrupt`, `…/resume`, `…/finish` (`location?`, `mode?`), `…/cancel`, `…/fail`."
       - channel: node-red
         text: Materialfluss-Programme `finish-order` und `interrupt-order`.
       - channel: leitstand
-        text: Seite **Transport** – Fortsetzen, Abschließen, Stornieren je Auftrag.
+        text: Seite **Transport** – Fortsetzen, Abschließen, Stornieren je Auftrag; „Problemhistorie“ aufklappen.
     rules:
       - Endzustände `FINISHED`, `CANCELED`, `ONFAILURE` erlauben keine Aktion mehr.
+      - Die Problemhistorie (`problems` am Auftrag) behält die letzten 50 Probleme mit Code, Text und Zeitpunkt.
       - TUs und Zielplätze offener Aufträge sind vor dem Löschen geschützt.
     acceptance:
       - id: abgeschlossen
@@ -147,6 +150,9 @@ features:
       - id: unterbrochen
         kind: effekt
         text: Ein Auftrag lässt sich unterbrechen, fortsetzen und scheitern lassen.
+      - id: problemhistorie
+        kind: effekt
+        text: Die Problemhistorie des Auftrags nennt alle bisherigen Probleme in zeitlicher Reihenfolge – auch aufgehobene.
       - id: endzustand
         kind: regel
         text: Endzustände erlauben keine Aktion mehr.
@@ -182,7 +188,7 @@ features:
       - kind: integration
         file: apps/api/test/integration/transport-order.integration.test.ts
         test: unterbricht, setzt fort und lässt scheitern
-        covers: [unterbrochen]
+        covers: [unterbrochen, problemhistorie]
       - kind: integration
         file: apps/api/test/integration/transport-order.integration.test.ts
         test: schützt TU und Zielplatz offener Aufträge vor dem Löschen
@@ -202,7 +208,7 @@ features:
     comparisons:
       openwms:
         status: erweitert
-        note: OpenWMS behandelt INTERRUPTED nicht (5.4 Nr. 6); hier unterbrechen und fortsetzen. Problemhistorie fehlt, siehe Lücken.
+        note: OpenWMS behandelt INTERRUPTED nicht (5.4 Nr. 6); hier unterbrechen und fortsetzen. Die Problemhistorie je Auftrag (`problems`) entspricht der ProblemHistory von OpenWMS.
         refs:
           - Analyse 3.5 O-03, O-06
           - Analyse 5.4 Nr. 6

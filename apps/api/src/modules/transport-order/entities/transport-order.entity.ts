@@ -36,6 +36,8 @@ const TransportOrderSchema = defineEntity({
     problemCode: p.string().length(60).nullable(),
     problemMessage: p.string().length(500).nullable(),
     problemAt: p.datetime().nullable(),
+    /** Problemhistorie: jedes gesetzte Problem mit Zeitpunkt, neueste zuletzt (höchstens 50). */
+    problems: p.json<{ code: string; message: string; at: string }[]>().defaultRaw(`'[]'`).onCreate(() => []),
     startedAt: p.datetime().nullable(),
     finishedAt: p.datetime().nullable(),
     finishedCoordinate: p.string().length(54).nullable(),

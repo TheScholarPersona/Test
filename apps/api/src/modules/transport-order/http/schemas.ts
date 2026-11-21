@@ -66,6 +66,8 @@ export const TransportOrderDtoSchema = z
     decisionId: z.uuid().nullable(),
     initiator: z.string().nullable(),
     problem: z.object({ code: z.string(), message: z.string(), at: z.iso.datetime() }).nullable(),
+    /** Alle bisherigen Probleme, älteste zuerst (höchstens 50). */
+    problems: z.array(z.object({ code: z.string(), message: z.string(), at: z.iso.datetime() })),
     startedAt: z.iso.datetime().nullable(),
     finished: z.object({ at: z.iso.datetime(), locationId: z.string(), deviated: z.boolean() }).nullable(),
     ended: z.object({ at: z.iso.datetime(), reason: z.string().nullable() }).nullable(),
