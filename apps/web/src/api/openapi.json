@@ -2665,6 +2665,18 @@
           "createdAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "seq": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "hash": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -2676,7 +2688,9 @@
           "lot",
           "bestBefore",
           "reference",
-          "createdAt"
+          "createdAt",
+          "seq",
+          "hash"
         ]
       },
       "StockCount": {
@@ -2908,6 +2922,268 @@
         ],
         "additionalProperties": false,
         "description": "Nicht genannte Soll-Zeilen gelten als nicht gefunden (0)"
+      },
+      "JournalHead": {
+        "type": "object",
+        "properties": {
+          "seq": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "hash": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "seq",
+          "hash",
+          "updatedAt"
+        ]
+      },
+      "JournalDayRoot": {
+        "type": "object",
+        "properties": {
+          "day": {
+            "type": "string",
+            "format": "date"
+          },
+          "count": {
+            "type": "integer"
+          },
+          "firstSeq": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "lastSeq": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "root": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "required": [
+          "day",
+          "count",
+          "firstSeq",
+          "lastSeq",
+          "root"
+        ]
+      },
+      "JournalProof": {
+        "type": "object",
+        "properties": {
+          "bookingId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "seq": {
+            "type": "integer"
+          },
+          "hash": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "day": {
+            "type": "string",
+            "format": "date"
+          },
+          "index": {
+            "type": "integer"
+          },
+          "size": {
+            "type": "integer"
+          },
+          "proof": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          },
+          "root": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "required": [
+          "bookingId",
+          "seq",
+          "hash",
+          "day",
+          "index",
+          "size",
+          "proof",
+          "root"
+        ]
+      },
+      "JournalVerification": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "checked": {
+            "type": "integer"
+          },
+          "head": {
+            "$ref": "#/components/schemas/JournalAnchor"
+          },
+          "pending": {
+            "type": "integer"
+          },
+          "problems": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "seq": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "bookingId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "code",
+                "seq",
+                "bookingId",
+                "message"
+              ]
+            }
+          },
+          "anchor": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "seq": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "hash": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "ok": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "seq",
+              "hash",
+              "ok"
+            ]
+          },
+          "days": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "day": {
+                  "type": "string",
+                  "format": "date"
+                },
+                "expected": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "actual": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "ok": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "day",
+                "expected",
+                "actual",
+                "ok"
+              ]
+            }
+          }
+        },
+        "required": [
+          "ok",
+          "checked",
+          "head",
+          "pending",
+          "problems",
+          "anchor",
+          "days"
+        ]
+      },
+      "JournalAnchor": {
+        "type": "object",
+        "properties": {
+          "seq": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "hash": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "required": [
+          "seq",
+          "hash"
+        ]
+      },
+      "JournalVerifyInput": {
+        "type": "object",
+        "properties": {
+          "anchor": {
+            "$ref": "#/components/schemas/JournalAnchor"
+          },
+          "days": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "day": {
+                  "type": "string",
+                  "format": "date"
+                },
+                "root": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                }
+              },
+              "required": [
+                "day",
+                "root"
+              ]
+            },
+            "maxItems": 400
+          }
+        },
+        "additionalProperties": false
       },
       "StrategyCatalog": {
         "type": "object",
@@ -14717,6 +14993,249 @@
           },
           "409": {
             "description": "Konflikt oder verletzte Geschäftsregel",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/stock-journal/head": {
+      "get": {
+        "summary": "Kopf der Hash-Kette (zum externen Verankern)",
+        "tags": [
+          "Bestand"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Kopf",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JournalHead"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/stock-journal/days/{day}": {
+      "get": {
+        "summary": "Merkle-Wurzel der Buchungen eines Tages (UTC)",
+        "tags": [
+          "Bestand"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "required": true,
+            "name": "day",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tageswurzel",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JournalDayRoot"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/stock-bookings/{id}/proof": {
+      "get": {
+        "summary": "Merkle-Beweis einer Buchung",
+        "tags": [
+          "Bestand"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Beweis",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JournalProof"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nicht gefunden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/stock-journal/verify": {
+      "post": {
+        "summary": "Hash-Kette vollständig prüfen, optional gegen verankerten Kopf und Tageswurzeln",
+        "tags": [
+          "Bestand"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JournalVerifyInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Ergebnis",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JournalVerification"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ungültige Anfrage (Feldprüfung)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Nicht angemeldet (UNAUTHENTICATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rolle reicht nicht (FORBIDDEN)",
             "content": {
               "application/json": {
                 "schema": {

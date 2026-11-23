@@ -589,6 +589,107 @@ features:
         refs:
           - Analyse 1.1
 
+  - id: bestand.journal-kette
+    title: Manipulationssicheres Buchungsjournal (Hash-Kette und Merkle-Wurzeln)
+    group: bestand.auswertung
+    summary: Macht jede nachträgliche Änderung am Buchungsjournal nachweisbar – auch durch jemanden mit vollem Datenbankzugriff, etwa bei einem Ransomware-Angriff.
+    description: |
+      Jede Buchung erhält beim Commit eine lückenlose Nummer und einen SHA-256-Hash, der den Hash der vorherigen Buchung
+      einschließt (Hash-Kette). Je Tag (UTC) bildet ein Merkle Tree nach RFC 6962 eine Wurzel über alle Buchungen;
+      damit lässt sich eine einzelne Buchung mit wenigen Hashes belegen. Kopf der Kette und Tageswurzeln werden
+      außerhalb des WMS verankert (unveränderbare Sicherung, ERP); die Prüfung rechnet jeden Hash unabhängig nach und
+      vergleicht mit dem verankerten Stand. So zeigt sie nach einem Vorfall, welcher Stand unverändert ist.
+    usage:
+      - channel: api
+        text: "`GET /v1/stock-journal/head`, `GET /v1/stock-journal/days/{day}`, `GET /v1/stock-bookings/{id}/proof`; prüfen mit `POST /v1/stock-journal/verify` (`anchor?`, `days?`)."
+      - channel: entwicklung
+        text: "`pnpm journal:anchor anker.json` schreibt Kopf und Tageswurzeln, `pnpm journal:verify anker.json` prüft dagegen (Exit-Code 1 bei Befund)."
+    rules:
+      - Verkettete Buchungen lassen sich weder ändern noch löschen (`JOURNAL_IMMUTABLE`, per Datenbank-Trigger).
+      - Die Verkettung läuft am Ende der Transaktion; die Sperre auf den Kettenkopf ist immer die letzte (keine neue Sperrreihenfolge).
+      - Befunde der Prüfung – geänderter Inhalt (`CHAIN_HASH_MISMATCH`), Lücke (`CHAIN_GAP`), gebrochene Verkettung (`CHAIN_LINK_BROKEN`), Abweichung vom Anker (`ANCHOR_MISMATCH`) oder von einer Tageswurzel (`DAY_ROOT_MISMATCH`).
+      - Schutz gegen ein Neuberechnen der ganzen Kette bietet nur der extern verankerte Stand.
+    acceptance:
+      - id: verkettet
+        kind: effekt
+        text: Jede Buchung trägt nach dem Commit eine lückenlose Nummer und einen Hash, auch bei gleichzeitigen Buchungen; die Prüfung bestätigt die Kette und der Kopf zeigt die letzte Buchung.
+      - id: merkle-beweis
+        kind: effekt
+        text: Eine einzelne Buchung lässt sich mit einem Merkle-Beweis aus wenigen Hashes gegen die Tageswurzel belegen; eine falsche Wurzel oder Position wird abgelehnt.
+      - id: journal-immutable
+        kind: regel
+        text: Verkettete Buchungen lassen sich weder ändern noch löschen.
+        code: JOURNAL_IMMUTABLE
+      - id: chain-hash-mismatch
+        kind: regel
+        text: Ein nachträglich geänderter Inhalt fällt an der betroffenen Buchung auf.
+        code: CHAIN_HASH_MISMATCH
+      - id: chain-gap
+        kind: regel
+        text: Eine gelöschte Buchung fällt als Lücke und gebrochene Verkettung auf.
+        code: CHAIN_GAP
+      - id: chain-link-broken
+        kind: regel
+        text: Stimmt der Vorgänger-Hash nicht, meldet die Prüfung eine gebrochene Verkettung.
+        code: CHAIN_LINK_BROKEN
+      - id: anchor-mismatch
+        kind: regel
+        text: Eine vollständig neu berechnete Kette ist in sich stimmig, weicht aber vom verankerten Kopf ab.
+        code: ANCHOR_MISMATCH
+      - id: day-root-mismatch
+        kind: regel
+        text: Eine neu berechnete Kette weicht von der verankerten Tageswurzel ab.
+        code: DAY_ROOT_MISMATCH
+    dependsOn: [bestand.buchungsjournal]
+    technical:
+      components:
+        - apps/api/src/modules/inventory/domain/journal-chain.ts
+        - apps/api/src/modules/inventory/application/journal.service.ts
+        - apps/api/src/modules/inventory/http/journal.controller.ts
+        - apps/api/src/migrations/Migration20261121100000_journal_chain.ts
+        - scripts/journal.mjs
+      endpoints:
+        - GET /v1/stock-journal/head
+        - GET /v1/stock-journal/days/{day}
+        - GET /v1/stock-bookings/{id}/proof
+        - POST /v1/stock-journal/verify
+      notes:
+        - Spalten `seq`, `prev_hash`, `hash` an `stock_booking`, Kopf in `journal_head`; Trigger `stock_booking_chain` (verzögert) und `stock_booking_guard`.
+        - Kanonisches Format v1 in SQL (`wms_journal_canonical`) und TypeScript (`canonical`) – beide müssen übereinstimmen; der Integrationstest prüft das.
+    evidence:
+      - kind: unit
+        file: apps/api/test/unit/inventory/journal-chain.test.ts
+        test: ändert jeden folgenden Hash, wenn eine Buchung geändert wird
+        covers: [verkettet]
+      - kind: unit
+        file: apps/api/test/unit/inventory/journal-chain.test.ts
+        test: belegt jede Buchung mit wenigen Hashes gegen die Wurzel
+        covers: [merkle-beweis]
+      - kind: unit
+        file: apps/api/test/unit/inventory/journal-chain.test.ts
+        test: lehnt geänderte Buchungen, falsche Position und falsche Wurzel ab
+        covers: [merkle-beweis]
+      - kind: integration
+        file: apps/api/test/integration/journal.integration.test.ts
+        test: verkettet jede Buchung beim Commit lückenlos, auch bei gleichzeitigen Buchungen
+        covers: [verkettet]
+      - kind: integration
+        file: apps/api/test/integration/journal.integration.test.ts
+        test: belegt eine einzelne Buchung per Merkle-Beweis gegen die Tageswurzel
+        covers: [merkle-beweis]
+      - kind: integration
+        file: apps/api/test/integration/journal.integration.test.ts
+        test: lässt verkettete Buchungen weder ändern noch löschen
+        rationale: Prüft den Schutz direkt in der Datenbank – der Trigger hat keinen eigenen Endpunkt.
+        covers: [journal-immutable]
+      - kind: integration
+        file: apps/api/test/integration/journal.integration.test.ts
+        test: erkennt Änderung, Löschung und eine neu berechnete Kette am verankerten Stand
+        covers: [chain-hash-mismatch, chain-gap, chain-link-broken, anchor-mismatch, day-root-mismatch]
+    comparisons:
+      openwms:
+        status: neu
+        note: OpenWMS hat kein manipulationserkennbares Buchungsjournal.
   - id: bestand.leitstand-ansicht
     title: Bestandsansicht im Leitstand mit Live-Aktualisierung
     group: bestand.auswertung

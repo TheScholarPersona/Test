@@ -66,7 +66,7 @@ areas:
     summary: Bestand je Transporteinheit führen, buchen, reservieren, auswerten und per Inventur prüfen.
     status: katalogisiert
     owns:
-      endpoints: [/v1/products, /v1/stock, /v1/stock-reservations, /v1/stock-bookings, /v1/stock-counts]
+      endpoints: [/v1/products, /v1/stock, /v1/stock-reservations, /v1/stock-bookings, /v1/stock-counts, /v1/stock-journal]
       events: [product, stock, stock-count]
       uiRoutes: [/bestand]
     groups:

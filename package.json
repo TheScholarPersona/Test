@@ -17,6 +17,8 @@
     "stack:up": "docker compose up -d --build --wait",
     "stack:down": "node scripts/stack-down.mjs",
     "demo:data": "node scripts/demo-data.mjs",
+    "journal:anchor": "node scripts/journal.mjs anchor",
+    "journal:verify": "node scripts/journal.mjs verify",
     "web:dev": "pnpm --filter @wms/web dev",
     "test:web": "pnpm --filter @wms/web test:e2e",
     "env:init": "node scripts/init-env.mjs",

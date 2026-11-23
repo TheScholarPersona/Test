@@ -182,6 +182,9 @@ export const StockBookingDtoSchema = z
     bestBefore: z.iso.date().nullable(),
     reference: z.string(),
     createdAt: z.iso.datetime(),
+    /** Position in der Hash-Kette; `null`, solange die Transaktion der Buchung nicht abgeschlossen ist. */
+    seq: z.number().int().nullable(),
+    hash: z.string().nullable(),
   })
   .meta({ id: 'StockBooking' });
 export type StockBookingDto = z.infer<typeof StockBookingDtoSchema>;

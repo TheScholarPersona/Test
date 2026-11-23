@@ -70,6 +70,10 @@ const StockBookingSchema = defineEntity({
     /** Fachlicher Bezug, z. B. `receiving:WE-4711/1` oder `receiving:blind`. */
     reference: p.string().length(120).index(),
     createdAt: p.datetime().onCreate(() => new Date()),
+    /** Hash-Kette: setzt die Datenbank beim Commit (Migration `journal_chain`), danach unveränderlich. */
+    seq: p.bigint('string').nullable().unique('stock_booking_seq_unique'),
+    prevHash: p.string().length(64).nullable(),
+    hash: p.string().length(64).nullable(),
   },
 });
 export class StockBooking extends StockBookingSchema.class {}
