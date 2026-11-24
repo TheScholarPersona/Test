@@ -364,6 +364,252 @@
       "comment": null
     },
     {
+      "name": "change_log",
+      "schema": "public",
+      "columns": {
+        "at": {
+          "name": "at",
+          "type": "timestamptz(6)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 6,
+          "precision": null,
+          "scale": null,
+          "default": "clock_timestamp()",
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "datetime"
+        },
+        "hash": {
+          "name": "hash",
+          "type": "varchar(64)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": 64,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "id": {
+          "name": "id",
+          "type": "bigint",
+          "unsigned": false,
+          "autoincrement": true,
+          "primary": true,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "bigint"
+        },
+        "op": {
+          "name": "op",
+          "type": "varchar(10)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [
+            "INSERT",
+            "UPDATE",
+            "DELETE",
+            "SNAPSHOT"
+          ],
+          "mappedType": "enum"
+        },
+        "prev_hash": {
+          "name": "prev_hash",
+          "type": "varchar(64)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": 64,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "row_hash": {
+          "name": "row_hash",
+          "type": "varchar(64)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": 64,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "row_id": {
+          "name": "row_id",
+          "type": "uuid",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "uuid"
+        },
+        "seq": {
+          "name": "seq",
+          "type": "bigint",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": true,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "bigint"
+        },
+        "source": {
+          "name": "source",
+          "type": "varchar(40)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": 40,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "table_name": {
+          "name": "table_name",
+          "type": "varchar(40)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 40,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        }
+      },
+      "indexes": [
+        {
+          "columnNames": [
+            "id"
+          ],
+          "composite": false,
+          "constraint": true,
+          "keyName": "change_log_pkey",
+          "primary": true,
+          "unique": true
+        },
+        {
+          "columnNames": [
+            "table_name",
+            "row_id",
+            "seq"
+          ],
+          "composite": true,
+          "constraint": false,
+          "keyName": "change_log_row_idx",
+          "primary": false,
+          "unique": false
+        },
+        {
+          "columnNames": [
+            "seq"
+          ],
+          "composite": false,
+          "constraint": true,
+          "keyName": "change_log_seq_key",
+          "primary": false,
+          "unique": true
+        }
+      ],
+      "checks": [
+        {
+          "name": "change_log_op_check",
+          "expression": "\"op\" in ('INSERT', 'UPDATE', 'DELETE', 'SNAPSHOT')",
+          "definition": "check (\"op\" in ('INSERT', 'UPDATE', 'DELETE', 'SNAPSHOT'))",
+          "columnName": "op"
+        }
+      ],
+      "triggers": [
+        {
+          "name": "change_log_chain",
+          "timing": "after",
+          "events": [
+            "insert"
+          ],
+          "forEach": "row",
+          "body": ""
+        },
+        {
+          "name": "change_log_guard",
+          "timing": "before",
+          "events": [
+            "delete",
+            "update"
+          ],
+          "forEach": "row",
+          "body": ""
+        }
+      ],
+      "foreignKeys": {},
+      "comment": null
+    },
+    {
       "name": "erp_message",
       "schema": "public",
       "columns": {
@@ -1874,6 +2120,103 @@
           "deleteRule": "cascade"
         }
       },
+      "comment": null
+    },
+    {
+      "name": "journal_head",
+      "schema": "public",
+      "columns": {
+        "hash": {
+          "name": "hash",
+          "type": "varchar(64)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 64,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "id": {
+          "name": "id",
+          "type": "int",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": true,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "integer"
+        },
+        "seq": {
+          "name": "seq",
+          "type": "bigint",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "bigint"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamptz(6)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": 6,
+          "precision": null,
+          "scale": null,
+          "default": "now()",
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "datetime"
+        }
+      },
+      "indexes": [
+        {
+          "columnNames": [
+            "id"
+          ],
+          "composite": false,
+          "constraint": true,
+          "keyName": "journal_head_pkey",
+          "primary": true,
+          "unique": true
+        }
+      ],
+      "checks": [
+        {
+          "name": "journal_head_id_check",
+          "expression": "id = ANY (ARRAY[1, 2])",
+          "definition": "CHECK ((id = ANY (ARRAY[1, 2])))",
+          "columnName": "id"
+        }
+      ],
+      "triggers": [],
+      "foreignKeys": {},
       "comment": null
     },
     {
@@ -6999,6 +7342,23 @@
           "enumItems": [],
           "mappedType": "datetime"
         },
+        "hash": {
+          "name": "hash",
+          "type": "varchar(64)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": 64,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
         "id": {
           "name": "id",
           "type": "uuid",
@@ -7018,6 +7378,23 @@
         },
         "lot": {
           "name": "lot",
+          "type": "varchar(64)",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": 64,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "string"
+        },
+        "prev_hash": {
+          "name": "prev_hash",
           "type": "varchar(64)",
           "unsigned": false,
           "autoincrement": false,
@@ -7066,6 +7443,23 @@
           "collation": null,
           "enumItems": [],
           "mappedType": "string"
+        },
+        "seq": {
+          "name": "seq",
+          "type": "bigint",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": true,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "collation": null,
+          "enumItems": [],
+          "mappedType": "bigint"
         },
         "sku": {
           "name": "sku",
@@ -7159,6 +7553,16 @@
         },
         {
           "columnNames": [
+            "seq"
+          ],
+          "composite": false,
+          "constraint": true,
+          "keyName": "stock_booking_seq_unique",
+          "primary": false,
+          "unique": true
+        },
+        {
+          "columnNames": [
             "sku"
           ],
           "composite": false,
@@ -7176,7 +7580,27 @@
           "columnName": "type"
         }
       ],
-      "triggers": [],
+      "triggers": [
+        {
+          "name": "stock_booking_chain",
+          "timing": "after",
+          "events": [
+            "insert"
+          ],
+          "forEach": "row",
+          "body": ""
+        },
+        {
+          "name": "stock_booking_guard",
+          "timing": "before",
+          "events": [
+            "delete",
+            "update"
+          ],
+          "forEach": "row",
+          "body": ""
+        }
+      ],
       "foreignKeys": {},
       "comment": null
     },
@@ -7885,7 +8309,19 @@
           "columnName": "quantity"
         }
       ],
-      "triggers": [],
+      "triggers": [
+        {
+          "name": "stock_item_change_log",
+          "timing": "after",
+          "events": [
+            "delete",
+            "insert",
+            "update"
+          ],
+          "forEach": "row",
+          "body": ""
+        }
+      ],
       "foreignKeys": {
         "stock_item_product_id_foreign": {
           "columnNames": [
@@ -9483,7 +9919,19 @@
           "columnName": "state"
         }
       ],
-      "triggers": [],
+      "triggers": [
+        {
+          "name": "transport_unit_change_log",
+          "timing": "after",
+          "events": [
+            "delete",
+            "insert",
+            "update"
+          ],
+          "forEach": "row",
+          "body": ""
+        }
+      ],
       "foreignKeys": {
         "transport_unit_location_id_foreign": {
           "columnNames": [

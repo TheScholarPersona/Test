@@ -112,4 +112,8 @@ describe('Geschäftspartner', () => {
       expect((await receiving('W-2', { supplier: 'Lieferant GmbH' })).body).toMatchObject({ supplier: 'Lieferant GmbH', supplierCode: null });
     });
   });
+
+  it('hinterlässt Buchungsjournal, Änderungsprotokoll und Bestand stimmig', async () => {
+    expect((await api.post('/v1/stock-journal/verify', {})).body).toMatchObject({ ok: true, problems: [] });
+  });
 });

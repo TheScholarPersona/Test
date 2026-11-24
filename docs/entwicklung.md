@@ -754,6 +754,33 @@ mosquitto_sub -h localhost -p 8883 --cafile ca.crt -u wms-api -P "<WMS_MQTT_API_
 
 Für den Betrieb außerhalb des eigenen Rechners zusätzlich: die API hinter einen TLS-Proxy (HTTPS) stellen, `AUTH_COOKIE_SECURE=true`, Profil `production` (keine Test-Endpunkte), für Node-RED ein Token mit Rolle `anlage` statt `admin`, ein Zertifikat einer eigenen oder öffentlichen Zertifizierungsstelle für MQTT.
 
+## Manipulationssicheres Buchungsjournal
+
+Jede Bestandsbuchung wird beim Commit verkettet: lückenlose Nummer `seq`, Hash der Vorgängerbuchung `prev_hash` und eigener Hash `hash` = SHA-256(`prev_hash` ‖ kanonischer Inhalt). Je Tag (UTC) bildet ein Merkle Tree (RFC 6962) eine Wurzel über die Buchungen. Verkettete Buchungen lassen sich weder ändern noch löschen (`JOURNAL_IMMUTABLE`).
+
+Wer Datenbankrechte hat, kann Trigger abschalten und die ganze Kette neu berechnen. Schutz bietet deshalb erst der **extern verankerte Stand**:
+
+```bash
+pnpm journal:anchor anker-$(date +%F).json   # Kopf und Tageswurzeln der letzten 7 Tage
+pnpm journal:verify anker-2026-11-23.json    # Kette prüfen und mit dem Anker vergleichen (Exit 1 bei Befund)
+```
+
+- Den Anker täglich (und zu jeder Datenbanksicherung) an einen Ort legen, an den das WMS nicht schreiben kann: unveränderbarer Objektspeicher, ERP, Ticketsystem.
+- Nach einem Vorfall zeigt `journal:verify` mit dem jeweils jüngsten Anker, ob und wo das Journal verändert wurde (`CHAIN_HASH_MISMATCH`, `CHAIN_GAP`, `CHAIN_LINK_BROKEN`, `ANCHOR_MISMATCH`, `DAY_ROOT_MISMATCH`). Die jüngste Sicherung, deren Kopf zu einem Anker passt, ist sauber.
+- Einzelne Buchung belegen: `GET /v1/stock-bookings/{id}/proof` liefert den Merkle-Pfad zur Tageswurzel.
+- Grenzen: Die Kette erkennt Veränderungen, verhindert aber weder Verschlüsselung noch Löschung (dafür braucht es Sicherungen). Buchungen über die API mit gestohlenen Zugangsdaten sind regulär verkettet.
+
+**Transporteinheiten und Bestand** schützen zwei Abgleiche, die `journal:verify` mit ausführt:
+
+| Abgleich | erkennt |
+|---|---|
+| Bestand je TU = Summe ihrer Buchungen; Buchungen gelöschter TUs ergeben 0 | Bestand direkt angelegt, erhöht, verringert oder samt TU gelöscht (`STOCK_MISMATCH`) |
+| Änderungsprotokoll `change_log` (Trigger auf `transport_unit` und `stock_item`, verkettet wie das Journal) mit Herkunft `wms.source` | Änderung per direktem SQL (`CHANGE_OUTSIDE_APP`); bei umgangenen Triggern: Zeile ohne Eintrag (`ROW_UNLOGGED`), fehlende Zeile (`ROW_MISSING`), abweichender Inhalt (`ROW_CHANGED`) |
+
+- Die API setzt beim Aufbau jeder Datenbankverbindung `wms.source = api`. Wer sich mit `psql` verbindet, erzeugt Einträge ohne Herkunft. Die Variable lässt sich zwar auch von Hand setzen – das hebt die Hürde, ersetzt aber keine Rechtetrennung (eigener Datenbankbenutzer für die API ohne DDL-Rechte).
+- Nach Untersuchung eines Vorfalls oder einer bewussten Datenkorrektur: `pnpm journal:verify anker.json --accepted-outside <Protokollnummer>`.
+- Jeder fachliche Integrationstest endet mit dieser Prüfung – reguläre Abläufe erzeugen keinen Befund.
+
 ## Ports der lokalen Umgebung
 
 Die Compose-Umgebung belegt auf dem Rechner `3000` (API), `1880` (Node-RED), `5432` (PostgreSQL) und `8883` (MQTT mit TLS), jeweils nur auf `127.0.0.1`. Ist ein Port belegt, z. B. durch eine andere Node-RED-Instanz, in der `.env` ändern:

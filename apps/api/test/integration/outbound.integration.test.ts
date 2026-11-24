@@ -263,4 +263,8 @@ describe('Auslagerung', () => {
       expect.arrayContaining(['/v1/outbound-orders', '/v1/outbound-orders/{orderId}/allocate', '/v1/outbound-orders/{orderId}/picks/{pickId}/confirm', '/v1/outbound-picks', '/v1/allocation/simulations']),
     );
   });
+
+  it('hinterlässt Buchungsjournal, Änderungsprotokoll und Bestand stimmig', async () => {
+    expect((await api.post('/v1/stock-journal/verify', {})).body).toMatchObject({ ok: true, problems: [] });
+  });
 });

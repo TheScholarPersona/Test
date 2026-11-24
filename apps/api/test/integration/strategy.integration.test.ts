@@ -264,4 +264,8 @@ describe('Strategien: Einlagerung', () => {
     const list = await api.get('/v1/strategy-decisions?subject=P4');
     expect(list.body).toMatchObject({ total: 1, items: [{ subject: 'P4', chosen: null, ruleSet: { version: 1, status: 'ARCHIVED' } }] });
   });
+
+  it('hinterlässt Buchungsjournal, Änderungsprotokoll und Bestand stimmig', async () => {
+    expect((await api.post('/v1/stock-journal/verify', {})).body).toMatchObject({ ok: true, problems: [] });
+  });
 });

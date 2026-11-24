@@ -257,4 +257,8 @@ describe('Transportaufträge', () => {
       expect.arrayContaining(['/v1/transport-orders', '/v1/transport-orders/start-pending', '/v1/transport-orders/{number}/finish', '/v1/transport-orders/{number}/interrupt']),
     );
   });
+
+  it('hinterlässt Buchungsjournal, Änderungsprotokoll und Bestand stimmig', async () => {
+    expect((await api.post('/v1/stock-journal/verify', {})).body).toMatchObject({ ok: true, problems: [] });
+  });
 });

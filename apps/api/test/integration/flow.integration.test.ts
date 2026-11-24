@@ -262,4 +262,8 @@ describe('Materialfluss', () => {
     const paths = Object.keys(((await api.get('/openapi.json')).body as { paths: Record<string, unknown> }).paths);
     expect(paths).toEqual(expect.arrayContaining(['/v1/flow/events', '/v1/flow/commands', '/v1/flow/routes/{routeId}/steps', '/v1/flow/actions', '/v1/flow/decisions']));
   });
+
+  it('hinterlässt Buchungsjournal, Änderungsprotokoll und Bestand stimmig', async () => {
+    expect((await api.post('/v1/stock-journal/verify', {})).body).toMatchObject({ ok: true, problems: [] });
+  });
 });

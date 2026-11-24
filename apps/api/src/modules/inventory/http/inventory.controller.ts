@@ -91,6 +91,8 @@ const toBookingDto = (b: StockBooking): StockBookingDto => ({
   bestBefore: isoDate(b.bestBefore),
   reference: b.reference,
   createdAt: b.createdAt.toISOString(),
+  seq: b.seq == null ? null : Number(b.seq),
+  hash: b.hash ?? null,
 });
 
 const toReservationDto = (r: StockReservation): ReservationDto => {
