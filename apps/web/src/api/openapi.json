@@ -2934,6 +2934,23 @@
             "type": "string",
             "pattern": "^[0-9a-f]{64}$"
           },
+          "changes": {
+            "type": "object",
+            "properties": {
+              "seq": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "hash": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            },
+            "required": [
+              "seq",
+              "hash"
+            ]
+          },
           "updatedAt": {
             "type": "string",
             "format": "date-time"
@@ -2942,6 +2959,7 @@
         "required": [
           "seq",
           "hash",
+          "changes",
           "updatedAt"
         ]
       },
@@ -3039,6 +3057,9 @@
           "head": {
             "$ref": "#/components/schemas/JournalAnchor"
           },
+          "changesChecked": {
+            "type": "integer"
+          },
           "pending": {
             "type": "integer"
           },
@@ -3050,13 +3071,21 @@
                 "code": {
                   "type": "string"
                 },
+                "chain": {
+                  "type": "string",
+                  "enum": [
+                    "journal",
+                    "changes",
+                    "state"
+                  ]
+                },
                 "seq": {
                   "type": [
                     "integer",
                     "null"
                   ]
                 },
-                "bookingId": {
+                "ref": {
                   "type": [
                     "string",
                     "null"
@@ -3068,8 +3097,9 @@
               },
               "required": [
                 "code",
+                "chain",
                 "seq",
-                "bookingId",
+                "ref",
                 "message"
               ]
             }
@@ -3087,6 +3117,23 @@
               "hash": {
                 "type": "string",
                 "pattern": "^[0-9a-f]{64}$"
+              },
+              "changes": {
+                "type": "object",
+                "properties": {
+                  "seq": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "hash": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  }
+                },
+                "required": [
+                  "seq",
+                  "hash"
+                ]
               },
               "ok": {
                 "type": "boolean"
@@ -3132,6 +3179,7 @@
           "ok",
           "checked",
           "head",
+          "changesChecked",
           "pending",
           "problems",
           "anchor",
@@ -3148,6 +3196,23 @@
           "hash": {
             "type": "string",
             "pattern": "^[0-9a-f]{64}$"
+          },
+          "changes": {
+            "type": "object",
+            "properties": {
+              "seq": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "hash": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            },
+            "required": [
+              "seq",
+              "hash"
+            ]
           }
         },
         "required": [
@@ -3181,6 +3246,10 @@
               ]
             },
             "maxItems": 400
+          },
+          "acceptedOutsideUpTo": {
+            "type": "integer",
+            "minimum": 0
           }
         },
         "additionalProperties": false
@@ -15182,7 +15251,7 @@
     },
     "/v1/stock-journal/verify": {
       "post": {
-        "summary": "Hash-Kette vollständig prüfen, optional gegen verankerten Kopf und Tageswurzeln",
+        "summary": "Journal und Änderungsprotokoll prüfen, Bestand und TUs abgleichen, optional gegen verankerten Stand",
         "tags": [
           "Bestand"
         ],

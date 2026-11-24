@@ -140,7 +140,7 @@ Die Prüfung **legt nie Features an**. Sie meldet, was zugeordnet werden muss; o
 
 ## 6. Stand der Bestandsaufnahme
 
-Alle 17 Bereiche sind katalogisiert (`status: katalogisiert`); jeder erkannte Bestandteil ist einem Feature zugeordnet. Mit den Testberichten aller Testarten (Unit, Integration, Node-RED-Szenarien, MQTT-Sicherheit, Browser) sind **alle 101 Features im Testlauf nachgewiesen; der Prüfbestand ist leer**. Die 101 Features haben **298 Akzeptanzkriterien** (Effekte und Regeln, darunter jeder Fehlercode aus den Regeln); jedes ist durch einen bestandenen Test mit Zusicherung belegt. 54 Nachweise prüfen ihr Feature nur indirekt (Querschnittsfunktionen ohne eigenen Endpunkt, Simulation statt Entscheidung, Node-RED-Flows) und tragen dafür eine Begründung nach Review.
+Alle 17 Bereiche sind katalogisiert (`status: katalogisiert`); jeder erkannte Bestandteil ist einem Feature zugeordnet. Mit den Testberichten aller Testarten (Unit, Integration, Node-RED-Szenarien, MQTT-Sicherheit, Browser) sind **alle 102 Features im Testlauf nachgewiesen; der Prüfbestand ist leer**. Die 102 Features haben **305 Akzeptanzkriterien** (Effekte und Regeln, darunter jeder Fehlercode aus den Regeln); jedes ist durch einen bestandenen Test mit Zusicherung belegt. 56 Nachweise prüfen ihr Feature nur indirekt (Querschnittsfunktionen ohne eigenen Endpunkt, Simulation statt Entscheidung, Node-RED-Flows) und tragen dafür eine Begründung nach Review.
 
 **Nachgeschärft beim Einführen der Nachweisregeln:** Für acht Fehlercodes gab es keinen Test, der sie auslöst und zusichert. Neue bzw. erweiterte Integrationstests decken sie jetzt ab: doppelt gescannte TU beim Verladen (`UNIT_ALREADY_LOADED`), Warenausgang bei reserviertem Bestand, aufgestapelten TUs oder offener Bewegung (`STOCK_RESERVED`, `TU_HAS_CHILDREN`, `TU_IN_USE`), Versandetikett für eine fremde TU (`UNIT_NOT_IN_SHIPMENT`), erledigte Bewegung in einer Gruppe (`MOVEMENT_CLOSED`), erneutes Schließen einer Position (`POSITION_NOT_IN_PROGRESS`) und vollständig reservierter Bestand in der Zuteilung (`NOT_AVAILABLE`).
 
@@ -149,7 +149,7 @@ Alle 17 Bereiche sind katalogisiert (`status: katalogisiert`); jeder erkannte Be
 | Lagerstruktur | 6 | 31 |
 | Transporteinheiten | 9 | 33 |
 | Strategien und Regeln | 7 | 15 |
-| Bestand | 13 | 34 |
+| Bestand | 14 | 34 |
 | Wareneingang | 5 | 20 |
 | Lagerbewegungen | 4 | 21 |
 | Transportaufträge | 2 | 19 |
@@ -163,7 +163,7 @@ Alle 17 Bereiche sind katalogisiert (`status: katalogisiert`); jeder erkannte Be
 | Integration und Automatisierung | 7 | 11 |
 | Bedienoberfläche | 5 | 2 |
 | Sicherheit und Betrieb | 11 | 12 |
-| **Summe** | **101** | **271** |
+| **Summe** | **102** | **271** |
 
 **Festlegungen** (Produktentscheidung nach dem Pilot):
 

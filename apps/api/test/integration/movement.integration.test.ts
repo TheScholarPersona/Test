@@ -280,4 +280,8 @@ describe('Lagerbewegungen', () => {
       expect.arrayContaining(['/v1/movements', '/v1/movements/{number}', '/v1/movements/{number}/start', '/v1/movements/{number}/complete', '/v1/movements/{number}/cancel']),
     );
   });
+
+  it('hinterlässt Buchungsjournal, Änderungsprotokoll und Bestand stimmig', async () => {
+    expect((await api.post('/v1/stock-journal/verify', {})).body).toMatchObject({ ok: true, problems: [] });
+  });
 });

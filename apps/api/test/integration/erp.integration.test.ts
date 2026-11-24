@@ -175,4 +175,8 @@ describe('ERP-Anbindung', () => {
       expect(counts).toEqual(expect.arrayContaining([expect.objectContaining({ direction: 'IN', state: 'PROCESSED' }), expect.objectContaining({ direction: 'OUT', state: 'SENT' })]));
     });
   });
+
+  it('hinterlässt Buchungsjournal, Änderungsprotokoll und Bestand stimmig', async () => {
+    expect((await api.post('/v1/stock-journal/verify', {})).body).toMatchObject({ ok: true, problems: [] });
+  });
 });

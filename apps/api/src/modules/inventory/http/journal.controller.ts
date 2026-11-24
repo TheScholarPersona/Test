@@ -8,8 +8,10 @@ const TAGS = ['Bestand'];
 const Hash = z.string().regex(/^[0-9a-f]{64}$/, 'SHA-256 als 64 Hex-Zeichen');
 const Day = z.iso.date();
 
-const AnchorSchema = z.object({ seq: z.number().int().min(0), hash: Hash }).meta({ id: 'JournalAnchor' });
-const HeadSchema = AnchorSchema.extend({ updatedAt: z.iso.datetime() }).meta({ id: 'JournalHead' });
+const ChainHead = z.object({ seq: z.number().int().min(0), hash: Hash });
+/** Kopf des Buchungsjournals, optional mit dem Kopf des Änderungsprotokolls (TUs, Bestandsposten). */
+const AnchorSchema = ChainHead.extend({ changes: ChainHead.optional() }).meta({ id: 'JournalAnchor' });
+const HeadSchema = ChainHead.extend({ changes: ChainHead, updatedAt: z.iso.datetime() }).meta({ id: 'JournalHead' });
 const DayParam = z.object({ day: Day });
 const BookingIdParam = z.object({ id: z.uuid() });
 const DayRootSchema = z
@@ -19,7 +21,12 @@ const ProofSchema = z
   .object({ bookingId: z.uuid(), seq: z.number().int(), hash: Hash, day: Day, index: z.number().int(), size: z.number().int(), proof: z.array(Hash), root: Hash })
   .meta({ id: 'JournalProof' });
 const VerifyInputSchema = z
-  .object({ anchor: AnchorSchema.optional(), days: z.array(z.object({ day: Day, root: Hash })).max(400).optional() })
+  .object({
+    anchor: AnchorSchema.optional(),
+    days: z.array(z.object({ day: Day, root: Hash })).max(400).optional(),
+    /** Änderungen an der Anwendung vorbei bis zu dieser Protokollnummer sind geprüft und bekannt. */
+    acceptedOutsideUpTo: z.number().int().min(0).optional(),
+  })
   .strict()
   .meta({ id: 'JournalVerifyInput' });
 type VerifyInput = z.infer<typeof VerifyInputSchema>;
@@ -28,8 +35,11 @@ const VerificationSchema = z
     ok: z.boolean(),
     checked: z.number().int(),
     head: AnchorSchema,
+    changesChecked: z.number().int(),
     pending: z.number().int(),
-    problems: z.array(z.object({ code: z.string(), seq: z.number().int().nullable(), bookingId: z.string().nullable(), message: z.string() })),
+    problems: z.array(
+      z.object({ code: z.string(), chain: z.enum(['journal', 'changes', 'state']), seq: z.number().int().nullable(), ref: z.string().nullable(), message: z.string() }),
+    ),
     anchor: AnchorSchema.extend({ ok: z.boolean() }).nullable(),
     days: z.array(z.object({ day: Day, expected: Hash, actual: Hash, ok: z.boolean() })),
   })
@@ -45,7 +55,7 @@ export class JournalController {
     docs.route({ method: 'get', path: '/v1/stock-journal/head', summary: 'Kopf der Hash-Kette (zum externen Verankern)', tags: TAGS, response: { status: 200, description: 'Kopf', schema: HeadSchema } });
     docs.route({ method: 'get', path: '/v1/stock-journal/days/{day}', summary: 'Merkle-Wurzel der Buchungen eines Tages (UTC)', tags: TAGS, params: DayParam, response: { status: 200, description: 'Tageswurzel', schema: DayRootSchema } });
     docs.route({ method: 'get', path: '/v1/stock-bookings/{id}/proof', summary: 'Merkle-Beweis einer Buchung', tags: TAGS, params: BookingIdParam, response: { status: 200, description: 'Beweis', schema: ProofSchema }, errors: [404] });
-    docs.route({ method: 'post', path: '/v1/stock-journal/verify', summary: 'Hash-Kette vollständig prüfen, optional gegen verankerten Kopf und Tageswurzeln', tags: TAGS, body: VerifyInputSchema, response: { status: 200, description: 'Ergebnis', schema: VerificationSchema }, errors: [400] });
+    docs.route({ method: 'post', path: '/v1/stock-journal/verify', summary: 'Journal und Änderungsprotokoll prüfen, Bestand und TUs abgleichen, optional gegen verankerten Stand', tags: TAGS, body: VerifyInputSchema, response: { status: 200, description: 'Ergebnis', schema: VerificationSchema }, errors: [400] });
   }
 
   @Get('stock-journal/head')

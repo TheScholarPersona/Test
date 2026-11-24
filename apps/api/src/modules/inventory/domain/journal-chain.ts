@@ -32,7 +32,7 @@ export interface ChainFields {
   createdAt: string;
 }
 
-const field = (value: string | null): string => (value === null ? '-' : `${[...value].length}:${value}`);
+export const field = (value: string | null): string => (value === null ? '-' : `${[...value].length}:${value}`);
 
 export function canonical(b: ChainFields): string {
   return [CHAIN_FORMAT, b.seq, b.id, b.type, b.sku, b.barcode, b.quantity, b.unitCode, b.lot, b.bestBefore, b.reference, b.createdAt]
@@ -42,6 +42,23 @@ export function canonical(b: ChainFields): string {
 
 export function chainHash(prevHash: string, b: ChainFields): string {
   return createHash('sha256').update(prevHash + canonical(b), 'utf8').digest('hex');
+}
+
+/** Eintrag im Änderungsprotokoll (Transporteinheiten, Bestandsposten), Format wie `wms_change_canonical`. */
+export interface ChangeFields {
+  seq: string;
+  tableName: string;
+  rowId: string;
+  op: string;
+  /** Herkunft (`api`, `migration`); `null` = an der Anwendung vorbei. */
+  source: string | null;
+  rowHash: string | null;
+  at: string;
+}
+
+export function changeHash(prevHash: string, c: ChangeFields): string {
+  const text = [CHAIN_FORMAT, ...[c.seq, c.tableName, c.rowId, c.op, c.source, c.rowHash, c.at].map(field)].join('|');
+  return createHash('sha256').update(prevHash + text, 'utf8').digest('hex');
 }
 
 // --- Merkle Tree (RFC 6962) -----------------------------------------------------------

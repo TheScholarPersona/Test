@@ -679,7 +679,7 @@ features:
         covers: [merkle-beweis]
       - kind: integration
         file: apps/api/test/integration/journal.integration.test.ts
-        test: lässt verkettete Buchungen weder ändern noch löschen
+        test: lässt verkettete Buchungen und Protokolleinträge weder ändern noch löschen
         rationale: Prüft den Schutz direkt in der Datenbank – der Trigger hat keinen eigenen Endpunkt.
         covers: [journal-immutable]
       - kind: integration
@@ -690,6 +690,103 @@ features:
       openwms:
         status: neu
         note: OpenWMS hat kein manipulationserkennbares Buchungsjournal.
+  - id: bestand.manipulationserkennung
+    title: Manipulation an Transporteinheiten und Bestand erkennen
+    group: bestand.auswertung
+    summary: Erkennt TUs und Bestandsposten, die an der Anwendung vorbei – direkt in der Datenbank – angelegt, geändert oder gelöscht wurden.
+    description: |
+      Zwei unabhängige Abgleiche ergänzen die Hash-Kette des Buchungsjournals. Erstens muss der Bestand jeder TU der
+      Summe ihrer Buchungen entsprechen; Buchungen gelöschter TUs müssen in Summe null ergeben, weil sich eine TU nur
+      leer löschen lässt. Zweitens schreibt ein Datenbank-Trigger jede Änderung an Transporteinheiten und
+      Bestandsposten mit Zeilen-Hash und Herkunft in ein verkettetes Änderungsprotokoll – auch bei direktem SQL. Die
+      Verbindungen der API tragen die Herkunft `api`; ein Eintrag ohne Herkunft entstand an der Anwendung vorbei. Der
+      aktuelle Zustand muss zum jeweils letzten Protokolleintrag passen; werden die Trigger umgangen, fällt genau das auf.
+    usage:
+      - channel: api
+        text: "`POST /v1/stock-journal/verify` (optional `acceptedOutsideUpTo` nach Untersuchung eines Vorfalls); Kopf des Protokolls in `GET /v1/stock-journal/head` (`changes`)."
+      - channel: entwicklung
+        text: "`pnpm journal:verify anker.json [--accepted-outside N]`; der Anker enthält auch den Kopf des Änderungsprotokolls."
+    rules:
+      - Bestand weicht von den Buchungen ab, auch für gelöschte TUs (`STOCK_MISMATCH`).
+      - Änderung ohne Herkunft `api` (`CHANGE_OUTSIDE_APP`), bis sie mit `acceptedOutsideUpTo` als untersucht gilt.
+      - Zeile ohne Protokolleintrag (`ROW_UNLOGGED`), protokollierte Zeile fehlt (`ROW_MISSING`), Inhalt weicht vom Protokoll ab (`ROW_CHANGED`).
+      - Protokolleinträge sind verkettet und unveränderlich (`CHANGE_LOG_IMMUTABLE`); beide Ketten sperren ihren Kopf in fester Reihenfolge.
+    acceptance:
+      - id: stimmig
+        kind: effekt
+        text: Nach jedem regulären Ablauf durch die Anwendung – Wareneingang, Bewegung, Auslagerung, Versand, Inventur, ERP, Materialfluss – passen Bestand, Buchungen und Protokoll zusammen.
+      - id: change-outside-app
+        kind: regel
+        text: Eine direkt in der Datenbank angelegte TU wird als Änderung an der Anwendung vorbei gemeldet und lässt sich nach Untersuchung quittieren.
+        code: CHANGE_OUTSIDE_APP
+      - id: row-unlogged
+        kind: regel
+        text: Eine mit umgangenen Triggern angelegte TU fällt als Zeile ohne Protokolleintrag auf.
+        code: ROW_UNLOGGED
+      - id: row-missing
+        kind: regel
+        text: Mit umgangenen Triggern gelöschte TUs und Bestandsposten fallen als fehlende Zeilen auf.
+        code: ROW_MISSING
+      - id: row-changed
+        kind: regel
+        text: Ein mit umgangenen Triggern geänderter Bestandsposten weicht vom protokollierten Stand ab.
+        code: ROW_CHANGED
+      - id: stock-mismatch
+        kind: regel
+        text: Erhöhter Bestand und eine samt Bestand gelöschte TU passen nicht mehr zu den Buchungen.
+        code: STOCK_MISMATCH
+      - id: change-log-immutable
+        kind: regel
+        text: Verkettete Protokolleinträge lassen sich weder ändern noch löschen.
+        code: CHANGE_LOG_IMMUTABLE
+    dependsOn: [bestand.journal-kette, bestand.bestand-je-tu, transporteinheiten.anlegen]
+    technical:
+      components:
+        - apps/api/src/modules/inventory/application/journal.service.ts
+        - apps/api/src/migrations/Migration20261124100000_change_log.ts
+        - apps/api/src/infrastructure/database/orm-options.ts
+        - scripts/journal.mjs
+      endpoints:
+        - POST /v1/stock-journal/verify
+      notes:
+        - Tabelle `change_log` mit Trigger `wms_change_record` auf `transport_unit` und `stock_item`; Kopf in `journal_head` (id 2).
+        - Herkunft aus der Sitzungsvariable `wms.source`, gesetzt beim Aufbau jeder Verbindung der API (`onCreateConnection`).
+        - Jeder fachliche Integrationstest endet mit dem Abgleich (`support/integrity.ts`).
+    evidence:
+      - kind: integration
+        file: apps/api/test/integration/journal.integration.test.ts
+        test: erkennt TUs und Bestand, die an der Anwendung vorbei angelegt, geändert oder gelöscht werden
+        rationale: Greift wie ein Angreifer direkt auf die Datenbank zu und prüft den Abgleich über die Prüfung.
+        covers: [change-outside-app, row-unlogged, row-missing, row-changed, stock-mismatch]
+      - kind: integration
+        file: apps/api/test/integration/journal.integration.test.ts
+        test: lässt verkettete Buchungen und Protokolleinträge weder ändern noch löschen
+        rationale: Prüft den Schutz direkt in der Datenbank – der Trigger hat keinen eigenen Endpunkt.
+        covers: [change-log-immutable]
+      - kind: integration
+        file: apps/api/test/integration/shipping.integration.test.ts
+        test: hinterlässt Buchungsjournal, Änderungsprotokoll und Bestand stimmig
+        covers: [stimmig]
+      - kind: integration
+        file: apps/api/test/integration/stock.integration.test.ts
+        test: hinterlässt Buchungsjournal, Änderungsprotokoll und Bestand stimmig
+        covers: [stimmig]
+      - kind: integration
+        file: apps/api/test/integration/outbound.integration.test.ts
+        test: hinterlässt Buchungsjournal, Änderungsprotokoll und Bestand stimmig
+        covers: [stimmig]
+      - kind: integration
+        file: apps/api/test/integration/receiving.integration.test.ts
+        test: hinterlässt Buchungsjournal, Änderungsprotokoll und Bestand stimmig
+        covers: [stimmig]
+      - kind: integration
+        file: apps/api/test/integration/flow.integration.test.ts
+        test: hinterlässt Buchungsjournal, Änderungsprotokoll und Bestand stimmig
+        covers: [stimmig]
+    comparisons:
+      openwms:
+        status: neu
+        note: OpenWMS hat keinen Abgleich von Bestand, Buchungen und Änderungsprotokoll.
   - id: bestand.leitstand-ansicht
     title: Bestandsansicht im Leitstand mit Live-Aktualisierung
     group: bestand.auswertung

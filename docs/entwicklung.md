@@ -770,6 +770,17 @@ pnpm journal:verify anker-2026-11-23.json    # Kette prüfen und mit dem Anker v
 - Einzelne Buchung belegen: `GET /v1/stock-bookings/{id}/proof` liefert den Merkle-Pfad zur Tageswurzel.
 - Grenzen: Die Kette erkennt Veränderungen, verhindert aber weder Verschlüsselung noch Löschung (dafür braucht es Sicherungen). Buchungen über die API mit gestohlenen Zugangsdaten sind regulär verkettet.
 
+**Transporteinheiten und Bestand** schützen zwei Abgleiche, die `journal:verify` mit ausführt:
+
+| Abgleich | erkennt |
+|---|---|
+| Bestand je TU = Summe ihrer Buchungen; Buchungen gelöschter TUs ergeben 0 | Bestand direkt angelegt, erhöht, verringert oder samt TU gelöscht (`STOCK_MISMATCH`) |
+| Änderungsprotokoll `change_log` (Trigger auf `transport_unit` und `stock_item`, verkettet wie das Journal) mit Herkunft `wms.source` | Änderung per direktem SQL (`CHANGE_OUTSIDE_APP`); bei umgangenen Triggern: Zeile ohne Eintrag (`ROW_UNLOGGED`), fehlende Zeile (`ROW_MISSING`), abweichender Inhalt (`ROW_CHANGED`) |
+
+- Die API setzt beim Aufbau jeder Datenbankverbindung `wms.source = api`. Wer sich mit `psql` verbindet, erzeugt Einträge ohne Herkunft. Die Variable lässt sich zwar auch von Hand setzen – das hebt die Hürde, ersetzt aber keine Rechtetrennung (eigener Datenbankbenutzer für die API ohne DDL-Rechte).
+- Nach Untersuchung eines Vorfalls oder einer bewussten Datenkorrektur: `pnpm journal:verify anker.json --accepted-outside <Protokollnummer>`.
+- Jeder fachliche Integrationstest endet mit dieser Prüfung – reguläre Abläufe erzeugen keinen Befund.
+
 ## Ports der lokalen Umgebung
 
 Die Compose-Umgebung belegt auf dem Rechner `3000` (API), `1880` (Node-RED), `5432` (PostgreSQL) und `8883` (MQTT mit TLS), jeweils nur auf `127.0.0.1`. Ist ein Port belegt, z. B. durch eine andere Node-RED-Instanz, in der `.env` ändern:
